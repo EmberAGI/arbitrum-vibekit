@@ -248,8 +248,7 @@ type ManagedMandateEditorProjection = {
 
 const DIRECT_HIRE_MESSAGE =
   'Use the portfolio manager to onboard and activate the managed lending agent.';
-const DIRECT_FIRE_MESSAGE =
-  'Use the portfolio manager to deactivate the managed lending agent.';
+const DIRECT_FIRE_MESSAGE = 'Use the portfolio manager to deactivate the managed lending agent.';
 const SHARED_EMBER_NETWORK = 'arbitrum';
 const OWS_SIGNING_CHAIN = 'evm';
 const MAX_PREPARE_TRANSACTION_ATTEMPTS = 3;
@@ -271,7 +270,11 @@ class PendingExecutionSubmissionError extends Error {
   revision: number | null;
   pendingSubmission: PendingExecutionSubmission;
 
-  constructor(message: string, revision: number | null, pendingSubmission: PendingExecutionSubmission) {
+  constructor(
+    message: string,
+    revision: number | null,
+    pendingSubmission: PendingExecutionSubmission,
+  ) {
     super(message);
     this.name = 'PendingExecutionSubmissionError';
     this.revision = revision;
@@ -358,6 +361,13 @@ function isSharedEmberActiveDelegationMismatch(error: unknown): boolean {
     error.message.includes(
       'Shared Ember Domain Service JSON-RPC error: internal_error: signed transaction must match the active delegation id',
     )
+  );
+}
+
+function isSharedEmberNonceSubmissionFailure(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes('send_nonce_error') || error.message.includes('nonce too low'))
   );
 }
 
@@ -455,8 +465,7 @@ async function runSharedEmberCommandWithResolvedRevision<T>(input: {
   currentRevision: number | null;
   buildRequest: (expectedRevision: number) => unknown;
 }): Promise<T> {
-  let expectedRevision =
-    input.currentRevision ?? (await readCurrentSharedEmberRevision(input));
+  let expectedRevision = input.currentRevision ?? (await readCurrentSharedEmberRevision(input));
 
   try {
     return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
@@ -517,8 +526,7 @@ function summarizeReservation(portfolioState: unknown): string | null {
     const matchingOwnedUnit =
       portfolioState['owned_units'].find(
         (candidate) =>
-          isRecord(candidate) &&
-          readString(candidate['reservation_id']) === reservationId,
+          isRecord(candidate) && readString(candidate['reservation_id']) === reservationId,
       ) ?? readFirstRecordFromArray(portfolioState['owned_units']);
 
     if (isRecord(matchingOwnedUnit)) {
@@ -539,7 +547,9 @@ function summarizeReservation(portfolioState: unknown): string | null {
   return `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`;
 }
 
-function readPortfolioOwnedUnit(portfolioState: Record<string, unknown>): Record<string, unknown> | null {
+function readPortfolioOwnedUnit(
+  portfolioState: Record<string, unknown>,
+): Record<string, unknown> | null {
   if (!Array.isArray(portfolioState['owned_units'])) {
     return null;
   }
@@ -558,8 +568,8 @@ function readPortfolioOwnedUnits(portfolioState: unknown): Record<string, unknow
     return [];
   }
 
-  return portfolioState['owned_units'].filter(
-    (candidate): candidate is Record<string, unknown> => isRecord(candidate),
+  return portfolioState['owned_units'].filter((candidate): candidate is Record<string, unknown> =>
+    isRecord(candidate),
   );
 }
 
@@ -658,7 +668,9 @@ function scoreActivePositionScopeVisibility(scope: Record<string, unknown>): num
   }
 
   const members = Array.isArray(scope['members'])
-    ? scope['members'].filter((candidate): candidate is Record<string, unknown> => isRecord(candidate))
+    ? scope['members'].filter((candidate): candidate is Record<string, unknown> =>
+        isRecord(candidate),
+      )
     : [];
   score += members.length * 2;
 
@@ -701,7 +713,11 @@ function selectPreferredActivePositionScope(input: {
 }): Record<string, unknown> {
   const rawObservedAt = readActivePositionScopeObservedAt(input.rawScope);
   const hydratedObservedAt = readActivePositionScopeObservedAt(input.hydratedScope);
-  if (rawObservedAt !== null && hydratedObservedAt !== null && rawObservedAt !== hydratedObservedAt) {
+  if (
+    rawObservedAt !== null &&
+    hydratedObservedAt !== null &&
+    rawObservedAt !== hydratedObservedAt
+  ) {
     return hydratedObservedAt > rawObservedAt ? input.hydratedScope : input.rawScope;
   }
 
@@ -753,7 +769,9 @@ function selectPreferredActivePositionScopesForContext(input: {
   return [...mergedScopes, ...hydratedScopesById.values()];
 }
 
-function readLaneContextFallback(portfolioState: Record<string, unknown>): Record<string, unknown> | null {
+function readLaneContextFallback(
+  portfolioState: Record<string, unknown>,
+): Record<string, unknown> | null {
   const ownedUnit = readPortfolioOwnedUnit(portfolioState);
   const reservation = readFirstRecordFromArray(portfolioState['reservations']);
   const network = readString(ownedUnit?.['network']) ?? readString(reservation?.['network']);
@@ -901,7 +919,9 @@ function readManagedMandate(
     return null;
   }
 
-  const lendingPolicy = isRecord(mandateContext['lending_policy']) ? mandateContext['lending_policy'] : null;
+  const lendingPolicy = isRecord(mandateContext['lending_policy'])
+    ? mandateContext['lending_policy']
+    : null;
   const collateralPolicy = isRecord(lendingPolicy?.['collateral_policy'])
     ? lendingPolicy['collateral_policy']
     : null;
@@ -909,7 +929,9 @@ function readManagedMandate(
     ? lendingPolicy['borrow_policy']
     : null;
   const riskPolicy = isRecord(lendingPolicy?.['risk_policy']) ? lendingPolicy['risk_policy'] : null;
-  const collateralAssets = Array.isArray(collateralPolicy?.['assets']) ? collateralPolicy['assets'] : null;
+  const collateralAssets = Array.isArray(collateralPolicy?.['assets'])
+    ? collateralPolicy['assets']
+    : null;
   const allowedBorrowAssets = Array.isArray(borrowPolicy?.['allowed_assets'])
     ? borrowPolicy['allowed_assets']
     : null;
@@ -962,15 +984,22 @@ function readManagedMandate(
 function buildManagedMandateEditorProjection(
   state: EmberLendingLifecycleState,
 ): ManagedMandateEditorProjection | null {
-  const managedMandate = isRecord(state.mandateContext) ? readManagedMandate(state.mandateContext) : null;
+  const managedMandate = isRecord(state.mandateContext)
+    ? readManagedMandate(state.mandateContext)
+    : null;
   if (!state.mandateRef || !managedMandate) {
     return null;
   }
 
   const portfolioState = isRecord(state.lastPortfolioState) ? state.lastPortfolioState : null;
-  const firstReservation = portfolioState ? readFirstRecordFromArray(portfolioState['reservations']) : null;
+  const firstReservation = portfolioState
+    ? readFirstRecordFromArray(portfolioState['reservations'])
+    : null;
   const reservationId = readString(firstReservation?.['reservation_id']);
-  const ownedUnits = portfolioState && Array.isArray(portfolioState['owned_units']) ? portfolioState['owned_units'] : [];
+  const ownedUnits =
+    portfolioState && Array.isArray(portfolioState['owned_units'])
+      ? portfolioState['owned_units']
+      : [];
   const reservedUnit =
     ownedUnits.find(
       (candidate) =>
@@ -1023,14 +1052,17 @@ function mergePortfolioStateWithExecutionContext(input: {
     context: input.executionContext,
     key: 'reservations',
   });
-  const fallbackActivePositionScopes = readPortfolioActivePositionScopes(input.fallbackPortfolioState);
+  const fallbackActivePositionScopes = readPortfolioActivePositionScopes(
+    input.fallbackPortfolioState,
+  );
   const portfolioActivePositionScopes = readPortfolioActivePositionScopes(input.portfolioState);
   const executionContextActivePositionScopes = readExplicitContextRecords({
     context: input.executionContext,
     key: 'active_position_scopes',
   });
   const fallbackWalletContents =
-    isRecord(input.fallbackPortfolioState) && Array.isArray(input.fallbackPortfolioState['wallet_contents'])
+    isRecord(input.fallbackPortfolioState) &&
+    Array.isArray(input.fallbackPortfolioState['wallet_contents'])
       ? input.fallbackPortfolioState['wallet_contents']
       : [];
   const portfolioWalletContents =
@@ -1038,22 +1070,25 @@ function mergePortfolioStateWithExecutionContext(input: {
       ? input.portfolioState['wallet_contents']
       : [];
   const walletContents =
-    Array.isArray(input.executionContext?.wallet_contents) && input.executionContext.wallet_contents.length > 0
+    Array.isArray(input.executionContext?.wallet_contents) &&
+    input.executionContext.wallet_contents.length > 0
       ? input.executionContext.wallet_contents
       : portfolioWalletContents.length > 0
         ? portfolioWalletContents
         : fallbackWalletContents;
 
-  const ownedUnits = portfolioOwnedUnits.length > 0
-    ? portfolioOwnedUnits
-    : executionContextOwnedUnits.status === 'present'
-      ? executionContextOwnedUnits.records
-      : fallbackOwnedUnits;
-  const reservations = portfolioReservations.length > 0
-    ? portfolioReservations
-    : executionContextReservations.status === 'present'
-      ? executionContextReservations.records
-      : fallbackReservations;
+  const ownedUnits =
+    portfolioOwnedUnits.length > 0
+      ? portfolioOwnedUnits
+      : executionContextOwnedUnits.status === 'present'
+        ? executionContextOwnedUnits.records
+        : fallbackOwnedUnits;
+  const reservations =
+    portfolioReservations.length > 0
+      ? portfolioReservations
+      : executionContextReservations.status === 'present'
+        ? executionContextReservations.records
+        : fallbackReservations;
   const activePositionScopes =
     executionContextActivePositionScopes.status === 'present'
       ? executionContextActivePositionScopes.records.length > 0
@@ -1215,7 +1250,9 @@ function hasManagedPortfolioProjection(portfolioState: unknown): boolean {
   );
 }
 
-function hasManagedExecutionContextProjection(executionContext: SharedEmberExecutionContext | null): boolean {
+function hasManagedExecutionContextProjection(
+  executionContext: SharedEmberExecutionContext | null,
+): boolean {
   if (!executionContext || !isRecord(executionContext)) {
     return false;
   }
@@ -1223,7 +1260,8 @@ function hasManagedExecutionContextProjection(executionContext: SharedEmberExecu
   return (
     readString(executionContext.mandate_ref) !== null ||
     isRecord(executionContext.mandate_context) ||
-    (Array.isArray(executionContext.wallet_contents) && executionContext.wallet_contents.length > 0) ||
+    (Array.isArray(executionContext.wallet_contents) &&
+      executionContext.wallet_contents.length > 0) ||
     (Array.isArray(executionContext.active_position_scopes) &&
       executionContext.active_position_scopes.length > 0) ||
     readHexAddress(executionContext.subagent_wallet_address) !== null ||
@@ -1300,10 +1338,7 @@ function appendEconomicExposuresXml(input: {
   input.lines.push(`${input.indent}</economic_exposures>`);
 }
 
-function appendWalletContentsXml(input: {
-  lines: string[];
-  walletContents: unknown;
-}): void {
+function appendWalletContentsXml(input: { lines: string[]; walletContents: unknown }): void {
   if (!Array.isArray(input.walletContents) || input.walletContents.length === 0) {
     return;
   }
@@ -1524,7 +1559,9 @@ function appendActivePositionScopesXml(input: {
           }
           const healthFactor = readString(observedState['health_factor']);
           if (healthFactor) {
-            input.lines.push(`            <health_factor>${escapeXml(healthFactor)}</health_factor>`);
+            input.lines.push(
+              `            <health_factor>${escapeXml(healthFactor)}</health_factor>`,
+            );
           }
           const normalizedHealthFactor = readString(observedState['normalized_health_factor']);
           if (normalizedHealthFactor) {
@@ -1547,7 +1584,9 @@ function appendActivePositionScopesXml(input: {
     }
 
     const members = Array.isArray(scope['members'])
-      ? scope['members'].filter((candidate): candidate is Record<string, unknown> => isRecord(candidate))
+      ? scope['members'].filter((candidate): candidate is Record<string, unknown> =>
+          isRecord(candidate),
+        )
       : [];
     if (members.length > 0) {
       input.lines.push('      <members>');
@@ -1628,7 +1667,9 @@ function appendCurrentCandidatePlanXml(input: {
 
   input.lines.push('  <current_candidate_plan>');
   if (transactionPlanId) {
-    input.lines.push(`    <transaction_plan_id>${escapeXml(transactionPlanId)}</transaction_plan_id>`);
+    input.lines.push(
+      `    <transaction_plan_id>${escapeXml(transactionPlanId)}</transaction_plan_id>`,
+    );
   }
   if (controlPath) {
     input.lines.push(`    <control_path>${escapeXml(controlPath)}</control_path>`);
@@ -1756,10 +1797,7 @@ function readReservationOwnedUnit(input: {
   );
 }
 
-function appendActiveReservationsXml(input: {
-  lines: string[];
-  portfolioState: unknown;
-}): void {
+function appendActiveReservationsXml(input: { lines: string[]; portfolioState: unknown }): void {
   const reservations = readPortfolioReservations(input.portfolioState);
   if (reservations.length === 0) {
     return;
@@ -1841,7 +1879,8 @@ function buildFallbackExecutionContextXml(state: EmberLendingLifecycleState): st
   appendWalletContentsXml({
     lines,
     walletContents:
-      isRecord(state.lastPortfolioState) && Array.isArray(state.lastPortfolioState['wallet_contents'])
+      isRecord(state.lastPortfolioState) &&
+      Array.isArray(state.lastPortfolioState['wallet_contents'])
         ? state.lastPortfolioState['wallet_contents']
         : [],
   });
@@ -1904,9 +1943,7 @@ function buildSharedEmberExecutionContextXml(
 
   const rootUserWalletAddress = readHexAddress(input.executionContext.root_user_wallet_address);
   if (rootUserWalletAddress) {
-    lines.push(
-      `  <root_user_wallet_address>${rootUserWalletAddress}</root_user_wallet_address>`,
-    );
+    lines.push(`  <root_user_wallet_address>${rootUserWalletAddress}</root_user_wallet_address>`);
   }
   appendWalletOwnershipGuidanceXml(lines);
 
@@ -1930,7 +1967,9 @@ function buildSharedEmberExecutionContextXml(
     lines,
     walletContents:
       input.executionContext.wallet_contents ??
-      (isRecord(input.state.lastPortfolioState) ? input.state.lastPortfolioState['wallet_contents'] : []),
+      (isRecord(input.state.lastPortfolioState)
+        ? input.state.lastPortfolioState['wallet_contents']
+        : []),
   });
 
   lines.push('</ember_lending_execution_context>');
@@ -1947,7 +1986,9 @@ function readCandidatePlanSummary(candidatePlan: unknown): string | null {
       ? candidatePlan['compact_plan_summary']
       : null;
 
-  return readString(compactPlanSummary?.['summary']) ?? readString(candidatePlan['transaction_plan_id']);
+  return (
+    readString(compactPlanSummary?.['summary']) ?? readString(candidatePlan['transaction_plan_id'])
+  );
 }
 
 function readCandidatePlanTransactionPlanId(candidatePlan: unknown): string | null {
@@ -2084,10 +2125,7 @@ function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
   };
 }
 
-function readCommittedExecutionProgressEvent(input: {
-  events: unknown[];
-  requestId: string;
-}): {
+function readCommittedExecutionProgressEvent(input: { events: unknown[]; requestId: string }): {
   sequence: number;
   executionResult: unknown;
 } | null {
@@ -2260,6 +2298,24 @@ function readExecutionStatusMessage(executionResult: unknown): {
   };
 }
 
+function isNonceFailedBeforeSubmissionExecutionResult(executionResult: unknown): boolean {
+  if (!isRecord(executionResult)) {
+    return false;
+  }
+
+  const phase = readString(executionResult['phase']);
+  const execution = readRecordKey(executionResult, 'execution');
+  const status = readString(execution?.['status']);
+  const message =
+    readString(execution?.['message']) ?? readString(executionResult['message']) ?? '';
+
+  return (
+    phase === 'completed' &&
+    status === 'failed_before_submission' &&
+    (message.includes('send_nonce_error') || message.includes('nonce too low'))
+  );
+}
+
 function readEscalationSummary(escalationRequest: unknown): string | null {
   if (!isRecord(escalationRequest)) {
     return null;
@@ -2318,10 +2374,7 @@ function buildExecutionArtifactData(input: {
   };
 }
 
-function readStringKey(
-  input: unknown,
-  key: string,
-): string | null {
+function readStringKey(input: unknown, key: string): string | null {
   return isRecord(input) ? readString(input[key]) : null;
 }
 
@@ -2329,15 +2382,11 @@ function readRecordKey(input: unknown, key: string): Record<string, unknown> | n
   return isRecord(input) && isRecord(input[key]) ? input[key] : null;
 }
 
-function readExecutionSigningPackage(
-  preparationResult: unknown,
-): Record<string, unknown> | null {
+function readExecutionSigningPackage(preparationResult: unknown): Record<string, unknown> | null {
   return readRecordKey(preparationResult, 'execution_signing_package');
 }
 
-function readExecutionPreparation(
-  executionResult: unknown,
-): Record<string, unknown> | null {
+function readExecutionPreparation(executionResult: unknown): Record<string, unknown> | null {
   return readRecordKey(executionResult, 'execution_preparation');
 }
 
@@ -2347,9 +2396,7 @@ function readExecutionPreparationMetadata(
   return readRecordKey(readExecutionPreparation(executionResult), 'metadata');
 }
 
-function readExecutionUnsignedTransactionHex(
-  preparationResult: unknown,
-): `0x${string}` | null {
+function readExecutionUnsignedTransactionHex(preparationResult: unknown): `0x${string}` | null {
   const executionSigningPackage = readExecutionSigningPackage(preparationResult);
 
   return (
@@ -2358,21 +2405,15 @@ function readExecutionUnsignedTransactionHex(
   );
 }
 
-function readPreparedExecutionId(
-  executionResult: unknown,
-): string | null {
+function readPreparedExecutionId(executionResult: unknown): string | null {
   return readString(readExecutionPreparation(executionResult)?.['execution_preparation_id']);
 }
 
-function readPreparedExecutionNetwork(
-  executionResult: unknown,
-): string | null {
+function readPreparedExecutionNetwork(executionResult: unknown): string | null {
   return readString(readExecutionPreparation(executionResult)?.['network']);
 }
 
-function readPreparedExecutionRequiredControlPath(
-  executionResult: unknown,
-): string | null {
+function readPreparedExecutionRequiredControlPath(executionResult: unknown): string | null {
   return readString(readExecutionPreparation(executionResult)?.['required_control_path']);
 }
 
@@ -2390,12 +2431,12 @@ function readPreparedExecutionPlannedTransactionPayloadRef(
 function readExecutionSigningPackageCanonicalUnsignedPayloadRef(
   executionResult: unknown,
 ): string | null {
-  return readString(readExecutionSigningPackage(executionResult)?.['canonical_unsigned_payload_ref']);
+  return readString(
+    readExecutionSigningPackage(executionResult)?.['canonical_unsigned_payload_ref'],
+  );
 }
 
-function readExecutionSigningPackageDelegationArtifactRef(
-  executionResult: unknown,
-): string | null {
+function readExecutionSigningPackageDelegationArtifactRef(executionResult: unknown): string | null {
   const executionSigningPackage = readExecutionSigningPackage(executionResult);
   return (
     readString(executionSigningPackage?.['delegation_artifact_ref']) ??
@@ -2413,9 +2454,7 @@ function readExecutionSigningPackageRootDelegationArtifactRef(
   );
 }
 
-function readPreparedExecutionWalletAddress(
-  executionResult: unknown,
-): `0x${string}` | null {
+function readPreparedExecutionWalletAddress(executionResult: unknown): `0x${string}` | null {
   const executionPreparation = readExecutionPreparation(executionResult);
   return readHexAddress(executionPreparation?.['agent_wallet']);
 }
@@ -2634,9 +2673,7 @@ function normalizeRequestIntent(intent: string | null): string | null {
 
 function readIntent(value: unknown): string | null {
   const normalized = readString(value)?.toLowerCase();
-  return normalized && REQUEST_INTENTS.has(normalized)
-    ? normalizeRequestIntent(normalized)
-    : null;
+  return normalized && REQUEST_INTENTS.has(normalized) ? normalizeRequestIntent(normalized) : null;
 }
 
 function readStringArray(value: unknown): string[] | null {
@@ -2735,10 +2772,7 @@ function mergeContextRecords(input: {
     });
 }
 
-function readExplicitContextRecords(input: {
-  context: unknown;
-  key: string;
-}):
+function readExplicitContextRecords(input: { context: unknown; key: string }):
   | {
       status: 'missing';
     }
@@ -2822,7 +2856,7 @@ function readPortfolioReservationForSource(
     }
   }
 
-  return reservations.length === 1 ? reservations[0] ?? null : null;
+  return reservations.length === 1 ? (reservations[0] ?? null) : null;
 }
 
 function resolveManagedPlanningControlPath(
@@ -2888,7 +2922,10 @@ function inferIntentFromControlPath(controlPath: string | null): string | null {
   }
 }
 
-function resolveManagedPlanningIntent(source: Record<string, unknown>, portfolioState: unknown): string {
+function resolveManagedPlanningIntent(
+  source: Record<string, unknown>,
+  portfolioState: unknown,
+): string {
   const preferredControlPath = resolveManagedPlanningControlPath(source, portfolioState);
   if (preferredControlPath) {
     const controlPathIntent = inferIntentFromControlPath(preferredControlPath);
@@ -2974,16 +3011,17 @@ function buildManagedPlanningBlockedMessageFromOnboardingState(input: {
   const targetAsset = readManagedMandateCollateralAsset(input.state);
   const accountedAssets = [
     ...new Set(
-      (Array.isArray(input.onboardingState['owned_units']) ? input.onboardingState['owned_units'] : [])
+      (Array.isArray(input.onboardingState['owned_units'])
+        ? input.onboardingState['owned_units']
+        : []
+      )
         .map((candidate) => (isRecord(candidate) ? readString(candidate['root_asset']) : null))
         .filter((asset): asset is string => asset !== null),
     ),
   ];
   const capitalReservedForAgent = readBoolean(proofs['capital_reserved_for_agent']);
   const policySnapshotRecorded = readBoolean(proofs['policy_snapshot_recorded']);
-  const initialSubagentDelegationIssued = readBoolean(
-    proofs['initial_subagent_delegation_issued'],
-  );
+  const initialSubagentDelegationIssued = readBoolean(proofs['initial_subagent_delegation_issued']);
   const phase = readString(input.onboardingState['phase']) ?? 'unknown';
 
   if (capitalReservedForAgent === false) {
@@ -3218,17 +3256,25 @@ function buildFallbackActionSummary(input: {
   state: EmberLendingLifecycleState;
   intent: string;
 }): string {
-  const portfolioState = isRecord(input.state.lastPortfolioState) ? input.state.lastPortfolioState : null;
+  const portfolioState = isRecord(input.state.lastPortfolioState)
+    ? input.state.lastPortfolioState
+    : null;
   const reservation = readPortfolioReservationForSource(portfolioState, input.source);
   const ownedUnit = portfolioState ? readPortfolioOwnedUnit(portfolioState) : null;
   const quantity =
-    formatSemanticQuantitySummary(input.source['quantity']) ?? readString(input.source['amount']) ?? null;
-  const asset = readString(input.source['asset']) ?? readString(ownedUnit?.['root_asset']) ?? 'capital';
+    formatSemanticQuantitySummary(input.source['quantity']) ??
+    readString(input.source['amount']) ??
+    null;
+  const asset =
+    readString(input.source['asset']) ?? readString(ownedUnit?.['root_asset']) ?? 'capital';
   const protocol =
     readString(input.source['protocol_system']) ??
     readString(input.source['protocol']) ??
-    (isRecord(input.state.mandateContext) ? readString(input.state.mandateContext['protocol']) : null);
-  const controlPath = readString(input.source['control_path']) ?? readString(reservation?.['control_path']);
+    (isRecord(input.state.mandateContext)
+      ? readString(input.state.mandateContext['protocol'])
+      : null);
+  const controlPath =
+    readString(input.source['control_path']) ?? readString(reservation?.['control_path']);
   const verb = readManagedActionVerb(controlPath, input.intent);
 
   if (quantity && protocol) {
@@ -3283,11 +3329,11 @@ function buildManagedSubagentDecisionContext(input: {
       readString(sourceDecisionContext?.['why_this_path_is_best']) ??
       'This matches the current lending mandate and reserved control path.',
     consequence_if_delayed:
-      readString(sourceDecisionContext?.['consequence_if_delayed']) ?? 'Reserved capital remains idle.',
-    alternatives_considered:
-      readStringArray(sourceDecisionContext?.['alternatives_considered']) ?? [
-        'wait and keep the capital idle',
-      ],
+      readString(sourceDecisionContext?.['consequence_if_delayed']) ??
+      'Reserved capital remains idle.',
+    alternatives_considered: readStringArray(
+      sourceDecisionContext?.['alternatives_considered'],
+    ) ?? ['wait and keep the capital idle'],
   };
 }
 
@@ -3358,7 +3404,9 @@ function buildEscalationHandoff(input: {
 
   const commandInput = readJsonObjectInput(input.operationInput) ?? {};
   const source =
-    'handoff' in commandInput && isRecord(commandInput['handoff']) ? commandInput['handoff'] : commandInput;
+    'handoff' in commandInput && isRecord(commandInput['handoff'])
+      ? commandInput['handoff']
+      : commandInput;
   const intent = resolveManagedPlanningIntent(source, input.state.lastPortfolioState);
   const actionSummary =
     readString(source['action_summary']) ??
@@ -3446,7 +3494,9 @@ function shouldStartFreshExecutionRequestAttempt(
     return false;
   }
 
-  const lastExecutionResult = isRecord(state.lastExecutionResult) ? state.lastExecutionResult : null;
+  const lastExecutionResult = isRecord(state.lastExecutionResult)
+    ? state.lastExecutionResult
+    : null;
   if (!lastExecutionResult) {
     return false;
   }
@@ -3551,26 +3601,27 @@ async function runPreparedExecutionFlow(input: {
   committedEventIds: string[];
   executionResult: unknown;
 }> {
-  let requestResponse = await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
-    protocolHost: input.protocolHost,
-    threadId: input.threadId,
-    agentId: input.agentId,
-    currentRevision: input.currentState.lastSharedEmberRevision,
-    buildRequest: (expectedRevision) => ({
-      jsonrpc: '2.0',
-      id: `shared-ember-${input.threadId}-request-execution`,
-      method: 'subagent.requestExecution.v1',
-      params: {
-        idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
-          baseIdempotencyKey: input.idempotencyKey,
-          attempt: 1,
-          priorRevision: input.currentState.lastSharedEmberRevision,
-        }),
-        expected_revision: expectedRevision,
-        transaction_plan_id: input.transactionPlanId,
-      },
-    }),
-  });
+  let requestResponse =
+    await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
+      protocolHost: input.protocolHost,
+      threadId: input.threadId,
+      agentId: input.agentId,
+      currentRevision: input.currentState.lastSharedEmberRevision,
+      buildRequest: (expectedRevision) => ({
+        jsonrpc: '2.0',
+        id: `shared-ember-${input.threadId}-request-execution`,
+        method: 'subagent.requestExecution.v1',
+        params: {
+          idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
+            baseIdempotencyKey: input.idempotencyKey,
+            attempt: 1,
+            priorRevision: input.currentState.lastSharedEmberRevision,
+          }),
+          expected_revision: expectedRevision,
+          transaction_plan_id: input.transactionPlanId,
+        },
+      }),
+    });
   let committedEventIds = [...(requestResponse.result?.committed_event_ids ?? [])];
   let executionResult: unknown = requestResponse.result?.execution_result ?? null;
   let requestAttempts = 1;
@@ -3587,31 +3638,35 @@ async function runPreparedExecutionFlow(input: {
     }
 
     requestAttempts += 1;
-    requestResponse = await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
-      protocolHost: input.protocolHost,
-      threadId: input.threadId,
-      agentId: input.agentId,
-      currentRevision: requestResponse.result?.revision ?? null,
-      buildRequest: (expectedRevision) => ({
-        jsonrpc: '2.0',
-        id: `shared-ember-${input.threadId}-request-execution`,
-        method: 'subagent.requestExecution.v1',
-        params: {
-          idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
-            baseIdempotencyKey: input.idempotencyKey,
-            attempt: requestAttempts,
-            priorRevision: requestResponse.result?.revision ?? null,
-          }),
-          expected_revision: expectedRevision,
-          transaction_plan_id: input.transactionPlanId,
-        },
-      }),
-    });
+    requestResponse =
+      await runSharedEmberCommandWithResolvedRevision<RequestTransactionExecutionResponse>({
+        protocolHost: input.protocolHost,
+        threadId: input.threadId,
+        agentId: input.agentId,
+        currentRevision: requestResponse.result?.revision ?? null,
+        buildRequest: (expectedRevision) => ({
+          jsonrpc: '2.0',
+          id: `shared-ember-${input.threadId}-request-execution`,
+          method: 'subagent.requestExecution.v1',
+          params: {
+            idempotency_key: buildExecutionPreparationContinuationIdempotencyKey({
+              baseIdempotencyKey: input.idempotencyKey,
+              attempt: requestAttempts,
+              priorRevision: requestResponse.result?.revision ?? null,
+            }),
+            expected_revision: expectedRevision,
+            transaction_plan_id: input.transactionPlanId,
+          },
+        }),
+      });
     committedEventIds.push(...(requestResponse.result?.committed_event_ids ?? []));
     executionResult = requestResponse.result?.execution_result ?? null;
   }
 
-  if (isRecord(executionResult) && readString(executionResult['phase']) === 'ready_for_redelegation') {
+  if (
+    isRecord(executionResult) &&
+    readString(executionResult['phase']) === 'ready_for_redelegation'
+  ) {
     const requestId = readString(executionResult['request_id']);
 
     if (requestId) {
@@ -3728,13 +3783,11 @@ async function runPreparedExecutionFlow(input: {
     const executionPreparationId = readPreparedExecutionId(executionResult);
     const canonicalUnsignedPayloadRef =
       readExecutionSigningPackageCanonicalUnsignedPayloadRef(executionResult);
-    const delegationArtifactRef =
-      readExecutionSigningPackageDelegationArtifactRef(executionResult);
+    const delegationArtifactRef = readExecutionSigningPackageDelegationArtifactRef(executionResult);
     const rootDelegationArtifactRef =
       readExecutionSigningPackageRootDelegationArtifactRef(executionResult);
-    const plannedTransactionPayloadRef = readPreparedExecutionPlannedTransactionPayloadRef(
-      executionResult,
-    );
+    const plannedTransactionPayloadRef =
+      readPreparedExecutionPlannedTransactionPayloadRef(executionResult);
     const network = readPreparedExecutionNetwork(executionResult);
     const requiredControlPath = readPreparedExecutionRequiredControlPath(executionResult);
     let resolvedUnsignedTransactionHex: `0x${string}` | null = null;
@@ -3923,7 +3976,8 @@ export function createEmberLendingDomain(
         },
         {
           name: 'create_escalation_request',
-          description: 'Create a bounded escalation request when the managed lending position cannot proceed locally.',
+          description:
+            'Create a bounded escalation request when the managed lending position cannot proceed locally.',
         },
       ],
       transitions: [],
@@ -3986,7 +4040,8 @@ export function createEmberLendingDomain(
             outputs: {
               status: {
                 executionStatus: 'completed',
-                statusMessage: 'Lending runtime projection hydrated from Shared Ember Domain Service.',
+                statusMessage:
+                  'Lending runtime projection hydrated from Shared Ember Domain Service.',
               },
               artifacts: [
                 {
@@ -4083,8 +4138,7 @@ export function createEmberLendingDomain(
               outputs: {
                 status: {
                   executionStatus: 'failed',
-                  statusMessage:
-                    readSemanticTransactionRequestBlockedMessage(operation.input),
+                  statusMessage: readSemanticTransactionRequestBlockedMessage(operation.input),
                 },
               },
             };
@@ -4173,19 +4227,17 @@ export function createEmberLendingDomain(
             };
           }
 
-          const anchoredPayloadRecord = await options.anchoredPayloadResolver!.anchorCandidatePlanPayload({
-            agentId,
-            threadId,
-            transactionPlanId: candidatePlanTransactionPlanId!,
-            walletAddress: planningState.walletAddress!,
-            rootUserWalletAddress: planningState.rootUserWalletAddress!,
-            payloadBuilderOutput: payloadBuilderOutput!,
-            compactPlanSummary: compactPlanSummary!,
-            useMaxRepayAmount:
-              payloadBuilderOutput?.required_control_path === 'lending.repay' &&
-              semanticRequest.quantity.kind === 'percent' &&
-              semanticRequest.quantity.value === 100,
-          });
+          const anchoredPayloadRecord =
+            await options.anchoredPayloadResolver!.anchorCandidatePlanPayload({
+              agentId,
+              threadId,
+              transactionPlanId: candidatePlanTransactionPlanId!,
+              walletAddress: planningState.walletAddress!,
+              rootUserWalletAddress: planningState.rootUserWalletAddress!,
+              payloadBuilderOutput: payloadBuilderOutput!,
+              compactPlanSummary: compactPlanSummary!,
+              useMaxRepayAmount: false,
+            });
           if (!anchoredPayloadRecord) {
             return {
               state: {
@@ -4304,7 +4356,8 @@ export function createEmberLendingDomain(
             preparedExecutionResult = await runExecutionAttempt(executionAttemptState);
           } catch (error) {
             if (
-              isSharedEmberActiveDelegationMismatch(error) &&
+              (isSharedEmberActiveDelegationMismatch(error) ||
+                isSharedEmberNonceSubmissionFailure(error)) &&
               executionAttemptState.pendingExecutionSubmission
             ) {
               executionAttemptState = {
@@ -4334,7 +4387,7 @@ export function createEmberLendingDomain(
                   lastSharedEmberRevision:
                     error instanceof LocalExecutionFailureError ||
                     error instanceof PendingExecutionSubmissionError
-                      ? error.revision ?? executionAttemptState.lastSharedEmberRevision
+                      ? (error.revision ?? executionAttemptState.lastSharedEmberRevision)
                       : executionAttemptState.lastSharedEmberRevision,
                   lastExecutionResult: currentState.lastExecutionResult,
                   lastExecutionTxHash: null,
@@ -4353,9 +4406,75 @@ export function createEmberLendingDomain(
             }
           }
 
+          if (
+            preparedExecutionResult &&
+            isNonceFailedBeforeSubmissionExecutionResult(preparedExecutionResult.executionResult)
+          ) {
+            const nonceRetryState: EmberLendingLifecycleState = {
+              ...executionAttemptState,
+              lastSharedEmberRevision:
+                preparedExecutionResult.revision ?? executionAttemptState.lastSharedEmberRevision,
+              lastExecutionResult: preparedExecutionResult.executionResult,
+              lastExecutionTxHash: null,
+              pendingExecutionSubmission: null,
+            };
+            const nonceRetryIdempotencyKey = buildRequestExecutionIdempotencyKey({
+              threadId,
+              transactionPlanId,
+              retryNonce: crypto
+                .createHash('sha256')
+                .update(crypto.randomUUID())
+                .digest('hex')
+                .slice(0, 12),
+            });
+
+            try {
+              preparedExecutionResult = await runPreparedExecutionFlow({
+                protocolHost,
+                runtimeSigning: options.runtimeSigning,
+                anchoredPayloadResolver: options.anchoredPayloadResolver,
+                runtimeSignerRef: options.runtimeSignerRef,
+                requestRedelegationRefresh: options.requestRedelegationRefresh,
+                threadId,
+                agentId,
+                currentState: nonceRetryState,
+                transactionPlanId,
+                idempotencyKey: nonceRetryIdempotencyKey,
+              });
+              executionAttemptState = nonceRetryState;
+            } catch (error) {
+              if (!(error instanceof Error)) {
+                throw error;
+              }
+
+              return {
+                state: {
+                  ...nonceRetryState,
+                  phase: 'active',
+                  lastSharedEmberRevision:
+                    error instanceof LocalExecutionFailureError ||
+                    error instanceof PendingExecutionSubmissionError
+                      ? (error.revision ?? nonceRetryState.lastSharedEmberRevision)
+                      : nonceRetryState.lastSharedEmberRevision,
+                  lastExecutionResult: nonceRetryState.lastExecutionResult,
+                  lastExecutionTxHash: null,
+                  pendingExecutionSubmission:
+                    error instanceof PendingExecutionSubmissionError
+                      ? error.pendingSubmission
+                      : null,
+                },
+                outputs: {
+                  status: {
+                    executionStatus: 'failed',
+                    statusMessage: normalizeSharedEmberExecutionErrorMessage(error),
+                  },
+                },
+              };
+            }
+          }
+
           const executionResult = preparedExecutionResult.executionResult ?? null;
-          const executionPortfolioState =
-            readExecutionPortfolioState(executionResult) ?? null;
+          const executionPortfolioState = readExecutionPortfolioState(executionResult) ?? null;
           const shouldHydrateManagedProjection =
             !hasManagedPortfolioProjection(executionPortfolioState);
           const mergedExecutionPortfolioState = mergePortfolioStateWithExecutionContext({

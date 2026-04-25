@@ -18,7 +18,11 @@ import {
 } from './WalletPortfolioPanel';
 import { WalletContentsWorkbench } from './WalletContentsWorkbench';
 import { WalletWithdrawPanel } from './WalletWithdrawPanel';
-import { buildWalletDashboardView } from './walletDashboardView';
+import {
+  buildWalletDashboardView,
+  type WalletContentsFamilyView,
+  type WalletContentsView,
+} from './walletDashboardView';
 
 type WalletPortfolioView = {
   balances: WalletBalanceView[];
@@ -58,7 +62,14 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
             <AssetsWidget view={dashboardView} />
             <AccountingWidget view={dashboardView} />
           </div>
-          <WalletPortfolioPanel balances={props.portfolio.balances} positions={props.portfolio.positions} />
+          {props.portfolioProjection ? (
+            <ProjectionHoldingsPanel view={dashboardView.contents} />
+          ) : (
+            <WalletPortfolioPanel
+              balances={props.portfolio.balances}
+              positions={props.portfolio.positions}
+            />
+          )}
         </div>
 
         <WalletWithdrawPanel
@@ -71,6 +82,113 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
       </div>
     </div>
   );
+}
+
+function ProjectionHoldingsPanel(props: { view: WalletContentsView }): React.JSX.Element {
+  return (
+    <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-[#221A13]">Projection holdings</h2>
+          <p className="mt-1 text-sm text-[#6D5B4C]">
+            Shared Ember family view; raw token wrappers and unrelated OCA lanes are not
+            double-counted here.
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-3 gap-2">
+          <ProjectionSummaryChip label="Wallet" valueUsd={props.view.summary.walletUsd} />
+          <ProjectionSummaryChip label="Deployed" valueUsd={props.view.summary.deployedUsd} />
+          <ProjectionSummaryChip label="Owed" valueUsd={props.view.summary.owedUsd} tone="owed" />
+        </div>
+      </div>
+
+      {props.view.families.length === 0 ? (
+        <p className="rounded-[18px] border border-dashed border-[#E7DBD0] bg-[#FCF5EC] px-4 py-6 text-sm text-[#8C7F72]">
+          No projected holdings yet.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {props.view.families.map((family) => (
+            <ProjectionFamilyRow key={family.id} family={family} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ProjectionSummaryChip(props: {
+  label: string;
+  valueUsd: number;
+  tone?: 'default' | 'owed';
+}): React.JSX.Element {
+  return (
+    <div className="rounded-[16px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2 text-right">
+      <div className="font-mono text-[8px] uppercase tracking-[0.14em] text-[#8C7F72]">
+        {props.label}
+      </div>
+      <div
+        className={`mt-1 text-[14px] font-semibold tracking-[-0.04em] ${
+          props.tone === 'owed' ? 'text-[#B23A32]' : 'text-[#221A13]'
+        }`}
+      >
+        {formatCompactUsd(props.valueUsd)}
+      </div>
+    </div>
+  );
+}
+
+function ProjectionFamilyRow(props: { family: WalletContentsFamilyView }): React.JSX.Element {
+  return (
+    <article className="rounded-[20px] border border-[#E7DBD0] bg-[#FCF5EC] px-4 py-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[15px] font-semibold tracking-[-0.04em] text-[#221A13]">
+            {props.family.label}
+          </div>
+          <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#8C7F72]">
+            {formatCompactUsd(props.family.grossExposureUsd)} gross ·{' '}
+            {formatPercent(props.family.share)}
+          </div>
+        </div>
+        <div className="shrink-0 rounded-full border border-[#D9CABB] bg-[#FFF9F2] px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[#8C7F72]">
+          {formatProjectionFamilyState(props.family)}
+        </div>
+      </div>
+      {props.family.lines.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {props.family.lines.map((line) => (
+            <div key={line.id} className="flex items-center justify-between gap-3 text-sm">
+              <span className="truncate text-[#6D5B4C]">{line.label}</span>
+              <span
+                className={`shrink-0 font-mono text-[11px] uppercase tracking-[0.12em] ${
+                  line.tone === 'owed' ? 'text-[#B23A32]' : 'text-[#8C7F72]'
+                }`}
+              >
+                {formatCompactUsd(line.valueUsd)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function formatProjectionFamilyState(family: WalletContentsFamilyView): string {
+  if (family.owedUsd > 0) {
+    return 'Debt';
+  }
+
+  if (family.deployedUsd > 0 && family.walletUsd > 0) {
+    return 'Split';
+  }
+
+  if (family.deployedUsd > 0) {
+    return 'Deployed';
+  }
+
+  return 'Wallet';
 }
 
 function AssetsWidget(props: {
@@ -136,7 +254,9 @@ function AccountingWidget(props: {
         <div
           className="grid h-28 min-w-0 text-right"
           style={{
-            gridTemplateRows: props.view.accounting.segments.map((segment) => segment.meter).join(' '),
+            gridTemplateRows: props.view.accounting.segments
+              .map((segment) => segment.meter)
+              .join(' '),
           }}
         >
           {props.view.accounting.segments.map((segment) => (
@@ -199,6 +319,10 @@ function formatScaledNumber(value: number): string {
     .toFixed(1)
     .replace(/\.0$/, '')
     .replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 export type { WalletManagementViewProps, WalletPortfolioView };

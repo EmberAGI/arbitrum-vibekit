@@ -23,6 +23,7 @@
     "smoke:managed-identities": "pnpm --dir ./apps/agent-portfolio-manager exec tsx ./src/managedOnboardingIdentitySmoke.ts",
     "smoke:redelegation-browser-signing": "node ./apps/agent-portfolio-manager/node_modules/tsx/dist/cli.mjs ./scripts/smoke/redelegation-browser-signing.ts",
     "smoke:managed-idle-reconciliation": "node ./apps/agent-portfolio-manager/node_modules/tsx/dist/cli.mjs ./scripts/smoke/managed-idle-reconciliation.ts",
+    "stack:wallet-qa": "bash scripts/smoke/boot-wallet-qa-stack.sh",
     "reset:dev-stack": "bash scripts/reset-dev-stack.sh"
   },
   "devDependencies": {

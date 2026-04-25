@@ -151,7 +151,9 @@ function readOnboardingBootstrapRootedWalletContextId(value: unknown): string | 
 function readPortfolioManagerContextWalletAddress(
   state: PortfolioManagerLifecycleState,
 ): `0x${string}` | null {
-  return state.activeWalletAddress ?? readOnboardingBootstrapWalletAddress(state.lastOnboardingBootstrap);
+  return (
+    state.activeWalletAddress ?? readOnboardingBootstrapWalletAddress(state.lastOnboardingBootstrap)
+  );
 }
 
 function escapeXml(value: string): string {
@@ -181,9 +183,7 @@ function readHexValue(value: unknown): `0x${string}` | null {
   return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
 }
 
-function readDelegationCaveats(
-  value: unknown,
-): PortfolioManagerSignedDelegation['caveats'] | null {
+function readDelegationCaveats(value: unknown): PortfolioManagerSignedDelegation['caveats'] | null {
   if (!Array.isArray(value)) {
     return null;
   }
@@ -500,8 +500,7 @@ async function runSharedEmberCommandWithResolvedRevision<T>(input: {
   currentRevision: number | null;
   buildRequest: (expectedRevision: number) => unknown;
 }): Promise<T> {
-  let expectedRevision =
-    input.currentRevision ?? (await readCurrentSharedEmberRevision(input));
+  let expectedRevision = input.currentRevision ?? (await readCurrentSharedEmberRevision(input));
 
   try {
     return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
@@ -565,7 +564,9 @@ async function readSharedEmberSubagentWalletAddress(input: {
     },
   });
   const result = isRecord(response) && isRecord(response['result']) ? response['result'] : null;
-  const executionContext = isRecord(result?.['execution_context']) ? result['execution_context'] : null;
+  const executionContext = isRecord(result?.['execution_context'])
+    ? result['execution_context']
+    : null;
 
   return {
     revision: readInt(result?.['revision']),
@@ -731,6 +732,8 @@ type PortfolioProjectionActivePositionScopeMemberInput = {
 type PortfolioProjectionActivePositionScopeInput = {
   scopeId: string;
   kind: string;
+  ownerType?: 'user_idle' | 'agent';
+  ownerId?: string;
   network: string;
   protocolSystem: string;
   containerRef: string;
@@ -829,16 +832,12 @@ function stableStringifyForIdempotency(value: unknown): string {
 
   return `{${entries
     .map(
-      ([key, entryValue]) =>
-        `${JSON.stringify(key)}:${stableStringifyForIdempotency(entryValue)}`,
+      ([key, entryValue]) => `${JSON.stringify(key)}:${stableStringifyForIdempotency(entryValue)}`,
     )
     .join(',')}}`;
 }
 
-function buildPayloadDerivedIdempotencyKey(params: {
-  prefix: string;
-  payload: unknown;
-}): string {
+function buildPayloadDerivedIdempotencyKey(params: { prefix: string; payload: unknown }): string {
   const digest = createHash('sha256')
     .update(stableStringifyForIdempotency(params.payload))
     .digest('hex')
@@ -1049,7 +1048,10 @@ function buildPortfolioProjectionReservations(params: {
             quantity,
           };
         })
-        .filter((allocation): allocation is PortfolioProjectionReservationAllocationInput => allocation !== null);
+        .filter(
+          (allocation): allocation is PortfolioProjectionReservationAllocationInput =>
+            allocation !== null,
+        );
 
       const fallbackUnitAllocations =
         unitAllocations.length > 0
@@ -1124,7 +1126,8 @@ function buildPortfolioProjectionActivePositionScopes(
           const memberId = readString(member['member_id']) ?? `${scopeId}-member-${index}`;
           const asset = readString(member['asset']);
           const quantity = readString(member['quantity']) ?? readString(member['amount']);
-          const valueUsd = readNumberLike(member['value_usd']) ?? readNumberLike(member['valueUsd']);
+          const valueUsd =
+            readNumberLike(member['value_usd']) ?? readNumberLike(member['valueUsd']);
 
           if (asset === null || quantity === null || valueUsd === null) {
             return null;
@@ -1146,14 +1149,18 @@ function buildPortfolioProjectionActivePositionScopes(
             },
           };
         })
-        .filter((entry): entry is PortfolioProjectionActivePositionScopeMemberInput => entry !== null);
+        .filter(
+          (entry): entry is PortfolioProjectionActivePositionScopeMemberInput => entry !== null,
+        );
 
       const marketStateRecord = isRecord(scope['market_state']) ? scope['market_state'] : null;
       const borrowableHeadroomUsd = readString(marketStateRecord?.['borrowable_headroom_usd']);
       const availableBorrowsUsd = readString(marketStateRecord?.['available_borrows_usd']);
       const healthFactor = readString(marketStateRecord?.['health_factor']);
       const currentLtvBps = readFiniteNumber(marketStateRecord?.['current_ltv_bps']);
-      const liquidationThresholdBps = readFiniteNumber(marketStateRecord?.['liquidation_threshold_bps']);
+      const liquidationThresholdBps = readFiniteNumber(
+        marketStateRecord?.['liquidation_threshold_bps'],
+      );
       const marketState =
         borrowableHeadroomUsd === null &&
         availableBorrowsUsd === null &&
@@ -1168,10 +1175,16 @@ function buildPortfolioProjectionActivePositionScopes(
               ...(liquidationThresholdBps !== null ? { liquidationThresholdBps } : {}),
               ...(healthFactor !== null ? { healthFactor } : {}),
             };
+      const ownerType = readString(scope['owner_type']);
+      const normalizedOwnerType =
+        ownerType === 'agent' || ownerType === 'user_idle' ? ownerType : null;
+      const ownerId = readString(scope['owner_id']);
 
       return {
         scopeId,
         kind: readString(scope['kind']) ?? readString(scope['scope_type_id']) ?? 'position',
+        ...(normalizedOwnerType !== null ? { ownerType: normalizedOwnerType } : {}),
+        ...(ownerId !== null ? { ownerId } : {}),
         network: readString(scope['network']) ?? PORTFOLIO_MANAGER_NETWORK,
         protocolSystem: readString(scope['protocol_system']) ?? 'unknown',
         containerRef: readString(scope['container_ref']) ?? scopeId,
@@ -1375,7 +1388,9 @@ function buildAggregatedPortfolioManagerWalletAccountingDetails(params: {
     }
   }
 
-  const phaseValues = [...new Set(accountingDetails.map((details) => details.onboarding.phase))].sort();
+  const phaseValues = [
+    ...new Set(accountingDetails.map((details) => details.onboarding.phase)),
+  ].sort();
   const aggregatedProofs: typeof primaryDetails.onboarding.proofs = {
     rooted_wallet_context_registered: accountingDetails.every(
       (details) => details.onboarding.proofs.rooted_wallet_context_registered,
@@ -1423,11 +1438,11 @@ function buildAggregatedPortfolioManagerWalletAccountingDetails(params: {
       active: accountingDetails.every((details) => details.onboarding.active),
       proofs: aggregatedProofs,
       rootedWalletContextId:
-        accountingDetails.find((details) => details.onboarding.rootedWalletContextId !== null)?.onboarding
-          .rootedWalletContextId ?? null,
+        accountingDetails.find((details) => details.onboarding.rootedWalletContextId !== null)
+          ?.onboarding.rootedWalletContextId ?? null,
       rootDelegationId:
-        accountingDetails.find((details) => details.onboarding.rootDelegationId !== null)?.onboarding
-          .rootDelegationId ?? null,
+        accountingDetails.find((details) => details.onboarding.rootDelegationId !== null)
+          ?.onboarding.rootDelegationId ?? null,
     },
     assets: Array.from(assetsByUnitId.values()),
     reservations: Array.from(reservationsById.values()),
@@ -1488,8 +1503,7 @@ function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupI
   }
 
   const portfolioMandate = 'portfolioMandate' in input ? input.portfolioMandate : null;
-  const firstManagedMandate =
-    'firstManagedMandate' in input ? input.firstManagedMandate : null;
+  const firstManagedMandate = 'firstManagedMandate' in input ? input.firstManagedMandate : null;
   const parsedPortfolioMandate = parsePortfolioMandate(portfolioMandate);
   const parsedFirstManagedMandate = parseFirstManagedMandate(firstManagedMandate);
 
@@ -1624,7 +1638,9 @@ function readManagedAgentIdsFromOnboardingBootstrap(value: unknown): string[] {
   return Array.from(managedAgentIds);
 }
 
-function readManagedAgentIdsForLifecycleState(currentState: PortfolioManagerLifecycleState): string[] {
+function readManagedAgentIdsForLifecycleState(
+  currentState: PortfolioManagerLifecycleState,
+): string[] {
   if (currentState.phase === 'prehire') {
     return [];
   }
@@ -1664,9 +1680,8 @@ async function readManagedPortfolioStateSnapshot(params: {
             }),
           )
         ).filter(
-          (
-            portfolioRead,
-          ): portfolioRead is ManagedAgentPortfolioStateRead => portfolioRead !== null,
+          (portfolioRead): portfolioRead is ManagedAgentPortfolioStateRead =>
+            portfolioRead !== null,
         )
       : [];
   const managedMandateProjection =
@@ -1713,7 +1728,9 @@ async function readManagedPortfolioStateSnapshot(params: {
         fallbackAgentId: portfolioRead.agentId,
       }),
     )
-    .filter((projectionInput): projectionInput is PortfolioProjectionInput => projectionInput !== null);
+    .filter(
+      (projectionInput): projectionInput is PortfolioProjectionInput => projectionInput !== null,
+    );
   const portfolioProjectionInput =
     managedPortfolioProjectionInputs.length > 0 && accountingStateReads.length > 0
       ? buildAggregatedPortfolioProjectionInputFromAccountingStates({
@@ -1721,7 +1738,7 @@ async function readManagedPortfolioStateSnapshot(params: {
           accountingStateReads,
         })
       : managedPortfolioProjectionInputs.length > 0
-        ? managedPortfolioProjectionInputs[0] ?? null
+        ? (managedPortfolioProjectionInputs[0] ?? null)
         : null;
 
   return {
@@ -1758,7 +1775,9 @@ function buildManagedMandateEditorProjection(
 
   const firstReservation = readFirstRecordFromArray(portfolioState['reservations']);
   const reservationId = readString(firstReservation?.['reservation_id']);
-  const ownedUnits = Array.isArray(portfolioState['owned_units']) ? portfolioState['owned_units'] : [];
+  const ownedUnits = Array.isArray(portfolioState['owned_units'])
+    ? portfolioState['owned_units']
+    : [];
   const reservedUnit =
     ownedUnits.find(
       (candidate) =>
@@ -1870,7 +1889,9 @@ function buildManagedMandateEditorProjectionFromOnboardingBootstrap(
   };
 }
 
-function parsePortfolioManagerSignedDelegations(input: unknown): PortfolioManagerSignedDelegation[] | null {
+function parsePortfolioManagerSignedDelegations(
+  input: unknown,
+): PortfolioManagerSignedDelegation[] | null {
   if (typeof input !== 'object' || input === null) {
     return null;
   }
@@ -1887,7 +1908,12 @@ function parsePortfolioManagerSignedDelegations(input: unknown): PortfolioManage
 }
 
 function isPortfolioManagerSigningRejected(input: unknown): boolean {
-  return typeof input === 'object' && input !== null && 'outcome' in input && input.outcome === 'rejected';
+  return (
+    typeof input === 'object' &&
+    input !== null &&
+    'outcome' in input &&
+    input.outcome === 'rejected'
+  );
 }
 
 function buildPortfolioManagerUnsignedDelegation(
@@ -1930,8 +1956,7 @@ function readPrimaryManagedCollateralAsset(
 ): string | null {
   return (
     approvedSetup.firstManagedMandate.managedMandate.lending_policy.collateral_policy.assets[0]
-      ?.asset ??
-    null
+      ?.asset ?? null
   );
 }
 
@@ -1940,9 +1965,7 @@ function buildPortfolioManagerOnboardingBlockedMessage(input: {
   onboardingDetails: ReturnType<typeof buildPortfolioManagerWalletAccountingDetails>;
 }): string {
   const targetAsset = readPrimaryManagedCollateralAsset(input.approvedSetup);
-  const accountedAssets = [
-    ...new Set(input.onboardingDetails.assets.map((asset) => asset.asset)),
-  ];
+  const accountedAssets = [...new Set(input.onboardingDetails.assets.map((asset) => asset.asset))];
   const proofs = input.onboardingDetails.onboarding.proofs;
   const initialSubagentDelegationIssued =
     proofs.initial_subagent_delegation_issued ?? proofs.agent_active;
@@ -1977,9 +2000,7 @@ function buildPortfolioManagerOnboardingBlockedMessage(input: {
   return `Portfolio manager onboarding is not complete. Shared Ember onboarding phase is ${input.onboardingDetails.onboarding.phase}.${missingProofs.length > 0 ? ` Missing proofs: ${missingProofs.join(', ')}.` : ''}`;
 }
 
-function buildManagedReservePolicySummary(input: {
-  managedMandate: ManagedMandate;
-}): string {
+function buildManagedReservePolicySummary(input: { managedMandate: ManagedMandate }): string {
   const primaryCollateralAsset =
     input.managedMandate.lending_policy.collateral_policy.assets[0]?.asset ?? 'capital';
 
@@ -2140,10 +2161,7 @@ function buildPortfolioManagerRootDelegationHandoff(params: {
   };
 }
 
-function buildRootDelegationIdempotencyKey(params: {
-  threadId: string;
-  handoff: unknown;
-}): string {
+function buildRootDelegationIdempotencyKey(params: { threadId: string; handoff: unknown }): string {
   return buildPayloadDerivedIdempotencyKey({
     prefix: 'idem-root-delegation',
     payload: {
@@ -2239,7 +2257,8 @@ export function createPortfolioManagerDomain(
         },
         {
           type: 'portfolio-manager-delegation-signing-request',
-          description: 'Request delegation signatures needed to complete portfolio-manager onboarding.',
+          description:
+            'Request delegation signatures needed to complete portfolio-manager onboarding.',
           mirroredToActivity: false,
         },
       ],
@@ -2248,7 +2267,8 @@ export function createPortfolioManagerDomain(
       const currentState = state ?? buildDefaultLifecycleState();
       const context = ['<portfolio_manager_context>'];
       const protocolHost = options.protocolHost;
-      const projectedManagedMandateProjection = readManagedMandateEditorProjection(currentProjection);
+      const projectedManagedMandateProjection =
+        readManagedMandateEditorProjection(currentProjection);
       const activeManagedSnapshot =
         currentState.phase === 'active' && protocolHost
           ? await readManagedPortfolioStateSnapshot({
@@ -2259,7 +2279,8 @@ export function createPortfolioManagerDomain(
           : null;
       const liveManagedMandateProjection = activeManagedSnapshot?.managedMandateProjection ?? null;
       const visibleManagedMandateProjection =
-        liveManagedMandateProjection ?? (currentState.phase === 'active' ? projectedManagedMandateProjection : null);
+        liveManagedMandateProjection ??
+        (currentState.phase === 'active' ? projectedManagedMandateProjection : null);
 
       context.push(`  <lifecycle_phase>${currentState.phase}</lifecycle_phase>`);
 
@@ -2279,7 +2300,7 @@ export function createPortfolioManagerDomain(
 
       const rootedWalletAddress =
         currentState.phase === 'active'
-          ? visibleManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress
+          ? (visibleManagedMandateProjection?.rootUserWallet ?? currentState.activeWalletAddress)
           : readOnboardingBootstrapWalletAddress(currentState.lastOnboardingBootstrap);
       if (rootedWalletAddress) {
         context.push(
@@ -2305,7 +2326,9 @@ export function createPortfolioManagerDomain(
         );
       }
 
-      const approvedSetup = readApprovedSetupFromOnboardingBootstrap(currentState.lastOnboardingBootstrap);
+      const approvedSetup = readApprovedSetupFromOnboardingBootstrap(
+        currentState.lastOnboardingBootstrap,
+      );
       if (visibleManagedMandateProjection) {
         const managedMandate = visibleManagedMandateProjection.managedMandate;
         context.push('  <managed_agent_mandates>');
@@ -2357,9 +2380,9 @@ export function createPortfolioManagerDomain(
 
       const walletAddress =
         currentState.phase === 'active'
-          ? activeManagedSnapshot?.managedWalletAddress ??
+          ? (activeManagedSnapshot?.managedWalletAddress ??
             visibleManagedMandateProjection?.rootUserWallet ??
-            currentState.activeWalletAddress
+            currentState.activeWalletAddress)
           : readPortfolioManagerContextWalletAddress(currentState);
       if (walletAddress && protocolHost) {
         try {
@@ -2488,18 +2511,15 @@ export function createPortfolioManagerDomain(
 
           return {
             state: nextState,
-              outputs: {
-                status: {
-                  executionStatus: 'interrupted',
-                  statusMessage: PORTFOLIO_MANAGER_SIGNING_MESSAGE,
-                },
-                interrupt: buildPortfolioManagerSigningInterrupt(
-                  setupInput,
-                  controllerWalletAddress,
-                ),
+            outputs: {
+              status: {
+                executionStatus: 'interrupted',
+                statusMessage: PORTFOLIO_MANAGER_SIGNING_MESSAGE,
               },
-            };
-          }
+              interrupt: buildPortfolioManagerSigningInterrupt(setupInput, controllerWalletAddress),
+            },
+          };
+        }
         case PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE: {
           if (isPortfolioManagerSigningRejected(operation.input)) {
             return {
@@ -2723,7 +2743,8 @@ export function createPortfolioManagerDomain(
               phase: 'onboarding',
               lastPortfolioState: currentState.lastPortfolioState,
               lastSharedEmberRevision: nextRevision,
-              lastRootDelegation: response.result?.root_delegation ?? currentState.lastRootDelegation,
+              lastRootDelegation:
+                response.result?.root_delegation ?? currentState.lastRootDelegation,
               lastOnboardingBootstrap: onboarding,
               lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
               activeWalletAddress: walletAddress,
@@ -2940,10 +2961,7 @@ export function createPortfolioManagerDomain(
           const nextRevision =
             managedMandateProjection === null && managedSnapshot.accountingStateReads.length === 0
               ? portfolioStateRead.revision
-              : Math.max(
-                  portfolioStateRead.revision ?? 0,
-                  managedSnapshot.revision ?? 0,
-                );
+              : Math.max(portfolioStateRead.revision ?? 0, managedSnapshot.revision ?? 0);
 
           const nextState: PortfolioManagerLifecycleState = {
             phase: nextPhase,
@@ -2952,13 +2970,18 @@ export function createPortfolioManagerDomain(
             lastRootDelegation: currentState.lastRootDelegation,
             lastOnboardingBootstrap: currentState.lastOnboardingBootstrap,
             lastRootedWalletContextId:
-              managedMandateProjection?.rootedWalletContextId ?? currentState.lastRootedWalletContextId,
+              managedMandateProjection?.rootedWalletContextId ??
+              currentState.lastRootedWalletContextId,
             activeWalletAddress:
               managedSnapshot.managedWalletAddress ?? currentState.activeWalletAddress,
             pendingOnboardingWalletAddress:
-              managedMandateProjection === null ? currentState.pendingOnboardingWalletAddress : null,
+              managedMandateProjection === null
+                ? currentState.pendingOnboardingWalletAddress
+                : null,
             pendingApprovedSetup:
-              managedMandateProjection === null ? currentState.pendingApprovedSetup ?? null : null,
+              managedMandateProjection === null
+                ? (currentState.pendingApprovedSetup ?? null)
+                : null,
           };
 
           return {
@@ -3166,7 +3189,8 @@ export function createPortfolioManagerDomain(
               outputs: {
                 status: {
                   executionStatus: 'completed',
-                  statusMessage: 'No redelegation work is currently pending in the Shared Ember outbox.',
+                  statusMessage:
+                    'No redelegation work is currently pending in the Shared Ember outbox.',
                 },
               },
             };
@@ -3315,9 +3339,8 @@ export function createPortfolioManagerDomain(
           const registeredRevision =
             readInt(registrationResponse.result?.revision) ?? nextState.lastSharedEmberRevision;
           const acknowledgedRevision =
-            readInt(
-              isRecord(acknowledgeResponse) ? acknowledgeResponse['revision'] : null,
-            ) ?? registeredRevision;
+            readInt(isRecord(acknowledgeResponse) ? acknowledgeResponse['revision'] : null) ??
+            registeredRevision;
           const acknowledgedThroughSequence =
             readInt(
               isRecord(acknowledgeResponse)
@@ -3412,8 +3435,7 @@ export function createPortfolioManagerDomain(
             lastOnboardingBootstrap: currentState.lastOnboardingBootstrap,
             lastRootedWalletContextId: response.result?.rooted_wallet_context_id ?? null,
             activeWalletAddress:
-              currentState.activeWalletAddress ??
-              currentState.pendingOnboardingWalletAddress,
+              currentState.activeWalletAddress ?? currentState.pendingOnboardingWalletAddress,
             pendingOnboardingWalletAddress: currentState.pendingOnboardingWalletAddress,
             pendingApprovedSetup: currentState.pendingApprovedSetup ?? null,
           };

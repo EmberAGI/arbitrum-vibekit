@@ -34,6 +34,9 @@ function buildCommitmentsByObservedAsset(params: {
       if (!unit) {
         continue;
       }
+      if (unit.reservationId !== reservation.reservationId) {
+        continue;
+      }
 
       const commitments = commitmentsByObservedAsset.get(unit.rootAsset) ?? [];
       commitments.push({
@@ -160,7 +163,10 @@ function buildPositionObservedAssetProjections(params: {
     );
 }
 
-function compareObservedAssets(left: ObservedAssetProjection, right: ObservedAssetProjection): number {
+function compareObservedAssets(
+  left: ObservedAssetProjection,
+  right: ObservedAssetProjection,
+): number {
   const sourceOrder = {
     wallet: 0,
     position: 1,
@@ -182,7 +188,8 @@ export function buildAssetFamilyProjectionFromObservedAssets(
   },
 ): AssetFamilyProjection[] {
   const totalPositiveUsd = observedAssets.reduce(
-    (sum, observedAsset) => (observedAsset.sourceKind === 'debt' ? sum : sum + observedAsset.valueUsd),
+    (sum, observedAsset) =>
+      observedAsset.sourceKind === 'debt' ? sum : sum + observedAsset.valueUsd,
     0,
   );
   const families = new Map<string, Omit<AssetFamilyProjection, 'share'>>();
@@ -219,15 +226,21 @@ export function buildAssetFamilyProjectionFromObservedAssets(
       positiveUsd: observedAsset.sourceKind === 'debt' ? 0 : observedAsset.valueUsd,
       walletUsd: observedAsset.sourceKind === 'wallet' ? observedAsset.valueUsd : 0,
       deployedUsd: observedAsset.sourceKind === 'position' ? observedAsset.valueUsd : 0,
-      walletAvailableUsd: observedAsset.sourceKind === 'wallet' ? observedAsset.availableUsd ?? 0 : 0,
-      walletCommittedUsd: observedAsset.sourceKind === 'wallet' ? observedAsset.committedUsd ?? 0 : 0,
+      walletAvailableUsd:
+        observedAsset.sourceKind === 'wallet' ? (observedAsset.availableUsd ?? 0) : 0,
+      walletCommittedUsd:
+        observedAsset.sourceKind === 'wallet' ? (observedAsset.committedUsd ?? 0) : 0,
       debtUsd: observedAsset.sourceKind === 'debt' ? observedAsset.valueUsd : 0,
       observedAssets: [observedAsset],
       commitmentCount: observedAsset.commitments.length,
       directCount:
-        observedAsset.sourceKind !== 'debt' && observedAsset.asset === observedAsset.familyAsset ? 1 : 0,
+        observedAsset.sourceKind !== 'debt' && observedAsset.asset === observedAsset.familyAsset
+          ? 1
+          : 0,
       wrapperCount:
-        observedAsset.sourceKind !== 'debt' && observedAsset.asset !== observedAsset.familyAsset ? 1 : 0,
+        observedAsset.sourceKind !== 'debt' && observedAsset.asset !== observedAsset.familyAsset
+          ? 1
+          : 0,
     });
   }
 
