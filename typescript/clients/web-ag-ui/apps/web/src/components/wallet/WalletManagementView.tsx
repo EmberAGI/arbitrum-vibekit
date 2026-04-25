@@ -3,7 +3,6 @@
 import type { Account, Chain, Transport, WalletClient } from 'viem';
 
 import { PortfolioDashboardTopBar } from '@/components/dashboard/PortfolioDashboardTopBar';
-import { RectangularTreemap } from '@/components/dashboard/RectangularTreemap';
 import type {
   PortfolioProjectionInput,
   PortfolioProjectionPacket,
@@ -51,59 +50,27 @@ export function WalletManagementView(props: WalletManagementViewProps): React.JS
     <div className="mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6">
       <PortfolioDashboardTopBar view={dashboardView.topbar} />
       <div className="space-y-6 px-4 pb-6 sm:px-6">
-        <WalletContentsWorkbench view={dashboardView.contents} />
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] xl:items-start">
+          <WalletContentsWorkbench view={dashboardView.contents} positions={props.portfolio.positions} />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
-          <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)] lg:items-start">
-            <div className="space-y-6">
-              <AssetsWidget view={dashboardView} />
-              <AccountingWidget view={dashboardView} />
-            </div>
-            <WalletPortfolioPanel balances={props.portfolio.balances} positions={props.portfolio.positions} />
+          <div className="space-y-6">
+            <WalletPortfolioPanel
+              treemapItems={dashboardView.treemapItems}
+              totalExposureLabel={dashboardView.topbar.metrics[0]?.value ?? '$0'}
+            />
+            <AccountingWidget view={dashboardView} />
+
+            <WalletWithdrawPanel
+              sourceAddress={props.walletAddress}
+              connectedDestinationAddress={props.connectedDestinationAddress}
+              walletClient={props.walletClient}
+              balances={props.portfolio.balances}
+              onWithdrawConfirmed={props.onWithdrawConfirmed}
+            />
           </div>
-
-          <WalletWithdrawPanel
-            sourceAddress={props.walletAddress}
-            connectedDestinationAddress={props.connectedDestinationAddress}
-            walletClient={props.walletClient}
-            balances={props.portfolio.balances}
-            onWithdrawConfirmed={props.onWithdrawConfirmed}
-          />
         </div>
       </div>
     </div>
-  );
-}
-
-function AssetsWidget(props: {
-  view: ReturnType<typeof buildWalletDashboardView>;
-}): React.JSX.Element {
-  return (
-    <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] px-5 py-4 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
-      <div className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]">
-          <span>Assets</span>
-          <span>{props.view.topbar.metrics[0]?.value ?? '$0'}</span>
-        </div>
-        <div className="truncate text-[12px] font-medium text-[#8C7F72]">
-          Wallet + visible deployed exposure
-        </div>
-      </div>
-      <div className="relative mt-3">
-        {props.view.treemapItems.length > 0 ? (
-          <RectangularTreemap className="h-[188px]" items={props.view.treemapItems} />
-        ) : (
-          <div className="flex h-[188px] items-center justify-center rounded-[20px] border border-dashed border-[#E7DBD0] bg-[#FCF5EC] text-sm text-[#8C7F72]">
-            No priced wallet exposures yet.
-          </div>
-        )}
-      </div>
-      <div className="mt-3 flex items-center gap-2 font-mono text-[8px] uppercase tracking-[0.14em] text-[#A6927E]">
-        <span>Hover the treemap</span>
-        <span aria-hidden="true">·</span>
-        <span>cash and deployed exposure</span>
-      </div>
-    </section>
   );
 }
 

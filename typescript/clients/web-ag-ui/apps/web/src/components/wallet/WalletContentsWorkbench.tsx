@@ -4,10 +4,22 @@ import { COINGECKO_TOKEN_ICON_BY_SYMBOL } from '@/constants/coingeckoTokenIcons'
 import { iconMonogram, proxyIconUri, resolveTokenIconUri } from '@/utils/iconResolution';
 
 import type {
+  LiquidityPositionView,
+  PendlePositionView,
+  PerpetualPositionView,
+} from './WalletPortfolioPanel';
+import type {
   WalletContentsFamilyView,
   WalletContentsObservedAssetView,
   WalletContentsView,
 } from './walletDashboardView';
+import { parseUsdNotional } from './walletDashboardView';
+
+export type WalletContentsDefiPositionsView = {
+  perpetuals: PerpetualPositionView[];
+  pendle: PendlePositionView[];
+  liquidity: LiquidityPositionView[];
+};
 
 function formatUsd(value: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -327,19 +339,10 @@ function ObservedAssetBreakdown(props: {
     <div className={`${zebraClassName} px-4 py-3`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <WalletTokenAvatar
-              symbol={props.observedAsset.asset}
-              fallbackSymbol={props.observedAsset.familyAsset}
-              small
-            />
-            <div className="min-w-0">
-              <div className="truncate text-[11px] uppercase tracking-[0.14em] text-[#221A13]">
-                {props.observedAsset.asset}
-              </div>
-              <div className="mt-1 text-xs text-[#6D5B4C]">{describeObservedAsset(props.observedAsset)}</div>
-            </div>
+          <div className="truncate text-[11px] uppercase tracking-[0.14em] text-[#221A13]">
+            {props.observedAsset.asset}
           </div>
+          <div className="mt-1 text-xs text-[#6D5B4C]">{describeObservedAsset(props.observedAsset)}</div>
         </div>
         <div className="text-right">
           <div className={props.observedAsset.sourceKind === 'debt' ? 'text-sm text-[#B23A32]' : 'text-sm text-[#221A13]'}>
@@ -364,7 +367,7 @@ function FamilyBreakdown(props: {
   familyView: WalletContentsFamilyView;
 }): React.JSX.Element {
   return (
-    <div className="mx-4 mb-4 mt-4 overflow-hidden rounded-[18px] border border-[#E7DBD0] bg-[#FFF9F2]">
+    <div className="border-t border-[#E7DBD0]">
       {props.familyView.observedAssets.map((observedAsset, index) => (
         <ObservedAssetBreakdown
           key={`${props.familyView.id}:${observedAsset.asset}:${observedAsset.sourceKind}:${index}`}
@@ -380,8 +383,8 @@ function FeaturedCard(props: {
   familyView: WalletContentsFamilyView;
 }): React.JSX.Element {
   return (
-    <details className="overflow-hidden rounded-[22px] border border-[#E7DBD0] bg-[#FFFCF7] shadow-[0_16px_36px_rgba(28,18,10,0.08)]">
-      <summary className="list-none cursor-pointer px-4 py-4">
+    <details className="group relative overflow-hidden rounded-[22px] border border-[#E7DBD0] bg-[#FFFCF7] pb-7 shadow-[0_16px_36px_rgba(28,18,10,0.08)]">
+      <summary className="list-none cursor-pointer px-3 pb-2 pt-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <WalletTokenAvatar symbol={props.familyView.label} fallbackSymbol={props.familyView.label} />
@@ -391,7 +394,7 @@ function FeaturedCard(props: {
             {formatPercent(props.familyView.share)}
           </div>
         </div>
-        <div className="mt-5 text-[32px] font-semibold tracking-[-0.06em] text-[#221A13]">
+        <div className="mt-2 text-[32px] font-semibold tracking-[-0.06em] text-[#221A13]">
           {formatUsd(props.familyView.positiveUsd)}
         </div>
         <FamilyCompositionBar
@@ -401,6 +404,22 @@ function FeaturedCard(props: {
           owedUsd={props.familyView.owedUsd}
           compact
         />
+        <div className="absolute inset-x-0 bottom-0 flex h-7 justify-center border-t border-[#E7DBD0] bg-[#FFFCF7] pt-1">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-4 w-4 rotate-180 text-[#6D5B4C] transition-transform duration-150 group-open:rotate-0"
+          >
+            <path
+              d="M6 9l6 6 6-6"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+            />
+          </svg>
+        </div>
       </summary>
       <FamilyBreakdown familyView={props.familyView} />
     </details>
@@ -450,8 +469,82 @@ function EmptyWalletContents(): React.JSX.Element {
   );
 }
 
+function DeFiPositionsSection(props: {
+  positions: WalletContentsDefiPositionsView;
+}): React.JSX.Element {
+  return (
+    <div className="mt-5 border-t border-[#E7DBD0] pt-4">
+      <h3 className="text-sm font-semibold text-[#221A13]">DeFi</h3>
+
+      <div className="mt-3 divide-y divide-[#E7DBD0] border-y border-[#E7DBD0]">
+        <div className="py-3">
+          <h4 className="text-[13px] font-semibold text-[#3C2A21]">Perpetual Positions</h4>
+          {props.positions.perpetuals.length === 0 ? (
+            <p className="mt-1 text-sm text-[#8C7F72]">No perpetual positions.</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {props.positions.perpetuals.map((position) => (
+                <li
+                  key={position.key}
+                  className="flex items-center justify-between gap-3 bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
+                >
+                  <span>
+                    {position.positionSide.toUpperCase()} · {position.marketAddress.slice(0, 10)}…
+                  </span>
+                  <span className="font-mono text-[11px] text-[#8C7F72]">
+                    ${parseUsdNotional(position.sizeInUsd)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="py-3">
+          <h4 className="text-[13px] font-semibold text-[#3C2A21]">Pendle Positions</h4>
+          {props.positions.pendle.length === 0 ? (
+            <p className="mt-1 text-sm text-[#8C7F72]">No Pendle positions.</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {props.positions.pendle.map((position) => (
+                <li
+                  key={`${position.marketIdentifier.chainId}:${position.marketIdentifier.address}`}
+                  className="bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
+                >
+                  {position.marketIdentifier.address.slice(0, 10)}… · PT {position.pt.exactAmount} · YT{' '}
+                  {position.yt.exactAmount}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="py-3">
+          <h4 className="text-[13px] font-semibold text-[#3C2A21]">CLMM / Camelot Positions</h4>
+          {props.positions.liquidity.length === 0 ? (
+            <p className="mt-1 text-sm text-[#8C7F72]">No CLMM/Camelot positions.</p>
+          ) : (
+            <ul className="mt-2 space-y-2">
+              {props.positions.liquidity.map((position) => (
+                <li
+                  key={position.positionId ?? position.poolName ?? 'unknown'}
+                  className="bg-[#FCF5EC] px-3 py-2.5 text-sm text-[#221A13]"
+                >
+                  {(position.poolName && position.poolName.length > 0) ? position.poolName : 'Unnamed Pool'}
+                  {position.positionValueUsd ? ` · $${parseUsdNotional(position.positionValueUsd)}` : ''}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function WalletContentsWorkbench(props: {
   view: WalletContentsView;
+  positions: WalletContentsDefiPositionsView;
 }): React.JSX.Element {
   const familyViews = props.view.families;
   const featuredAssets = familyViews.filter((familyView) => familyView.share > 0.04);
@@ -477,7 +570,7 @@ export function WalletContentsWorkbench(props: {
           <EmptyWalletContents />
         ) : (
           <>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3">
               {featuredAssets.map((familyView) => (
                 <FeaturedCard key={familyView.id} familyView={familyView} />
               ))}
@@ -489,6 +582,7 @@ export function WalletContentsWorkbench(props: {
             </div>
           </>
         )}
+        <DeFiPositionsSection positions={props.positions} />
       </div>
     </section>
   );

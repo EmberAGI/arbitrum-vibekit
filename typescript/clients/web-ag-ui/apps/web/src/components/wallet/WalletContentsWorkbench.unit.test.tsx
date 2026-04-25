@@ -4,10 +4,17 @@ import { describe, expect, it } from 'vitest';
 
 import { WalletContentsWorkbench } from './WalletContentsWorkbench';
 
+const EMPTY_DEFI_POSITIONS = {
+  perpetuals: [],
+  pendle: [],
+  liquidity: [],
+};
+
 describe('WalletContentsWorkbench', () => {
   it('renders wallet contents USD values with two decimal places', () => {
     const html = renderToStaticMarkup(
       React.createElement(WalletContentsWorkbench, {
+        positions: EMPTY_DEFI_POSITIONS,
         view: {
           summary: {
             grossExposureUsd: 1_259.345,
@@ -166,6 +173,28 @@ describe('WalletContentsWorkbench', () => {
     expect(html).toContain('$1,135.95');
     expect(html).toContain('$12.00');
     expect(html).toContain('0.000027');
+    expect(html.indexOf('Composition')).toBeLessThan(html.indexOf('DeFi'));
+    expect(html).toContain('No perpetual positions.');
+    expect(html).toContain('No Pendle positions.');
+    expect(html).toContain('No CLMM/Camelot positions.');
+    expect(html).not.toContain('list-none cursor-pointer px-3 py-3');
+    expect(html).toContain('mt-2 text-[32px]');
+    expect(html).toContain('group relative overflow-hidden rounded-[22px]');
+    expect(html).toContain('list-none cursor-pointer px-3 pb-2 pt-3');
+    expect(html).toContain('absolute inset-x-0 bottom-0 flex h-7 justify-center border-t border-[#E7DBD0] bg-[#FFFCF7] pt-1');
+    expect(html).toContain('rotate-180');
+    expect(html).toContain('group-open:rotate-0');
+    expect(html).not.toContain('duration-150 group-open:rotate-180');
+    expect(html).toContain('viewBox="0 0 24 24"');
+    expect(html).not.toContain('mt-3 flex justify-center border-t border-[#E7DBD0] bg-[#FFFCF7] pt-2');
+    expect(html).toContain('grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3');
+    expect(html).toContain('Direct unmanaged USDC');
+    expect(html).toContain('Deployed on Aave · tracks USDC');
+    expect(html).not.toContain('mx-4 mb-4 mt-4 overflow-hidden rounded-[18px] border border-[#E7DBD0] bg-[#FFF9F2]');
+    expect(html).not.toContain('h-8 w-8');
+    expect(html).not.toContain('grid gap-3 md:grid-cols-2 xl:grid-cols-3');
+    expect(html).not.toContain('list-none cursor-pointer px-4 py-4');
+    expect(html).not.toContain('mt-5 text-[32px]');
     expect(html).not.toContain('>$23<');
     expect(html).not.toContain('>$100<');
     expect(html).not.toContain('>$123<');
@@ -175,6 +204,7 @@ describe('WalletContentsWorkbench', () => {
   it('matches the reservation-aware wallet reference structure while preserving the light theme', () => {
     const html = renderToStaticMarkup(
       React.createElement(WalletContentsWorkbench, {
+        positions: EMPTY_DEFI_POSITIONS,
         view: {
           summary: {
             grossExposureUsd: 1_271.345,
@@ -255,6 +285,7 @@ describe('WalletContentsWorkbench', () => {
   it('uses the wallet summary total for top-level unmanaged exposure when family availability is zero', () => {
     const html = renderToStaticMarkup(
       React.createElement(WalletContentsWorkbench, {
+        positions: EMPTY_DEFI_POSITIONS,
         view: {
           summary: {
             grossExposureUsd: 170.45,
@@ -295,6 +326,7 @@ describe('WalletContentsWorkbench', () => {
   it('keeps the top-level unmanaged value aligned with the summary when reserved data exists without availability', () => {
     const html = renderToStaticMarkup(
       React.createElement(WalletContentsWorkbench, {
+        positions: EMPTY_DEFI_POSITIONS,
         view: {
           summary: {
             grossExposureUsd: 112.11,

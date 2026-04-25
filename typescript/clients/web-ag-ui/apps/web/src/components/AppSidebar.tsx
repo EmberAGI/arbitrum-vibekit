@@ -484,9 +484,6 @@ export function AppSidebar() {
           />
           <div className="flex items-center gap-2">
             <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
-            <span className="text-[10px] font-mono font-medium text-[#8A6F58] px-1.5 py-0.5 bg-[#FFF8F0] border border-[#D8C0A7] rounded-[5px]">
-              AI
-            </span>
           </div>
         </div>
       </div>
