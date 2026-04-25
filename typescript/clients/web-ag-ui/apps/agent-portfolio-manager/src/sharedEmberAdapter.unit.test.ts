@@ -280,6 +280,12 @@ function createLiveManagedAgentPortfolioState() {
         value_usd: '10',
       },
       {
+        asset: 'WBTC',
+        network: 'arbitrum',
+        quantity: '2736',
+        value_usd: '2.1084539253125922',
+      },
+      {
         asset: 'WETH',
         network: 'arbitrum',
         quantity: '0.01',
@@ -3216,7 +3222,15 @@ describe('createPortfolioManagerDomain', () => {
               asset: 'USDC',
               network: 'arbitrum',
               quantity: '10',
+              displayQuantity: '0.00001',
               valueUsd: 10,
+            }),
+            expect.objectContaining({
+              asset: 'WBTC',
+              network: 'arbitrum',
+              quantity: '2736',
+              displayQuantity: '0.00002736',
+              valueUsd: 2.1084539253125922,
             }),
             expect.objectContaining({
               asset: 'WETH',

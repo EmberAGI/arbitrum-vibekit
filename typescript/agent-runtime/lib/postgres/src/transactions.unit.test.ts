@@ -30,6 +30,8 @@ describe('transactions', () => {
       'pi_thread_activity',
     ]);
     expect(statements[0]?.text).toContain('insert into pi_threads');
+    expect(statements[0]?.text).toContain('on conflict (thread_key) do update');
+    expect(statements[0]?.text).toContain('id = excluded.id');
     expect(statements[1]?.text).toContain('insert into pi_executions');
     expect(statements[1]?.text).toContain('on conflict (id) do update');
     expect(statements[2]?.text).toContain('update pi_interrupts');

@@ -138,7 +138,7 @@ export function buildPersistThreadStateStatements(params: {
   return [
     buildStatement(
       'pi_threads',
-      'insert into pi_threads (id, thread_key, status, thread_state, created_at, updated_at) values ($1, $2, $3, $4, $5, $6) on conflict (id) do update set thread_state = excluded.thread_state, updated_at = excluded.updated_at',
+      'insert into pi_threads (id, thread_key, status, thread_state, created_at, updated_at) values ($1, $2, $3, $4, $5, $6) on conflict (thread_key) do update set id = excluded.id, status = excluded.status, thread_state = excluded.thread_state, updated_at = excluded.updated_at',
       [params.threadId, params.threadKey, 'active', JSON.stringify(params.threadState), params.now, params.now],
     ),
   ];

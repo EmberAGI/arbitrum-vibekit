@@ -207,7 +207,7 @@ export class AAVEAdapter {
     const normalizedAsset = this.normalizeTokenAddress(repayToken);
 
     // Choose repayment method based on useATokens flag
-    const txs = await this.repay(normalizedAsset, amount.toString(), from, repayToken.decimals);
+    const txs = await this.repay(normalizedAsset, amount.toString(), from);
 
     return {
       transactions: txs.map((t) => transactionPlanFromEthers(this.chain.id.toString(), t)),
@@ -226,7 +226,6 @@ export class AAVEAdapter {
       normalizedAsset,
       amount.toString(),
       from,
-      repayToken.decimals,
     );
 
     return {
@@ -458,19 +457,12 @@ export class AAVEAdapter {
     return (approvalTx ? [approvalTx] : []).concat([tx]);
   }
 
-  private async repay(
-    asset: string,
-    amount_formatted: string,
-    from: string,
-    tokenDecimals: number,
-  ): Promise<AAVEAction> {
+  private async repay(asset: string, amount: string, from: string): Promise<AAVEAction> {
     // validate
     ethers.utils.getAddress(asset);
     ethers.utils.getAddress(from);
 
     const bundle: PoolBundle = this.getPoolBundle();
-
-    const amount = utils.parseUnits(amount_formatted, tokenDecimals).toString();
 
     const tx = bundle.repayTxBuilder.generateTxData({
       user: from,
@@ -490,16 +482,10 @@ export class AAVEAdapter {
     return (approvalTx ? [approvalTx] : []).concat([tx]);
   }
 
-  private repayWithATokens(
-    asset: string,
-    amount_formatted: string,
-    from: string,
-    tokenDecimals: number,
-  ): Promise<AAVEAction> {
+  private repayWithATokens(asset: string, amount: string, from: string): Promise<AAVEAction> {
     ethers.utils.getAddress(asset);
     ethers.utils.getAddress(from);
     const bundle = this.getPoolBundle();
-    const amount = utils.parseUnits(amount_formatted, tokenDecimals).toString();
     const tx = bundle.repayWithATokensTxBuilder.generateTxData({
       user: from,
       reserve: asset,

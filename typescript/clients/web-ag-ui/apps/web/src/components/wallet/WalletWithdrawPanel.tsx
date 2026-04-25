@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import {
   createPublicClient,
   erc20Abi,
+  formatUnits,
   http,
   parseUnits,
   type Account,
@@ -14,6 +15,7 @@ import {
   type WalletClient,
 } from 'viem';
 
+import { DashboardTokenAvatar } from '@/components/dashboard/DashboardTokenAvatar';
 import type { WalletBalanceView } from './WalletPortfolioPanel';
 import { isUserRejectedTransactionError, validateWithdrawRequest } from './withdraw';
 import { defaultEvmChain } from '@/config/evmChains';
@@ -35,6 +37,7 @@ type WalletWithdrawPanelProps = {
 };
 
 const ZERO_ADDRESS = `0x${'0'.repeat(40)}` as const;
+const TOKENS_PER_WITHDRAW_PAGE = 5;
 
 function tokenLabel(balance: WalletBalanceView): string {
   return balance.symbol ?? `${balance.tokenUid.address.slice(0, 8)}…`;
@@ -42,6 +45,24 @@ function tokenLabel(balance: WalletBalanceView): string {
 
 function balanceKey(balance: WalletBalanceView): string {
   return `${balance.tokenUid.chainId}:${balance.tokenUid.address.toLowerCase()}`;
+}
+
+export function formatWithdrawTokenAmount(input: {
+  amount: string;
+  decimals?: number;
+}): string {
+  return formatUnits(BigInt(input.amount), input.decimals ?? 18);
+}
+
+function formatWithdrawTokenAmountPercent(input: {
+  amount: string;
+  decimals?: number;
+  percent: 25 | 50 | 100;
+}): string {
+  return formatUnits(
+    (BigInt(input.amount) * BigInt(input.percent)) / BigInt(100),
+    input.decimals ?? 18,
+  );
 }
 
 export function getPreferredSelectedTokenKey(input: {
@@ -85,6 +106,7 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
   const [customDestination, setCustomDestination] = useState('');
   const [amount, setAmount] = useState('');
   const [userSelectedTokenKey, setUserSelectedTokenKey] = useState<string>('');
+  const [tokenPageIndex, setTokenPageIndex] = useState(0);
   const [status, setStatus] = useState<WithdrawResultStatus>({ kind: 'idle' });
 
   const selectedTokenKey = getPreferredSelectedTokenKey({
@@ -102,6 +124,41 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
 
   const canSubmit = props.walletClient !== null && selectedToken !== null && amount.trim().length > 0;
   const isWorking = status.kind === 'submitting' || status.kind === 'confirming';
+  const selectedTokenBalance = selectedToken
+    ? formatWithdrawTokenAmount({
+        amount: selectedToken.amount,
+        decimals: selectedToken.decimals,
+      })
+    : '';
+  const selectedTokenQuarterBalance = selectedToken
+    ? formatWithdrawTokenAmountPercent({
+        amount: selectedToken.amount,
+        decimals: selectedToken.decimals,
+        percent: 25,
+      })
+    : '';
+  const selectedTokenHalfBalance = selectedToken
+    ? formatWithdrawTokenAmountPercent({
+        amount: selectedToken.amount,
+        decimals: selectedToken.decimals,
+        percent: 50,
+      })
+    : '';
+  const tokenPageCount = Math.max(1, Math.ceil(props.balances.length / TOKENS_PER_WITHDRAW_PAGE));
+  const boundedTokenPageIndex = Math.min(tokenPageIndex, tokenPageCount - 1);
+  const visibleBalances = props.balances.slice(
+    boundedTokenPageIndex * TOKENS_PER_WITHDRAW_PAGE,
+    boundedTokenPageIndex * TOKENS_PER_WITHDRAW_PAGE + TOKENS_PER_WITHDRAW_PAGE,
+  );
+
+  const selectTokenPage = (pageIndex: number): void => {
+    const nextPageIndex = Math.max(0, Math.min(tokenPageCount - 1, pageIndex));
+    const nextPageFirstToken = props.balances[nextPageIndex * TOKENS_PER_WITHDRAW_PAGE];
+    setTokenPageIndex(nextPageIndex);
+    if (nextPageFirstToken) {
+      setUserSelectedTokenKey(balanceKey(nextPageFirstToken));
+    }
+  };
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
@@ -187,10 +244,7 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
 
   return (
     <section className="rounded-[28px] border border-[#F0D9C7] bg-[#FFF9F2] p-5 shadow-[0_18px_44px_rgba(0,0,0,0.08)]">
-      <h2 className="mb-3 text-lg font-semibold text-[#221A13]">Withdraw</h2>
-      <p className="mb-4 text-sm text-[#6D5B4C]">
-        Move funds from your MetaMask smart account to another wallet.
-      </p>
+      <h2 className="mb-4 text-lg font-semibold text-[#221A13]">Withdraw</h2>
 
       {status.kind !== 'idle' && (
         <div className="mb-4 rounded-[18px] border border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2.5">
@@ -233,27 +287,27 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
       <form className="space-y-3" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <label className="text-xs uppercase tracking-wide text-[#8C7F72]">Destination</label>
-          <div className="flex flex-col gap-2 rounded-[18px] border border-[#E7DBD0] bg-[#FCF5EC] p-3">
-            <label className="flex items-center gap-2 text-sm text-[#221A13]">
-              <input
-                type="radio"
-                name="destination-mode"
-                checked={mode === 'connected'}
-                onChange={() => setMode('connected')}
-                disabled={!props.connectedDestinationAddress}
-              />
-              <span>
-                Connected wallet
-                {props.connectedDestinationAddress && (
-                  <span className="ml-2 font-mono text-xs text-gray-400">
-                    {props.connectedDestinationAddress}
-                  </span>
-                )}
-              </span>
-            </label>
+          <div className="space-y-2">
+            <div className="space-y-1.5">
+              <label className="flex items-center gap-2 text-sm text-[#221A13]">
+                <input
+                  type="radio"
+                  name="destination-mode"
+                  checked={mode === 'connected'}
+                  onChange={() => setMode('connected')}
+                  disabled={!props.connectedDestinationAddress}
+                />
+                <span className="whitespace-nowrap">Connected wallet</span>
+              </label>
+              {props.connectedDestinationAddress && (
+                <div className="min-w-0 break-all rounded-lg bg-[#FFFCF7] px-3 py-2 font-mono text-xs text-[#8C7F72]">
+                  {props.connectedDestinationAddress}
+                </div>
+              )}
+            </div>
             {!props.connectedDestinationAddress && (
               <p className="text-xs text-[#8C7F72]">
-                No connected destination wallet detected. You can still withdraw to a custom address.
+                No connected destination wallet detected.
               </p>
             )}
             <label className="flex items-center gap-2 text-sm text-[#221A13]">
@@ -278,37 +332,120 @@ export function WalletWithdrawPanel(props: WalletWithdrawPanelProps): React.JSX.
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-[#8C7F72]" htmlFor="withdraw-token-select">
-            Token
-          </label>
-          <select
-            id="withdraw-token-select"
-            value={selectedTokenKey}
-            onChange={(event) => setUserSelectedTokenKey(event.target.value)}
-            className="w-full rounded-xl border border-[#E7DBD0] bg-[#FFF9F2] px-3 py-2 text-sm text-[#221A13]"
-          >
-            {props.balances.length === 0 && <option value="">No tokens available</option>}
-            {props.balances.map((balance) => (
-              <option key={balanceKey(balance)} value={balanceKey(balance)}>
-                {tokenLabel(balance)}
-              </option>
-            ))}
-          </select>
+          <div className="text-xs uppercase tracking-wide text-[#8C7F72]">Token</div>
+          <div className="grid gap-2">
+            {props.balances.length === 0 && (
+              <div className="rounded-xl border border-dashed border-[#E7DBD0] bg-[#FCF5EC] px-3 py-2 text-sm text-[#8C7F72]">
+                No tokens available
+              </div>
+            )}
+            {visibleBalances.map((balance) => {
+              const key = balanceKey(balance);
+              const label = tokenLabel(balance);
+              const formattedBalance = formatWithdrawTokenAmount({
+                amount: balance.amount,
+                decimals: balance.decimals,
+              });
+              const isSelected = key === selectedTokenKey;
+
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-label={`Select ${label}`}
+                  aria-pressed={isSelected}
+                  data-token-withdraw-choice="true"
+                  onClick={() => setUserSelectedTokenKey(key)}
+                  className={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-2 text-left transition ${
+                    isSelected
+                      ? 'border-[#FD6731]/40 bg-[#FFF0E6] text-[#221A13]'
+                      : 'border-[#E7DBD0] bg-[#FFFCF7] text-[#221A13] hover:border-[#E8C9AA]'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-2">
+                    <DashboardTokenAvatar symbol={balance.symbol} fallbackSymbol={label} small />
+                    <span className="truncate text-sm font-medium">{label}</span>
+                  </span>
+                  <span className="shrink-0 text-xs text-[#8C7F72]">
+                    {formattedBalance} {label} available
+                  </span>
+                </button>
+              );
+            })}
+            {props.balances.length > TOKENS_PER_WITHDRAW_PAGE && (
+              <div className="flex items-center justify-between gap-2 text-xs text-[#8C7F72]">
+                <button
+                  type="button"
+                  onClick={() => selectTokenPage(boundedTokenPageIndex - 1)}
+                  disabled={boundedTokenPageIndex === 0}
+                  className="rounded-lg border border-[#E7DBD0] bg-[#FFFCF7] px-2.5 py-1 font-medium text-[#221A13] transition hover:border-[#E8C9AA] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {boundedTokenPageIndex + 1} of {tokenPageCount}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => selectTokenPage(boundedTokenPageIndex + 1)}
+                  disabled={boundedTokenPageIndex >= tokenPageCount - 1}
+                  className="rounded-lg border border-[#E7DBD0] bg-[#FFFCF7] px-2.5 py-1 font-medium text-[#221A13] transition hover:border-[#E8C9AA] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs uppercase tracking-wide text-[#8C7F72]" htmlFor="withdraw-amount-input">
-            Amount
-          </label>
-          <input
-            id="withdraw-amount-input"
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            placeholder="0.0"
-            className="w-full rounded-xl border border-[#E7DBD0] bg-[#FFF9F2] px-3 py-2 text-sm text-[#221A13]"
-          />
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-xs uppercase tracking-wide text-[#8C7F72]" htmlFor="withdraw-amount-input">
+              Amount
+            </label>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAmount(selectedTokenQuarterBalance)}
+                disabled={!selectedToken}
+                className="text-xs font-semibold uppercase tracking-[0.12em] text-[#FD6731] disabled:text-[#C7B6A4]"
+              >
+                25%
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmount(selectedTokenHalfBalance)}
+                disabled={!selectedToken}
+                className="text-xs font-semibold uppercase tracking-[0.12em] text-[#FD6731] disabled:text-[#C7B6A4]"
+              >
+                50%
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmount(selectedTokenBalance)}
+                disabled={!selectedToken}
+                className="text-xs font-semibold uppercase tracking-[0.12em] text-[#FD6731] disabled:text-[#C7B6A4]"
+              >
+                Max
+              </button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 rounded-xl border border-[#E7DBD0] bg-[#FFF9F2] px-3 py-2">
+            <input
+              id="withdraw-amount-input"
+              type="text"
+              inputMode="decimal"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              placeholder="0.0"
+              className="min-w-0 flex-1 bg-transparent text-sm text-[#221A13] outline-none"
+            />
+            {selectedToken ? (
+              <span className="shrink-0 text-xs font-medium text-[#8C7F72]">
+                {tokenLabel(selectedToken)}
+              </span>
+            ) : null}
+          </div>
         </div>
 
         <button

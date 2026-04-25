@@ -10,6 +10,7 @@ export type WalletContentInput = {
   asset: string;
   network: string;
   quantity: string;
+  displayQuantity?: string;
   valueUsd: number;
   economicExposures?: EconomicExposureInput[];
 };
@@ -51,6 +52,7 @@ export type ActivePositionScopeMemberInput = {
   role: 'collateral' | 'debt';
   asset: string;
   quantity: string;
+  displayQuantity?: string;
   valueUsd: number;
   economicExposures: EconomicExposureInput[];
   state: ActivePositionScopeMemberStateInput;
@@ -87,6 +89,7 @@ export type ObservedAssetProjection = {
   familyAsset: string;
   network: string;
   quantity: number;
+  displayQuantity?: string;
   valueUsd: number;
   sourceKind: 'wallet' | 'position' | 'debt';
   semanticClass: AssetSemanticClass;

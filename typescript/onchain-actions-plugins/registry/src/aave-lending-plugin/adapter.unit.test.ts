@@ -65,6 +65,95 @@ describe('AAVEAdapter.createWithdrawTransaction', () => {
   });
 });
 
+describe('AAVEAdapter repay amount handling', () => {
+  function createAdapter() {
+    return new AAVEAdapter({
+      chainId: 42161,
+      rpcUrl: 'http://127.0.0.1:8545',
+      wrappedNativeToken: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+    });
+  }
+
+  const repayToken: Token = {
+    tokenUid: {
+      address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+      chainId: '42161',
+    },
+    name: 'USD Coin',
+    symbol: 'USDC',
+    decimals: 6,
+    isNative: false,
+    isVetted: true,
+    iconUri: null,
+  };
+
+  it('passes repay base-unit amounts without applying token decimals again', async () => {
+    const adapter = createAdapter();
+    const generateTxData = vi.fn().mockReturnValue({
+      to: '0x0000000000000000000000000000000000000001',
+      data: '0x',
+      value: 0,
+    });
+    const createApproval = vi.fn().mockResolvedValue(null);
+
+    Reflect.set(adapter, 'createApproval', createApproval);
+    Reflect.set(
+      adapter,
+      'getPoolBundle',
+      vi.fn().mockReturnValue({
+        poolAddress: '0x0000000000000000000000000000000000000002',
+        repayTxBuilder: { generateTxData },
+      }),
+    );
+
+    await adapter.createRepayTransaction({
+      repayToken,
+      amount: 1000001n,
+      walletAddress: '0x00000000000000000000000000000000000000f1',
+    });
+
+    expect(generateTxData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: '1000001',
+      }),
+    );
+    expect(createApproval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount_raw: '1000001',
+      }),
+    );
+  });
+
+  it('passes repay-with-aTokens base-unit amounts without applying token decimals again', async () => {
+    const adapter = createAdapter();
+    const generateTxData = vi.fn().mockReturnValue({
+      to: '0x0000000000000000000000000000000000000001',
+      data: '0x',
+      value: 0,
+    });
+
+    Reflect.set(
+      adapter,
+      'getPoolBundle',
+      vi.fn().mockReturnValue({
+        repayWithATokensTxBuilder: { generateTxData },
+      }),
+    );
+
+    await adapter.createRepayTransactionWithATokens({
+      repayToken,
+      amount: 1000001n,
+      walletAddress: '0x00000000000000000000000000000000000000f1',
+    });
+
+    expect(generateTxData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amount: '1000001',
+      }),
+    );
+  });
+});
+
 describe('AAVEAdapter.getUserSummary', () => {
   const walletAddress = '0xaD53eC51a70e9a17df6752fdA80cd465457c258d';
 

@@ -110,6 +110,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('bg-[linear-gradient(180deg,#fffdf9_0%,#f7efe4_100%)]');
     expect(html).toContain('border-[#eadac7]');
+    expect(html).not.toContain('<nav');
     expect(html).not.toContain('bg-[#1e1e1e]');
   });
 

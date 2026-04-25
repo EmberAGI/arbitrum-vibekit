@@ -94,6 +94,16 @@ function renderManagedAgentDetail(
 }
 
 describe('AgentDetailPage managed-agent affordances', () => {
+  it('does not render breadcrumb navigation after the agent is hired', () => {
+    const html = renderManagedAgentDetail({
+      isHired: true,
+    });
+
+    expect(html).not.toContain('<nav');
+    expect(html).not.toContain('Agents</button>');
+    expect(html).toContain('Refresh');
+  });
+
   it('routes ember-lending onboarding through the portfolio manager in prehire state', () => {
     const html = renderManagedAgentDetail({});
 

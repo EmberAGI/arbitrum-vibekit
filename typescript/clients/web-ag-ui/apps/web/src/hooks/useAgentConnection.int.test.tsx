@@ -2923,7 +2923,7 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.isActive).toBe(false);
   });
 
-  it('serializes rapid A->B->A detail handoff so next connect waits for prior disconnect', async () => {
+  it('allows rapid A->B->A detail handoff without waiting for slow AG-UI detach', async () => {
     let resolveDetachAtoB: (() => void) | null = null;
     let resolveDetachBtoA: (() => void) | null = null;
     const pendingAtoB = new Promise<void>((resolve) => {
@@ -2964,7 +2964,7 @@ describe('useAgentConnection integration', () => {
         rootB.render(<TestHarness agentId="agent-gmx-allora" />);
       });
       await flushEffects();
-      expect(mocks.connectAgent).toHaveBeenCalledTimes(1);
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
 
       resolveDetachAtoB?.();
       await flushEffects();
@@ -2980,7 +2980,7 @@ describe('useAgentConnection integration', () => {
         rootA2.render(<TestHarness agentId="agent-clmm" />);
       });
       await flushEffects();
-      expect(mocks.connectAgent).toHaveBeenCalledTimes(2);
+      expect(mocks.connectAgent).toHaveBeenCalledTimes(3);
 
       resolveDetachBtoA?.();
       await flushEffects();

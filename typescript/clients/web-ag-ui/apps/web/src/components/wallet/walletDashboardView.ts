@@ -53,16 +53,38 @@ export type WalletContentsFamilyView = {
   id: string;
   label: string;
   walletUsd: number;
+  walletAvailableUsd: number;
+  walletCommittedUsd: number;
   deployedUsd: number;
   owedUsd: number;
   positiveUsd: number;
   grossExposureUsd: number;
   share: number;
+  observedAssets: WalletContentsObservedAssetView[];
   lines: {
     id: string;
     label: string;
     tone: 'wallet' | 'deployed' | 'owed';
     valueUsd: number;
+  }[];
+};
+
+export type WalletContentsObservedAssetView = {
+  asset: string;
+  familyAsset: string;
+  quantity: number;
+  displayQuantity?: string;
+  valueUsd: number;
+  sourceKind: 'wallet' | 'position' | 'debt';
+  protocolSystem?: string;
+  scopeKind?: string;
+  availableQuantity?: number;
+  committedQuantity?: number;
+  economicExposures?: { asset: string; quantity: string }[];
+  commitments: {
+    agentId: string;
+    agentLabel: string;
+    quantity: number;
   }[];
 };
 
@@ -166,26 +188,32 @@ function buildWalletDashboardViewFromProjection(
 function buildProjectionTopbarView(
   portfolio: PortfolioProjectionPacket,
 ): DashboardTopbarView {
+  const unmanagedWalletUsd = sumProjectionUnmanagedWalletUsd(portfolio);
+
   return {
     benchmarkAssetLabel: portfolio.accounting.cashFamilyAsset,
     metrics: [
       {
         label: 'Gross exposure',
-        value: formatUsdCompact(portfolio.summary.grossExposureUsd),
-        positiveAssetsValue: formatUsdCompact(portfolio.summary.positiveAssetsUsd),
-        liabilitiesValue: formatUsdCompact(portfolio.summary.liabilitiesUsd),
+        value: formatUsd(portfolio.summary.grossExposureUsd),
+        positiveAssetsValue: formatUsd(portfolio.summary.positiveAssetsUsd),
+        liabilitiesValue: formatUsd(portfolio.summary.liabilitiesUsd),
       },
       {
         label: 'Net worth',
-        value: formatUsdCompact(portfolio.summary.netWorthUsd),
+        value: formatUsd(portfolio.summary.netWorthUsd),
       },
       {
-        label: 'Unallocated',
-        value: formatUsdCompact(portfolio.accounting.availableCashUsd),
+        label: 'Unmanaged',
+        value: formatUsd(unmanagedWalletUsd),
         valueClassName: 'text-[#0F5A38]',
       },
     ],
   };
+}
+
+function sumProjectionUnmanagedWalletUsd(portfolio: PortfolioProjectionPacket): number {
+  return portfolio.assetFamilies.reduce((sum, family) => sum + family.walletAvailableUsd, 0);
 }
 
 function buildProjectionAccountingView(portfolio: PortfolioProjectionPacket): DashboardAccountingView {
@@ -250,13 +278,13 @@ function buildProjectionAccountingView(portfolio: PortfolioProjectionPacket): Da
 
 function buildProjectionContentsView(portfolio: PortfolioProjectionPacket): WalletContentsView {
   const grossExposureUsd = portfolio.summary.grossExposureUsd;
-  const totalWalletUsd = portfolio.accounting.cashUsd + portfolio.accounting.inWalletUsd;
+  const unmanagedWalletUsd = sumProjectionUnmanagedWalletUsd(portfolio);
   const families = portfolio.assetFamilies.map((family) => buildProjectionFamilyView(family, grossExposureUsd));
 
   return {
     summary: {
       grossExposureUsd,
-      walletUsd: totalWalletUsd,
+      walletUsd: unmanagedWalletUsd,
       deployedUsd: portfolio.accounting.deployedUsd,
       owedUsd: portfolio.accounting.liabilitiesUsd,
       unpricedLaneCount: 0,
@@ -303,11 +331,33 @@ function buildProjectionFamilyView(
     id: `family:${family.network}:${family.asset}`,
     label: family.asset,
     walletUsd: family.walletUsd,
+    walletAvailableUsd: family.walletAvailableUsd,
+    walletCommittedUsd: family.walletCommittedUsd,
     deployedUsd: family.deployedUsd,
     owedUsd: family.debtUsd,
     positiveUsd: family.positiveUsd,
     grossExposureUsd: familyGrossExposureUsd,
     share: grossExposureUsd > 0 ? familyGrossExposureUsd / grossExposureUsd : 0,
+    observedAssets: family.observedAssets.map((observedAsset) => ({
+      asset: observedAsset.asset,
+      familyAsset: observedAsset.familyAsset,
+      quantity: observedAsset.quantity,
+      ...(observedAsset.displayQuantity !== undefined
+        ? { displayQuantity: observedAsset.displayQuantity }
+        : {}),
+      valueUsd: observedAsset.valueUsd,
+      sourceKind: observedAsset.sourceKind,
+      protocolSystem: observedAsset.protocolSystem,
+      scopeKind: observedAsset.scopeKind,
+      availableQuantity: observedAsset.availableQuantity,
+      committedQuantity: observedAsset.committedQuantity,
+      economicExposures: observedAsset.economicExposures,
+      commitments: observedAsset.commitments.map((commitment) => ({
+        agentId: commitment.agentId,
+        agentLabel: commitment.agentLabel,
+        quantity: commitment.quantity,
+      })),
+    })),
     lines: family.observedAssets.flatMap((observedAsset, index) =>
       buildObservedAssetLines({
         family,
@@ -343,7 +393,7 @@ function buildObservedAssetLines(input: {
         id: `${lineIdBase}:available`,
         label:
           (input.observedAsset.committedUsd ?? 0) > 0
-            ? `Unallocated ${input.observedAsset.asset}`
+            ? `Unmanaged ${input.observedAsset.asset}`
             : `Wallet ${input.observedAsset.asset}`,
         tone: 'wallet',
         valueUsd: input.observedAsset.availableUsd ?? 0,
@@ -532,18 +582,18 @@ function buildLegacyWalletDashboardView(portfolio: WalletPortfolioView): WalletD
       metrics: [
         {
           label: 'Gross exposure',
-          value: formatUsdCompact(grossExposureUsd),
-          positiveAssetsValue: formatUsdCompact(positiveAssetsUsd),
-          liabilitiesValue: formatUsdCompact(liabilitiesUsd),
+          value: formatUsd(grossExposureUsd),
+          positiveAssetsValue: formatUsd(positiveAssetsUsd),
+          liabilitiesValue: formatUsd(liabilitiesUsd),
         },
         {
           label: 'Net worth',
-          value: formatUsdCompact(netWorthUsd),
-        },
-        {
-          label: 'Unallocated',
-          value: formatUsdCompact(cashUsd),
-          valueClassName: 'text-[#0F5A38]',
+          value: formatUsd(netWorthUsd),
+      },
+      {
+        label: 'Unmanaged',
+        value: formatUsd(cashUsd),
+        valueClassName: 'text-[#0F5A38]',
         },
       ],
     },
@@ -576,11 +626,14 @@ function buildLegacyWalletContentsView(input: {
       id,
       label,
       walletUsd: 0,
+      walletAvailableUsd: 0,
+      walletCommittedUsd: 0,
       deployedUsd: 0,
       owedUsd: 0,
       positiveUsd: 0,
       grossExposureUsd: 0,
       share: 0,
+      observedAssets: [],
       lines: [],
     };
     familyById.set(id, family);
@@ -595,6 +648,16 @@ function buildLegacyWalletContentsView(input: {
     const label = balance.symbol ?? formatCompactReference(balance.tokenUid.address);
     const family = getFamily(`balance:${balance.tokenUid.chainId}:${balance.tokenUid.address}`, label);
     family.walletUsd += balance.valueUsd;
+    family.walletAvailableUsd += balance.valueUsd;
+    family.observedAssets.push({
+      asset: label,
+      familyAsset: label,
+      quantity: parseTokenQuantity(balance.amount, balance.decimals),
+      valueUsd: balance.valueUsd,
+      sourceKind: 'wallet',
+      availableQuantity: parseTokenQuantity(balance.amount, balance.decimals),
+      commitments: [],
+    });
     family.lines.push({
       id: `wallet:${family.id}`,
       label: `Wallet ${label}`,
@@ -619,6 +682,16 @@ function buildLegacyWalletContentsView(input: {
     } else {
       family.deployedUsd += valueUsd;
     }
+    family.observedAssets.push({
+      asset: label,
+      familyAsset: label,
+      quantity: valueUsd,
+      valueUsd,
+      sourceKind: isShort ? 'debt' : 'position',
+      protocolSystem: 'perp',
+      scopeKind: 'perpetual',
+      commitments: [],
+    });
 
     family.lines.push({
       id: `perp:${position.key}`,
@@ -637,6 +710,16 @@ function buildLegacyWalletContentsView(input: {
     const label = position.poolName || `Liquidity ${index + 1}`;
     const family = getFamily(`liquidity:${position.positionId}`, label);
     family.deployedUsd += valueUsd;
+    family.observedAssets.push({
+      asset: label,
+      familyAsset: label,
+      quantity: valueUsd,
+      valueUsd,
+      sourceKind: 'position',
+      protocolSystem: 'liquidity',
+      scopeKind: 'liquidity-position',
+      commitments: [],
+    });
     family.lines.push({
       id: `liquidity:${position.positionId}`,
       label,
@@ -753,6 +836,20 @@ function buildLegacyAccountingView(input: {
   };
 }
 
+function parseTokenQuantity(amount: string, decimals: number | undefined): number {
+  if (typeof decimals !== 'number') {
+    const parsed = Number(amount);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  try {
+    const parsed = Number(formatUnits(BigInt(amount), decimals));
+    return Number.isFinite(parsed) ? parsed : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function buildLegacyTreemapItems(input: {
   portfolio: WalletPortfolioView;
   positiveAssetsUsd: number;
@@ -856,6 +953,15 @@ function formatUsdCompact(value: number): string {
     currency: 'USD',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatUsd(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 

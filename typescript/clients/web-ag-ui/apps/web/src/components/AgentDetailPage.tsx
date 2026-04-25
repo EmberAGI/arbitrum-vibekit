@@ -3,7 +3,6 @@
 /* eslint-disable @next/next/no-img-element */
 
 import {
-  ChevronRight,
   ChevronDown,
   Star,
   Globe,
@@ -14,6 +13,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
+import Link from 'next/link';
 import { formatUnits } from 'viem';
 import {
   useCallback,
@@ -94,7 +94,6 @@ import {
   readManagedLendingCollateralPolicies,
 } from '../utils/managedMandate';
 import { ManagedMandateWorkbenchCard } from './ManagedMandateWorkbenchCard';
-import { HardNavLink } from './ui/HardNavLink';
 import {
   buildPiExampleInterruptA2UiView,
   buildPiExampleStatusA2UiView,
@@ -582,7 +581,7 @@ function PortfolioManagerMandateWorkbenchShell(props: {
 
   return (
     <div className="flex items-stretch gap-4">
-      <HardNavLink
+      <Link
         href={lendingAgentHref}
         aria-label="Open Ember Lending"
         className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-2 self-stretch border-r border-[#eadac7] pr-4 text-center transition-colors hover:text-[#2f2118]"
@@ -611,7 +610,7 @@ function PortfolioManagerMandateWorkbenchShell(props: {
         <div className="text-[11px] font-medium leading-[1.1] text-[#503826]">
           Lending
         </div>
-      </HardNavLink>
+      </Link>
       <div className="min-w-0 flex-1 self-stretch">{props.children}</div>
     </div>
   );
@@ -1455,16 +1454,7 @@ export function AgentDetailPage({
       <div className={DETAIL_PAGE_SHELL_CLASS}>
         <div className="max-w-[1200px] mx-auto">
           {popups}
-          {/* Breadcrumb */}
-          <nav className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2 text-sm text-[#7c6757]">
-              <button onClick={onBack} className="transition-colors hover:text-[#2f2118]">
-                Agents
-              </button>
-              <ChevronRight className="w-4 h-4" />
-              <span className="text-[#261a12]">{agentName}</span>
-            </div>
-            {/* Refresh button */}
+          <div className="mb-6 flex justify-end">
             <button
               onClick={onSync}
               disabled={isSyncing}
@@ -1473,7 +1463,7 @@ export function AgentDetailPage({
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
               {isSyncing ? 'Syncing...' : 'Refresh'}
             </button>
-          </nav>
+          </div>
 
           <>
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">
@@ -1734,14 +1724,6 @@ export function AgentDetailPage({
     <div className={DETAIL_PAGE_SHELL_CLASS}>
       <div className="max-w-[1200px] mx-auto">
         {popups}
-        {/* Breadcrumb */}
-        <nav className="mb-6 flex items-center gap-2 text-sm text-[#7c6757]">
-          <button onClick={onBack} className="transition-colors hover:text-[#2f2118]">
-            Agents
-          </button>
-          <ChevronRight className="w-4 h-4" />
-          <span className="text-[#261a12]">{agentName}</span>
-        </nav>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-8 items-start">

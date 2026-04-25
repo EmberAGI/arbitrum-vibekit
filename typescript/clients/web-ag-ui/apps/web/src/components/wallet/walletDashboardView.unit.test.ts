@@ -70,7 +70,23 @@ describe('wallet dashboard view', () => {
     expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
       'Gross exposure',
       'Net worth',
-      'Unallocated',
+      'Unmanaged',
+    ]);
+    expect(view.topbar.metrics).toMatchObject([
+      {
+        label: 'Gross exposure',
+        value: '$2,800.00',
+        positiveAssetsValue: '$2,700.00',
+        liabilitiesValue: '$100.00',
+      },
+      {
+        label: 'Net worth',
+        value: '$2,600.00',
+      },
+      {
+        label: 'Unmanaged',
+        value: '$2,000.00',
+      },
     ]);
     expect(view.accounting.segments.map((segment) => [segment.label, segment.valueUsd])).toEqual([
       ['Cash', 2_000],
@@ -248,18 +264,18 @@ describe('wallet dashboard view', () => {
     expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
       'Gross exposure',
       'Net worth',
-      'Unallocated',
+      'Unmanaged',
     ]);
     expect(view.topbar.metrics[2]).toMatchObject({
-      label: 'Unallocated',
-      value: '$15',
+      label: 'Unmanaged',
+      value: '$35.00',
     });
     expect(view.accounting.segments.map((segment) => [segment.label, segment.valueUsd])).toEqual([
       ['Cash', 40],
       ['Assets', 45],
       ['Liabilities', 5],
     ]);
-    expect(view.contents.summary.walletUsd).toBe(60);
+    expect(view.contents.summary.walletUsd).toBe(35);
     expect(view.contents.summary.deployedUsd).toBe(25);
     expect(view.contents.summary.owedUsd).toBe(5);
     expect(view.contents.families.find((family) => family.label === 'USDC')).toMatchObject({
@@ -346,5 +362,87 @@ describe('wallet dashboard view', () => {
       valueLabel: '$2',
     });
     expect(wbtcTreemapItem?.hoverChildren?.map((item) => item.label)).toEqual(['Wallet WBTC']);
+  });
+
+  it('uses economic exposure quantities for Aave wrapper position cards', () => {
+    const portfolioProjection = buildPortfolioProjection({
+      benchmarkAsset: 'USD',
+      walletContents: [],
+      reservations: [],
+      ownedUnits: [],
+      activePositionScopes: [
+        {
+          scopeId: 'position-scope-aave-arbitrum-wallet',
+          kind: 'lending-position',
+          network: 'arbitrum',
+          protocolSystem: 'aave',
+          containerRef: 'aave:position-scope-aave-arbitrum-wallet',
+          status: 'active',
+          members: [
+            {
+              memberId: 'aave-weth-collateral',
+              role: 'collateral',
+              asset: 'aArbWETH',
+              quantity: '20776430481205574',
+              displayQuantity: '0.020776430481205574',
+              valueUsd: 48.070624975982546,
+              economicExposures: [
+                {
+                  asset: 'WETH',
+                  quantity: '0.020776430517459555',
+                },
+              ],
+              state: {
+                withdrawableQuantity: '0.0198384825984434',
+              },
+            },
+            {
+              memberId: 'aave-native-usdc-collateral',
+              role: 'collateral',
+              asset: 'aArbUSDCn',
+              quantity: '8244483',
+              displayQuantity: '8.244483',
+              valueUsd: 8.24315860625088,
+              economicExposures: [
+                {
+                  asset: 'USDC',
+                  quantity: '8.244483',
+                },
+              ],
+              state: {
+                withdrawableQuantity: '7.872287',
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const view = buildWalletDashboardView({
+      portfolioProjection,
+      portfolioProjectionInput: {
+        benchmarkAsset: 'USD',
+        walletContents: [],
+        reservations: [],
+        ownedUnits: [],
+        activePositionScopes: [],
+      },
+    });
+
+    const wethFamily = view.contents.families.find((family) => family.label === 'ETH');
+    const usdcFamily = view.contents.families.find((family) => family.label === 'USDC');
+
+    expect(wethFamily?.observedAssets[0]).toMatchObject({
+      asset: 'aArbWETH',
+      quantity: 20776430481205576,
+      displayQuantity: '0.020776430481205574',
+      valueUsd: 48.070624975982546,
+    });
+    expect(usdcFamily?.observedAssets[0]).toMatchObject({
+      asset: 'aArbUSDCn',
+      quantity: 8244483,
+      displayQuantity: '8.244483',
+      valueUsd: 8.24315860625088,
+    });
   });
 });

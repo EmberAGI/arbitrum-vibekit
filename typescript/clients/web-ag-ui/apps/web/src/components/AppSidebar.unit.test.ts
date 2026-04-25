@@ -1,9 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { arbitrum, mainnet, polygon } from 'viem/chains';
 
-import { AppSidebar, getSidebarAgentHref, getWalletSelectorChains } from './AppSidebar';
+import { AppSidebar, getSidebarAgentHref } from './AppSidebar';
 
 const privyMocks = vi.hoisted(() => ({
   ready: true,
@@ -117,6 +116,7 @@ vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => {
       getSnapshot: getAuthoritativeSnapshotMock,
       setSnapshot: vi.fn(),
     }),
+    useAuthoritativeAgentSnapshotCacheVersion: () => 0,
   };
 });
 
@@ -156,46 +156,62 @@ describe('AppSidebar wallet actions', () => {
     getAuthoritativeSnapshotMock.mockReturnValue(null);
   });
 
-  it('limits wallet selector chain options to Arbitrum and Ethereum', () => {
-    const result = getWalletSelectorChains([arbitrum, mainnet, polygon]);
-    expect(result.map((chain) => chain.id)).toEqual([arbitrum.id, mainnet.id]);
-  });
-
-  it('renders a secondary Manage Wallet link when wallet is connected', () => {
+  it('does not render the network selector or build-agent CTA in the bottom nav', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Manage Wallet');
-    expect(html).toContain('href="/wallet"');
+    expect(html).not.toContain('Arbitrum One');
+    expect(html).not.toContain('Ethereum');
+    expect(html).not.toContain('Build my Agent');
+    expect(html).not.toContain('p-4 border-t border-[#DDC8B3] space-y-3');
+  });
+
+  it('does not render wallet management actions once they move to the global top bar', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).not.toContain('Manage Wallet');
+    expect(html).not.toContain('href="/wallet"');
+    expect(html).not.toContain('Logout');
   });
 
   it('uses the widened sidebar frame and a light shell palette', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('w-[312px]');
-    expect(html).toContain('bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]');
-    expect(html).toContain('src="/ember-sidebar-logo.png"');
+    expect(html).toContain('border-r border-[#DDC8B3]');
+    expect(html).toContain('bg-[#F7EFE3]');
+    expect(html).toContain('text-[#3C2A21]');
+    expect(html).toContain('transition-[width]');
+    expect(html).not.toContain('src="/ember-sidebar-logo.png"');
+    expect(html).not.toContain('src="/ember-name.svg"');
+    expect(html).not.toContain('>AI</span>');
   });
 
-  it('links the platform chat entry to the portfolio agent conversation', () => {
+  it('does not render the old primary navigation section', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Ember Portfolio Agent');
-    expect(html).toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+    expect(html).not.toContain('Platform');
+    expect(html).not.toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+    expect(html).not.toContain('>Agents</span>');
+    expect(html).not.toContain('>Hire</a>');
+    expect(html).not.toContain('>Acquire</a>');
+    expect(html).not.toContain('Leaderboard');
   });
 
-  it('does not keep the hire nav item highlighted on the portfolio agent route', () => {
+  it('does not render primary nav active markers on the portfolio agent route', () => {
     pathnameMock = '/hire-agents/agent-portfolio-manager';
 
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
     const activeMarkers = html.match(/w-px h-6 bg-\[#fd6731\]/g) ?? [];
 
-    expect(activeMarkers).toHaveLength(1);
+    expect(activeMarkers).toHaveLength(0);
   });
 
-  it('uses simplified sidebar icons for agents and activity state', () => {
+  it('does not render old primary nav icons or activity state icons', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('lucide-bot');
+    expect(html).not.toContain('lucide-message-square');
+    expect(html).not.toContain('lucide-bot');
+    expect(html).not.toContain('lucide-trophy');
     expect(html).not.toContain('lucide-terminal');
     expect(html).not.toContain('lucide-alert-circle');
     expect(html).not.toContain('lucide-check-circle');
@@ -206,11 +222,11 @@ describe('AppSidebar wallet actions', () => {
     expect(html).not.toContain('text-blue-400');
   });
 
-  it('uses a thin left nav indicator with light hover surfaces', () => {
+  it('keeps light sidebar hover surfaces without the old nav indicator', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('w-px h-6 bg-[#fd6731]');
-    expect(html).toContain('hover:bg-[#F0E2D2]');
+    expect(html).toContain('hover:bg-[#FFF7F2]');
+    expect(html).not.toContain('w-px h-6 bg-[#fd6731]');
     expect(html).not.toContain('hover:bg-[#1B1C21]');
     expect(html).not.toContain('text-white bg-[#1C1D23] border border-[#2F313B]');
   });
@@ -218,8 +234,9 @@ describe('AppSidebar wallet actions', () => {
   it('uses mono typography for sidebar section labels and badges', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('text-[10px] font-mono font-medium text-[#8A6F58]');
-    expect(html).toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
+    expect(html).not.toContain('Agent Activity');
+    expect(html).not.toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
+    expect(html).toContain('font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]');
   });
 
   it('shows only user-facing agents in activity sections', () => {
@@ -244,7 +261,7 @@ describe('AppSidebar wallet actions', () => {
     ]);
     useAgentListMock.mockReturnValue({
       agents: {
-        'agent-portfolio-manager': { taskState: 'running' },
+        'agent-portfolio-manager': { synced: true, taskState: 'running' },
         'agent-pi-example': { taskState: 'running' },
       },
     });
@@ -267,6 +284,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -313,6 +332,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -445,6 +466,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -493,6 +516,8 @@ describe('AppSidebar wallet actions', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('rounded-[18px]');
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('background:#9896FF');
     expect(html).toContain('px-3 pt-4 pb-3');
     expect(html).toContain('$12k gross');
     expect(html).toContain('$4k gross');
@@ -678,7 +703,7 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('33% of portfolio');
     expect(html).toContain('ETH');
     expect(html).toContain('USDT');
-    expect(html).toContain('Unallocated');
+    expect(html).toContain('Unmanaged');
     expect(html).not.toContain('$12k gross');
     expect(html).not.toContain('$4k gross');
   });
