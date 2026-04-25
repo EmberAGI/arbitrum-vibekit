@@ -72,8 +72,9 @@ function GlobalWalletControls(props: {
 }): React.JSX.Element | null {
   const { ready, authenticated } = usePrivy();
   const { logout } = useLogout();
+  const walletAddress = props.walletAddress;
 
-  if (!authenticated || !props.walletAddress) {
+  if (!authenticated || !walletAddress) {
     return null;
   }
 
@@ -86,7 +87,7 @@ function GlobalWalletControls(props: {
           aria-label="Show wallet address"
           className="font-mono text-[12px] font-medium transition hover:text-[#241813] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E8C9AA] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F8EFE5]"
         >
-          {formatAddress(props.walletAddress)}
+          {formatAddress(walletAddress)}
         </button>
         <div
           role="dialog"
@@ -100,7 +101,7 @@ function GlobalWalletControls(props: {
             <input
               type="text"
               readOnly
-              value={props.walletAddress}
+              value={walletAddress}
               onFocus={(event) => event.currentTarget.select()}
               onClick={(event) => event.currentTarget.select()}
               className="min-w-0 flex-1 rounded-md border border-[#DDC8B3] bg-[#FCF5EC] px-2 py-1 text-xs font-mono text-[#2C1E17]"
@@ -108,7 +109,7 @@ function GlobalWalletControls(props: {
             />
             <button
               type="button"
-              onClick={() => void navigator?.clipboard?.writeText?.(props.walletAddress)}
+              onClick={() => void navigator?.clipboard?.writeText?.(walletAddress)}
               className="shrink-0 rounded-md border border-[#DDC8B3] bg-[#F0E2D2] px-2 py-1 text-xs font-medium text-[#2C1E17] transition hover:bg-[#E6D2BF]"
             >
               Copy
@@ -136,7 +137,7 @@ function GlobalWalletControls(props: {
 
 function GlobalTopBarBrand(): React.JSX.Element {
   return (
-    <div className="flex items-center gap-2.5 border-r border-[#D7C5B4] pr-5">
+    <div className="flex w-[calc(312px-1rem)] items-center gap-2.5 border-r border-[#D7C5B4] pr-5 md:w-[calc(312px-1.25rem)]">
       <Image
         src="/ember-sidebar-logo.png"
         alt="Ember Logo"

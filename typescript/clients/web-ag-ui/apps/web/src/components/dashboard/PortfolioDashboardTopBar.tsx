@@ -111,14 +111,14 @@ export function PortfolioDashboardTopBar(props: {
   rightAccessory?: React.ReactNode;
 }): React.JSX.Element {
   const gridClassName = props.view.benchmarkAssetLabel
-    ? 'sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_auto]'
-    : 'sm:grid-cols-2 xl:grid-cols-3';
+    ? 'sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content_auto]'
+    : 'sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content]';
 
   return (
     <section className="rounded-b-[24px] rounded-t-none border border-[#E4D5C7] bg-[#EFE5DA] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
         {props.leftAccessory ? <div className="shrink-0">{props.leftAccessory}</div> : null}
-        <div className={`grid flex-1 gap-3 xl:pl-3 ${gridClassName}`}>
+        <div className={`grid flex-1 gap-3 xl:flex-none xl:gap-x-6 xl:pl-3 ${gridClassName}`}>
           {props.view.metrics.map((metric) => (
             <div key={metric.label}>
               {metric.positiveAssetsValue && metric.liabilitiesValue ? (

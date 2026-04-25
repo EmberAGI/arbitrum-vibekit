@@ -38,6 +38,7 @@ const projectionInput = {
 let domainProjectionMock: Record<string, unknown> = {
   portfolioProjectionInput: projectionInput,
 };
+let walletAddressMock: string | null = '0x1111111111111111111111111111111111111111';
 
 vi.mock('next/image', () => ({
   default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => React.createElement('img', props),
@@ -71,9 +72,7 @@ vi.mock('@/utils/hardNavigation', () => ({
 
 vi.mock('@/hooks/usePrivyWalletClient', () => ({
   usePrivyWalletClient: () => ({
-    privyWallet: {
-      address: '0x1111111111111111111111111111111111111111',
-    },
+    privyWallet: walletAddressMock ? { address: walletAddressMock } : null,
   }),
 }));
 
@@ -116,6 +115,7 @@ describe('GlobalPortfolioTopBar', () => {
     domainProjectionMock = {
       portfolioProjectionInput: projectionInput,
     };
+    walletAddressMock = '0x1111111111111111111111111111111111111111';
   });
 
   it('renders the portfolio metrics and benchmark in a persistent sticky site bar', () => {
@@ -135,6 +135,8 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).toContain('src="/ember-sidebar-logo.png"');
     expect(html).toContain('src="/ember-name.svg"');
     expect(html).toContain('border-r border-[#D7C5B4]');
+    expect(html).toContain('w-[calc(312px-1rem)]');
+    expect(html).toContain('md:w-[calc(312px-1.25rem)]');
     expect(html).toContain('pr-5');
     expect(html).toContain('xl:pl-3');
     expect(html.indexOf('src="/ember-sidebar-logo.png"')).toBeLessThan(
@@ -199,6 +201,18 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).not.toContain('Full wallet address');
     expect(html).toContain('0x1111111111111111111111111111111111111111');
     expect(html).toContain('Copy');
+  });
+
+  it('omits wallet controls when no wallet address is connected', () => {
+    walletAddressMock = null;
+
+    const html = renderToStaticMarkup(React.createElement(GlobalPortfolioTopBar));
+
+    expect(html).toContain('sticky top-0 z-40');
+    expect(html).toContain('Gross exposure');
+    expect(html).not.toContain('Wallet address');
+    expect(html).not.toContain('Copy');
+    expect(html).not.toContain('Manage Wallet');
   });
 
   it('keeps the site bar visible while portfolio metrics are loading', () => {
