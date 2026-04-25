@@ -54,6 +54,9 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'refresh_redelegation_work',
         },
         {
+          name: 'dispatch_spot_swap',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
         },
       ],
@@ -64,6 +67,9 @@ describe('createPortfolioManagerAgentConfig', () => {
         },
         {
           type: 'portfolio-manager-delegation-signing-request',
+        },
+        {
+          type: 'portfolio-manager-swap-reservation-conflict-request',
         },
       ],
     });

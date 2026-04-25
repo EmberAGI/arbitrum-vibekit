@@ -1,18 +1,31 @@
 import { createHash } from 'node:crypto';
 
+import {
+  createExecution,
+  type Delegation,
+  ExecutionMode,
+  getDeleGatorEnvironment,
+} from '@metamask/delegation-toolkit';
+import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedEvmTransaction } from 'agent-runtime/internal';
+import { createPublicClient, http, serializeTransaction } from 'viem';
+import { arbitrum, mainnet } from 'viem/chains';
 
-import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
 import {
   HIDDEN_OCA_EXECUTOR_AGENT_ID,
   HIDDEN_OCA_EXECUTOR_CONTROL_PATH,
 } from './serviceIdentityPreflight.js';
+import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
 
 const DEFAULT_ONCHAIN_ACTIONS_API_URL = 'https://api.emberai.xyz';
+const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
+const DEFAULT_ETHEREUM_RPC_URL = 'https://eth.merkle.io';
 const DEFAULT_RUNTIME_SIGNER_REF = 'oca-executor-wallet';
 const OWS_SIGNING_CHAIN = 'evm';
 const MAX_EXECUTION_REQUEST_ATTEMPTS = 4;
+const RPC_RETRY_COUNT = 2;
+const RPC_TIMEOUT_MS = 8_000;
 
 type TokenIdentifier = {
   chainId: string;
@@ -121,12 +134,14 @@ type HiddenOcaSpotSwapExecutorOptions = {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   onchainActionsClient?: HiddenOcaOnchainActionsClient;
   onchainActionsBaseUrl?: string;
+  env?: NodeJS.ProcessEnv;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
   executorWalletAddress?: `0x${string}`;
   resolvePreparedUnsignedTransactionHex?: (
     input: PreparedUnsignedTransactionResolutionInput,
   ) => Promise<`0x${string}` | null>;
+  resolveExecutionPublicClient?: ResolveHiddenOcaExecutionPublicClient;
   requestRedelegationRefresh?: (input: {
     threadId: string;
     transactionPlanId: string;
@@ -138,6 +153,27 @@ type HiddenOcaSpotSwapExecutorOptions = {
 type HiddenOcaSpotSwapExecutor = {
   executeSpotSwap: (input: HiddenOcaSpotSwapExecutionInput) => Promise<HiddenOcaSpotSwapResult>;
 };
+
+type HiddenOcaExecutionPublicClient = {
+  getTransactionCount: (input: { address: `0x${string}`; blockTag?: 'pending' }) => Promise<number>;
+  estimateFeesPerGas: () => Promise<{
+    gasPrice?: bigint;
+    maxFeePerGas?: bigint;
+    maxPriorityFeePerGas?: bigint;
+  }>;
+  estimateGas: (input: {
+    account: `0x${string}`;
+    to: `0x${string}`;
+    value: bigint;
+    data: `0x${string}`;
+  }) => Promise<bigint>;
+};
+
+type SupportedExecutionNetwork = 'arbitrum' | 'mainnet';
+
+type ResolveHiddenOcaExecutionPublicClient = (
+  network: SupportedExecutionNetwork,
+) => HiddenOcaExecutionPublicClient;
 
 type SharedEmberRevisionResponse = {
   result?: {
@@ -177,6 +213,96 @@ function sanitizeIdSegment(value: string): string {
     .replace(/^-|-$/gu, '');
 
   return sanitized.length > 0 ? sanitized : 'spot-swap';
+}
+
+function bufferDelegatedExecutionGas(gasEstimate: bigint): bigint {
+  return (gasEstimate * 3n) / 2n;
+}
+
+function normalizeDelegationSignature(signature: string): `0x${string}` {
+  const normalized = signature.trim().toLowerCase();
+  return normalized.startsWith('0x')
+    ? (normalized as `0x${string}`)
+    : (`0x${normalized}` as `0x${string}`);
+}
+
+function decodeDelegationArtifactRef(artifactRef: string): Delegation {
+  const prefix = 'metamask-delegation:';
+  if (!artifactRef.startsWith(prefix)) {
+    throw new Error(`Unsupported delegation artifact ref "${artifactRef}".`);
+  }
+
+  const decoded = JSON.parse(
+    Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8'),
+  ) as Delegation;
+  decoded.signature = normalizeDelegationSignature(decoded.signature);
+
+  return decoded;
+}
+
+function requireDelegationArtifactRef(input: { label: string; value?: string | null }): string {
+  if (typeof input.value === 'string' && input.value.trim().length > 0) {
+    return input.value;
+  }
+
+  throw new Error(
+    `Hidden swap execution signing requires ${input.label} to build the delegated transaction wrapper.`,
+  );
+}
+
+function createRpcTransport(url: string): ReturnType<typeof http> {
+  const baseTransport = http(url);
+  const baseTransportValue: unknown = baseTransport;
+  if (typeof baseTransportValue !== 'function') {
+    return baseTransport;
+  }
+
+  return ((params: Parameters<typeof baseTransport>[0]) =>
+    baseTransport({
+      ...params,
+      retryCount: RPC_RETRY_COUNT,
+      timeout: RPC_TIMEOUT_MS,
+    })) as ReturnType<typeof http>;
+}
+
+function resolveSupportedExecutionNetworkForChainId(chainId: number): SupportedExecutionNetwork {
+  switch (chainId) {
+    case arbitrum.id:
+      return 'arbitrum';
+    case mainnet.id:
+      return 'mainnet';
+    default:
+      throw new Error(`Unsupported hidden OCA execution chain id "${chainId}".`);
+  }
+}
+
+function resolveRpcUrl(network: SupportedExecutionNetwork, env: NodeJS.ProcessEnv): string {
+  switch (network) {
+    case 'arbitrum':
+      return env['ARBITRUM_RPC_URL']?.trim() || DEFAULT_ARBITRUM_RPC_URL;
+    case 'mainnet':
+      return env['ETHEREUM_RPC_URL']?.trim() || DEFAULT_ETHEREUM_RPC_URL;
+  }
+}
+
+function createDefaultExecutionPublicClientResolver(
+  env: NodeJS.ProcessEnv,
+): ResolveHiddenOcaExecutionPublicClient {
+  const clients = new Map<SupportedExecutionNetwork, HiddenOcaExecutionPublicClient>();
+
+  return (network) => {
+    const existingClient = clients.get(network);
+    if (existingClient) {
+      return existingClient;
+    }
+
+    const client = createPublicClient({
+      chain: network === 'arbitrum' ? arbitrum : mainnet,
+      transport: createRpcTransport(resolveRpcUrl(network, env)),
+    }) as HiddenOcaExecutionPublicClient;
+    clients.set(network, client);
+    return client;
+  };
 }
 
 function buildPayloadDerivedIdempotencyKey(input: HiddenOcaSpotSwapInput): string {
@@ -444,6 +570,107 @@ function readExecutionPreparation(executionResult: Record<string, unknown>) {
   return readRecordKey(executionResult, 'execution_preparation');
 }
 
+async function resolvePreparedUnsignedTransactionHexFromSwapResponse(input: {
+  executionSigningPackage: Record<string, unknown> | null;
+  swapResponse: OnchainActionsSwapResponse;
+  walletAddress: `0x${string}`;
+  resolveExecutionPublicClient: ResolveHiddenOcaExecutionPublicClient;
+}): Promise<`0x${string}`> {
+  const [firstTransaction, ...remainingTransactions] = input.swapResponse.transactions;
+  if (!firstTransaction) {
+    throw new Error('Hidden swap execution signing requires at least one OCA transaction request.');
+  }
+
+  const chainId = Number(firstTransaction.chainId);
+  if (!Number.isFinite(chainId) || chainId <= 0) {
+    throw new Error(`Invalid hidden swap transaction chain id "${firstTransaction.chainId}".`);
+  }
+
+  for (const transaction of remainingTransactions) {
+    if (Number(transaction.chainId) !== chainId) {
+      throw new Error(
+        'Hidden swap execution signing requires all OCA transaction requests to use the same chain id.',
+      );
+    }
+  }
+
+  const network = resolveSupportedExecutionNetworkForChainId(chainId);
+  const publicClient = input.resolveExecutionPublicClient(network);
+  const delegationManager = getDeleGatorEnvironment(
+    chainId,
+  ).DelegationManager.toLowerCase() as `0x${string}`;
+  const executions = input.swapResponse.transactions.map((transaction) =>
+    createExecution({
+      target: transaction.to.toLowerCase() as `0x${string}`,
+      value: BigInt(transaction.value ?? '0'),
+      callData: transaction.data.toLowerCase() as `0x${string}`,
+    }),
+  );
+  const activeDelegationArtifactRef = requireDelegationArtifactRef({
+    label: 'active delegation artifact ref',
+    value: readString(input.executionSigningPackage?.['delegation_artifact_ref']),
+  });
+  const rootDelegationArtifactRef = requireDelegationArtifactRef({
+    label: 'root delegation artifact ref',
+    value: readString(input.executionSigningPackage?.['root_delegation_artifact_ref']),
+  });
+  const delegatedTransactionData = DelegationManager.encode.redeemDelegations({
+    delegations: [
+      [
+        decodeDelegationArtifactRef(activeDelegationArtifactRef),
+        decodeDelegationArtifactRef(rootDelegationArtifactRef),
+      ],
+    ],
+    modes: [executions.length === 1 ? ExecutionMode.SingleDefault : ExecutionMode.BatchDefault],
+    executions: [executions],
+  });
+  const [nonce, feeEstimate, gasEstimate] = await Promise.all([
+    publicClient.getTransactionCount({
+      address: input.walletAddress,
+      blockTag: 'pending',
+    }),
+    publicClient.estimateFeesPerGas(),
+    publicClient.estimateGas({
+      account: input.walletAddress,
+      to: delegationManager,
+      value: 0n,
+      data: delegatedTransactionData,
+    }),
+  ]);
+  const gas = bufferDelegatedExecutionGas(gasEstimate);
+
+  if (
+    typeof feeEstimate.maxFeePerGas === 'bigint' &&
+    typeof feeEstimate.maxPriorityFeePerGas === 'bigint'
+  ) {
+    return serializeTransaction({
+      chainId,
+      type: 'eip1559',
+      nonce,
+      gas,
+      maxFeePerGas: feeEstimate.maxFeePerGas,
+      maxPriorityFeePerGas: feeEstimate.maxPriorityFeePerGas,
+      to: delegationManager,
+      value: 0n,
+      data: delegatedTransactionData,
+    });
+  }
+
+  if (typeof feeEstimate.gasPrice === 'bigint') {
+    return serializeTransaction({
+      chainId,
+      nonce,
+      gas,
+      gasPrice: feeEstimate.gasPrice,
+      to: delegationManager,
+      value: 0n,
+      data: delegatedTransactionData,
+    });
+  }
+
+  throw new Error('RPC fee estimation did not return a signable gas price or EIP-1559 fee pair.');
+}
+
 async function signAndSubmitPreparedExecution(input: {
   options: HiddenOcaSpotSwapExecutorOptions;
   threadId: string;
@@ -479,12 +706,15 @@ async function signAndSubmitPreparedExecution(input: {
     (await input.options.resolvePreparedUnsignedTransactionHex?.({
       executionResult: input.executionResult,
       swapResponse: input.swapResponse,
-    })) ?? null;
-  if (!unsignedTransactionHex) {
-    throw new Error(
-      'Hidden swap execution signing could not continue because no prepared unsigned transaction was resolved.',
-    );
-  }
+    })) ??
+    (await resolvePreparedUnsignedTransactionHexFromSwapResponse({
+      executionSigningPackage,
+      swapResponse: input.swapResponse,
+      walletAddress: expectedWalletAddress,
+      resolveExecutionPublicClient:
+        input.options.resolveExecutionPublicClient ??
+        createDefaultExecutionPublicClientResolver(input.options.env ?? process.env),
+    }));
 
   const signer = input.options.signPreparedTransaction ?? signPreparedEvmTransaction;
   const signed = await signer({
@@ -765,7 +995,7 @@ function readSwapResponse(value: unknown): OnchainActionsSwapResponse {
 
 export function resolveHiddenOcaOnchainActionsApiUrl(env: NodeJS.ProcessEnv = process.env): string {
   const endpoint = trimTrailingSlash(
-    env.ONCHAIN_ACTIONS_API_URL?.trim() || DEFAULT_ONCHAIN_ACTIONS_API_URL,
+    env['ONCHAIN_ACTIONS_API_URL']?.trim() || DEFAULT_ONCHAIN_ACTIONS_API_URL,
   );
 
   return endpoint.endsWith('/openapi.json') ? endpoint.slice(0, -'/openapi.json'.length) : endpoint;

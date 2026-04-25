@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 
+import { getDeleGatorEnvironment, ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
+import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedDelegation } from 'agent-runtime/internal';
-import { getDeleGatorEnvironment, ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
-import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import { formatUnits, keccak256, toHex } from 'viem';
+import type {
+  HiddenOcaReservationConflictHandling,
+  HiddenOcaSpotSwapInput,
+  HiddenOcaSpotSwapResult,
+} from './hiddenOcaSwapExecutor.js';
 import {
   buildPortfolioManagerWalletAccountingDetails,
   buildSharedEmberAccountingContextXml,
@@ -33,6 +38,12 @@ export type PortfolioManagerLifecycleState = {
   activeWalletAddress: `0x${string}` | null;
   pendingOnboardingWalletAddress: `0x${string}` | null;
   pendingApprovedSetup?: PortfolioManagerApprovedSetup | null;
+  pendingSpotSwapConflict?: PortfolioManagerPendingSpotSwapConflict | null;
+};
+
+type PortfolioManagerPendingSpotSwapConflict = {
+  dispatch: HiddenOcaSpotSwapInput;
+  conflict: NonNullable<HiddenOcaSpotSwapResult['conflict']>;
 };
 
 type CreatePortfolioManagerDomainOptions = {
@@ -42,6 +53,13 @@ type CreatePortfolioManagerDomainOptions = {
   controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
+  hiddenOcaSpotSwapExecutor?: {
+    executeSpotSwap(input: {
+      threadId: string;
+      currentRevision?: number | null;
+      input: HiddenOcaSpotSwapInput;
+    }): Promise<HiddenOcaSpotSwapResult>;
+  };
 };
 
 type SharedEmberRevisionResponse = {
@@ -108,6 +126,7 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     activeWalletAddress: null,
     pendingOnboardingWalletAddress: null,
     pendingApprovedSetup: null,
+    pendingSpotSwapConflict: null,
   };
 }
 
@@ -608,6 +627,11 @@ const PORTFOLIO_MANAGER_SETUP_MESSAGE =
 const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-signing-request';
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
+const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND = 'dispatch_spot_swap';
+const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
+  'portfolio-manager-swap-reservation-conflict-request';
+const PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE =
+  'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.';
 const PORTFOLIO_MANAGER_ROOT_AUTHORITY = ROOT_AUTHORITY;
 const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
@@ -1591,6 +1615,219 @@ function parseManagedMandateUpdateInput(input: unknown): ManagedMandateUpdateInp
   };
 }
 
+function readSpotSwapAmountType(value: unknown): HiddenOcaSpotSwapInput['amountType'] | null {
+  return value === 'exactIn' || value === 'exactOut' ? value : null;
+}
+
+function readSpotSwapReservationConflictHandling(
+  value: unknown,
+): HiddenOcaSpotSwapInput['reservationConflictHandling'] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const kind = readString(value['kind']);
+  if (kind !== 'allow_reserved_for_other_agent' && kind !== 'unassigned_only') {
+    return null;
+  }
+
+  return { kind };
+}
+
+function parseSpotSwapDispatchInput(input: unknown): HiddenOcaSpotSwapInput | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const walletAddress = readHexAddress(input['walletAddress']);
+  const amount = readString(input['amount']);
+  const amountType = readSpotSwapAmountType(input['amountType']);
+  const fromChain = readString(input['fromChain']);
+  const toChain = readString(input['toChain']);
+  const fromToken = readString(input['fromToken']);
+  const toToken = readString(input['toToken']);
+
+  if (
+    walletAddress === null ||
+    amount === null ||
+    amountType === null ||
+    fromChain === null ||
+    toChain === null ||
+    fromToken === null ||
+    toToken === null
+  ) {
+    return null;
+  }
+
+  const reservationConflictHandling = readSpotSwapReservationConflictHandling(
+    input['reservationConflictHandling'],
+  );
+
+  return {
+    walletAddress,
+    amount,
+    amountType,
+    fromChain,
+    toChain,
+    fromToken,
+    toToken,
+    ...(readString(input['slippageTolerance'])
+      ? { slippageTolerance: readString(input['slippageTolerance'])! }
+      : {}),
+    ...(readString(input['expiration']) ? { expiration: readString(input['expiration'])! } : {}),
+    ...(readString(input['idempotencyKey'])
+      ? { idempotencyKey: readString(input['idempotencyKey'])! }
+      : {}),
+    ...(readString(input['rootedWalletContextId'])
+      ? { rootedWalletContextId: readString(input['rootedWalletContextId'])! }
+      : {}),
+    ...(reservationConflictHandling ? { reservationConflictHandling } : {}),
+  };
+}
+
+function buildSpotSwapDispatchInput(input: {
+  operationInput: unknown;
+  currentState: PortfolioManagerLifecycleState;
+}): HiddenOcaSpotSwapInput | null {
+  const dispatch = parseSpotSwapDispatchInput(input.operationInput);
+  if (!dispatch) {
+    return null;
+  }
+
+  return {
+    ...dispatch,
+    ...(dispatch.rootedWalletContextId
+      ? {}
+      : input.currentState.lastRootedWalletContextId
+        ? { rootedWalletContextId: input.currentState.lastRootedWalletContextId }
+        : {}),
+  };
+}
+
+function buildSpotSwapArtifact(result: HiddenOcaSpotSwapResult): Record<string, unknown> {
+  return {
+    type: 'hidden-oca-spot-swap',
+    status: result.status,
+    swapSummary: result.swapSummary,
+    transactionPlanId: result.transactionPlanId,
+    requestId: result.requestId,
+    committedEventIds: result.committedEventIds,
+    ...(result.transactionHash ? { transactionHash: result.transactionHash } : {}),
+    ...(result.conflict ? { conflict: result.conflict } : {}),
+    ...(result.failureReason ? { failureReason: result.failureReason } : {}),
+  };
+}
+
+function buildSpotSwapCompletionMessage(status: HiddenOcaSpotSwapResult['status']): string {
+  switch (status) {
+    case 'completed':
+      return 'Spot swap completed through the portfolio manager.';
+    case 'submitted':
+      return 'Spot swap submitted through the portfolio manager.';
+    case 'awaiting_redelegation':
+      return 'Spot swap execution is waiting for Shared Ember redelegation readiness.';
+    default:
+      return 'Spot swap execution finished through the portfolio manager.';
+  }
+}
+
+function buildSpotSwapOperationResult(input: {
+  currentState: PortfolioManagerLifecycleState;
+  dispatch: HiddenOcaSpotSwapInput;
+  result: HiddenOcaSpotSwapResult;
+}) {
+  if (input.result.status === 'conflict' && input.result.conflict) {
+    const nextState: PortfolioManagerLifecycleState = {
+      ...input.currentState,
+      pendingSpotSwapConflict: {
+        dispatch: input.dispatch,
+        conflict: input.result.conflict,
+      },
+    };
+
+    return {
+      state: nextState,
+      outputs: {
+        status: {
+          executionStatus: 'interrupted' as const,
+          statusMessage: PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE,
+        },
+        interrupt: {
+          type: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE,
+          mirroredToActivity: false,
+          message: PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE,
+          payload: {
+            swap: input.result.swapSummary,
+            conflict: input.result.conflict,
+            retryOptions: input.result.conflict.retryOptions,
+          },
+        },
+        artifacts: [
+          {
+            data: buildSpotSwapArtifact(input.result),
+          },
+        ],
+      },
+    };
+  }
+
+  if (input.result.status === 'failed' || input.result.status === 'blocked') {
+    return {
+      state: input.currentState,
+      outputs: {
+        status: {
+          executionStatus: 'failed' as const,
+          statusMessage:
+            input.result.failureReason ??
+            'Spot swap could not be prepared or executed through the portfolio manager.',
+        },
+        artifacts: [
+          {
+            data: buildSpotSwapArtifact(input.result),
+          },
+        ],
+      },
+    };
+  }
+
+  return {
+    state: {
+      ...input.currentState,
+      pendingSpotSwapConflict: null,
+    },
+    outputs: {
+      status: {
+        executionStatus: 'completed' as const,
+        statusMessage: buildSpotSwapCompletionMessage(input.result.status),
+      },
+      artifacts: [
+        {
+          data: buildSpotSwapArtifact(input.result),
+        },
+      ],
+    },
+  };
+}
+
+function readSpotSwapConflictOutcome(
+  value: unknown,
+): HiddenOcaReservationConflictHandling['kind'] | 'cancel' | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const outcome = readString(value['outcome']);
+  if (
+    outcome === 'allow_reserved_for_other_agent' ||
+    outcome === 'unassigned_only' ||
+    outcome === 'cancel'
+  ) {
+    return outcome;
+  }
+
+  return null;
+}
+
 function readApprovedSetupFromOnboardingBootstrap(
   value: unknown,
 ): PortfolioManagerApprovedSetup | null {
@@ -2298,6 +2535,11 @@ export function createPortfolioManagerDomain(
             'Read committed redelegation work from the Shared Ember outbox for the portfolio-manager orchestrator.',
         },
         {
+          name: PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND,
+          description:
+            'Dispatch a structured spot swap through the portfolio-manager owned hidden Onchain Actions executor.',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
           description:
             'Complete the rooted bootstrap in one Shared Ember command using onboarding data and the signing handoff.',
@@ -2314,6 +2556,12 @@ export function createPortfolioManagerDomain(
           type: 'portfolio-manager-delegation-signing-request',
           description:
             'Request delegation signatures needed to complete portfolio-manager onboarding.',
+          mirroredToActivity: false,
+        },
+        {
+          type: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE,
+          description:
+            'Ask whether a spot swap may touch capital reserved for another agent or should retry with unassigned capital only.',
           mirroredToActivity: false,
         },
       ],
@@ -2514,6 +2762,7 @@ export function createPortfolioManagerDomain(
             activeWalletAddress: null,
             pendingOnboardingWalletAddress: null,
             pendingApprovedSetup: null,
+            pendingSpotSwapConflict: null,
           };
 
           return {
@@ -3204,6 +3453,141 @@ export function createPortfolioManagerDomain(
               ],
             },
           };
+        }
+        case PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND: {
+          if (!options.hiddenOcaSpotSwapExecutor) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Hidden Onchain Actions spot swap executor is not configured for this portfolio-manager runtime.',
+                },
+              },
+            };
+          }
+
+          const dispatch = buildSpotSwapDispatchInput({
+            operationInput: operation.input,
+            currentState,
+          });
+          if (!dispatch) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap dispatch requires walletAddress, amount, amountType, fromChain, toChain, fromToken, and toToken.',
+                },
+              },
+            };
+          }
+
+          if (!dispatch.rootedWalletContextId) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap dispatch requires an active rooted wallet context before hidden execution can start.',
+                },
+              },
+            };
+          }
+
+          const result = await options.hiddenOcaSpotSwapExecutor.executeSpotSwap({
+            threadId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            input: dispatch,
+          });
+
+          return buildSpotSwapOperationResult({
+            currentState,
+            dispatch,
+            result,
+          });
+        }
+        case PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE: {
+          const outcome = readSpotSwapConflictOutcome(operation.input);
+          const pendingConflict = currentState.pendingSpotSwapConflict ?? null;
+
+          if (!pendingConflict) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'There is no exact pending spot swap conflict to confirm or retry.',
+                },
+              },
+            };
+          }
+
+          if (outcome === 'cancel') {
+            return {
+              state: {
+                ...currentState,
+                pendingSpotSwapConflict: null,
+              },
+              outputs: {
+                status: {
+                  executionStatus: 'canceled',
+                  statusMessage: 'Spot swap canceled before reserved-capital retry.',
+                },
+              },
+            };
+          }
+
+          if (outcome === null) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap conflict confirmation requires allow_reserved_for_other_agent, unassigned_only, or cancel.',
+                },
+              },
+            };
+          }
+
+          if (!options.hiddenOcaSpotSwapExecutor) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Hidden Onchain Actions spot swap executor is not configured for this portfolio-manager runtime.',
+                },
+              },
+            };
+          }
+
+          const dispatch: HiddenOcaSpotSwapInput = {
+            ...pendingConflict.dispatch,
+            reservationConflictHandling: {
+              kind: outcome,
+            },
+          };
+          const result = await options.hiddenOcaSpotSwapExecutor.executeSpotSwap({
+            threadId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            input: dispatch,
+          });
+
+          return buildSpotSwapOperationResult({
+            currentState: {
+              ...currentState,
+              pendingSpotSwapConflict: null,
+            },
+            dispatch,
+            result,
+          });
         }
         case 'refresh_redelegation_work': {
           if (!options.protocolHost) {

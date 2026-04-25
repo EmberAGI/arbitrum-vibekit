@@ -5,13 +5,14 @@ import {
   createPortfolioManagerDomain,
   type PortfolioManagerLifecycleState,
 } from './sharedEmberAdapter.js';
+import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
+import { createHiddenOcaSpotSwapExecutor } from './hiddenOcaSwapExecutor.js';
 import {
   createPortfolioManagerSharedEmberHttpHost,
   resolvePortfolioManagerSharedEmberBaseUrl,
 } from './sharedEmberHttpHost.js';
-import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
-import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 import { PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID } from './sharedEmberOnboardingState.js';
+import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -27,6 +28,12 @@ export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   PORTFOLIO_MANAGER_OWS_WALLET_NAME?: string;
   PORTFOLIO_MANAGER_OWS_PASSPHRASE?: string;
   PORTFOLIO_MANAGER_OWS_VAULT_PATH?: string;
+  PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME?: string;
+  PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE?: string;
+  PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH?: string;
+  ONCHAIN_ACTIONS_API_URL?: string;
+  ARBITRUM_RPC_URL?: string;
+  ETHEREUM_RPC_URL?: string;
 };
 
 type PortfolioManagerAgentRuntimeOptions = CreateAgentRuntimeOptions<PortfolioManagerLifecycleState>;
@@ -47,6 +54,8 @@ type CreatePortfolioManagerAgentConfigOptions = {
   controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
+  hiddenOcaExecutorWalletAddress?: `0x${string}`;
+  hiddenOcaExecutorRuntimeSignerRef?: string;
 };
 
 function requireEnvValue(
@@ -129,6 +138,24 @@ export function createPortfolioManagerAgentConfig(
       ...(options.controllerSignerAddress
         ? {
             controllerSignerAddress: options.controllerSignerAddress,
+          }
+        : {}),
+      ...(protocolHost && options.runtimeSigning
+        ? {
+            hiddenOcaSpotSwapExecutor: createHiddenOcaSpotSwapExecutor({
+              protocolHost,
+              env,
+              runtimeSigning: options.runtimeSigning,
+              ...(options.hiddenOcaExecutorRuntimeSignerRef
+                ? { runtimeSignerRef: options.hiddenOcaExecutorRuntimeSignerRef }
+                : {}),
+              ...(options.hiddenOcaExecutorWalletAddress
+                ? { executorWalletAddress: options.hiddenOcaExecutorWalletAddress }
+                : {}),
+              ...(env.ONCHAIN_ACTIONS_API_URL
+                ? { onchainActionsBaseUrl: env.ONCHAIN_ACTIONS_API_URL }
+                : {}),
+            }),
           }
         : {}),
     }),

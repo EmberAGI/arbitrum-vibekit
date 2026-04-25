@@ -6,15 +6,15 @@ import {
 } from 'agent-runtime/internal';
 
 import {
+  derivePortfolioManagerControllerSmartAccountAddress,
+  ensurePortfolioManagerControllerSmartAccountDeployed,
+} from './controllerIdentity.js';
+import {
   createPortfolioManagerAgentConfig,
   type PortfolioManagerAgentConfig,
   type PortfolioManagerGatewayEnv,
   resolvePortfolioManagerGatewayDependencies,
 } from './portfolioManagerFoundation.js';
-import {
-  derivePortfolioManagerControllerSmartAccountAddress,
-  ensurePortfolioManagerControllerSmartAccountDeployed,
-} from './controllerIdentity.js';
 import { ensurePortfolioManagerServiceIdentities } from './serviceIdentityPreflight.js';
 
 export const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
@@ -155,6 +155,7 @@ export async function createPortfolioManagerGatewayService(
       const dependencies = resolvePortfolioManagerGatewayDependencies(options.env);
       let controllerWalletAddress: `0x${string}` | undefined;
       let controllerSignerAddress: `0x${string}` | undefined;
+      let hiddenOcaExecutorWalletAddress: `0x${string}` | undefined;
 
       if (dependencies.protocolHost) {
         controllerSignerAddress = await readRequiredControllerSignerAddress({
@@ -191,7 +192,7 @@ export async function createPortfolioManagerGatewayService(
           options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentities
         )({
           protocolHost: dependencies.protocolHost,
-          readControllerWalletAddress: async () => controllerSmartAccountAddress,
+          readControllerWalletAddress: () => Promise.resolve(controllerSmartAccountAddress),
           readExecutorWalletAddress: async () =>
             await readHiddenOcaExecutorSignerAddress({
               signing,
@@ -205,14 +206,25 @@ export async function createPortfolioManagerGatewayService(
         }
 
         controllerWalletAddress = walletAddress;
+        if (
+          ensuredIdentities.hiddenOcaExecutor &&
+          'identity' in ensuredIdentities.hiddenOcaExecutor
+        ) {
+          const executorWalletAddress = ensuredIdentities.hiddenOcaExecutor.identity.wallet_address;
+          if (executorWalletAddress.startsWith('0x')) {
+            hiddenOcaExecutorWalletAddress = executorWalletAddress;
+          }
+        }
       }
 
       return {
         ...createPortfolioManagerAgentConfig(options.env, {
           runtimeSigning: signing,
           runtimeSignerRef: PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF,
+          hiddenOcaExecutorRuntimeSignerRef: HIDDEN_OCA_EXECUTOR_RUNTIME_SIGNER_REF,
           ...(controllerSignerAddress ? { controllerSignerAddress } : {}),
           ...(controllerWalletAddress ? { controllerWalletAddress } : {}),
+          ...(hiddenOcaExecutorWalletAddress ? { hiddenOcaExecutorWalletAddress } : {}),
         }),
         ...(options.now ? { now: options.now } : {}),
         ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),

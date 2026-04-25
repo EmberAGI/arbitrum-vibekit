@@ -1,5 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import {
+  createExecution,
+  type Delegation,
+  ExecutionMode,
+  getDeleGatorEnvironment,
+} from '@metamask/delegation-toolkit';
+import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
+import { serializeTransaction } from 'viem';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createHiddenOcaSpotSwapExecutor } from './hiddenOcaSwapExecutor.js';
 
@@ -7,12 +15,89 @@ const TEST_UNSIGNED_TRANSACTION_HEX =
   '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c18080c0' as const;
 const TEST_TRANSACTION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
+const TEST_ROOT_DELEGATION = createSignedDelegation({
+  delegate: '0x00000000000000000000000000000000000000c1',
+  delegator: '0x00000000000000000000000000000000000000a1',
+});
+const TEST_ACTIVE_DELEGATION = createSignedDelegation({
+  delegate: '0x00000000000000000000000000000000000000e1',
+  delegator: '0x00000000000000000000000000000000000000c1',
+});
+const TEST_ROOT_DELEGATION_ARTIFACT_REF = encodeDelegationArtifactRef(TEST_ROOT_DELEGATION);
+const TEST_ACTIVE_DELEGATION_ARTIFACT_REF = encodeDelegationArtifactRef(TEST_ACTIVE_DELEGATION);
 
 function createRuntimeSigningStub(signPayload: AgentRuntimeSigningService['signPayload']) {
   return {
     readAddress: vi.fn<AgentRuntimeSigningService['readAddress']>(),
     signPayload,
   };
+}
+
+function createSignedDelegation(input: {
+  delegate: `0x${string}`;
+  delegator: `0x${string}`;
+  authority?: `0x${string}`;
+}): Delegation {
+  return {
+    delegate: input.delegate,
+    delegator: input.delegator,
+    authority:
+      input.authority ?? '0x0000000000000000000000000000000000000000000000000000000000000000',
+    caveats: [],
+    salt: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    signature: '0x1234',
+  };
+}
+
+function encodeDelegationArtifactRef(delegation: Delegation): string {
+  return `metamask-delegation:${Buffer.from(JSON.stringify(delegation), 'utf8').toString(
+    'base64url',
+  )}`;
+}
+
+function buildExpectedDelegatedUnsignedTransactionHex(input: {
+  transaction: {
+    to: `0x${string}`;
+    value: string;
+    data: `0x${string}`;
+    chainId: string;
+  };
+  nonce: number;
+  gas: bigint;
+  maxFeePerGas: bigint;
+  maxPriorityFeePerGas: bigint;
+}): `0x${string}` {
+  const chainId = Number(input.transaction.chainId);
+  const { DelegationManager: delegationManager } = getDeleGatorEnvironment(chainId);
+  const data = DelegationManager.encode.redeemDelegations({
+    delegations: [[TEST_ACTIVE_DELEGATION, TEST_ROOT_DELEGATION]],
+    modes: [ExecutionMode.SingleDefault],
+    executions: [
+      [
+        createExecution({
+          target: input.transaction.to,
+          value: BigInt(input.transaction.value),
+          callData: input.transaction.data,
+        }),
+      ],
+    ],
+  });
+
+  return serializeTransaction({
+    chainId,
+    type: 'eip1559',
+    nonce: input.nonce,
+    gas: input.gas,
+    maxFeePerGas: input.maxFeePerGas,
+    maxPriorityFeePerGas: input.maxPriorityFeePerGas,
+    to: delegationManager,
+    value: 0n,
+    data,
+  });
+}
+
+function bufferDelegatedExecutionGas(gasEstimate: bigint): bigint {
+  return (gasEstimate * 3n) / 2n;
 }
 
 function createTokens() {
@@ -542,5 +627,159 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
         },
       },
     });
+  });
+
+  it('derives the delegated unsigned transaction from OCA swap transactions by default', async () => {
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000e1' as const,
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const swapResponse = createSwapResponse();
+    const executionPublicClient = {
+      getTransactionCount: vi.fn(async () => 7),
+      estimateFeesPerGas: vi.fn(async () => ({
+        maxFeePerGas: 200n,
+        maxPriorityFeePerGas: 3n,
+      })),
+      estimateGas: vi.fn(async () => 55_000n),
+    };
+    const expectedUnsignedTransactionHex = buildExpectedDelegatedUnsignedTransactionHex({
+      transaction: swapResponse.transactions[0]!,
+      nonce: 7,
+      gas: bufferDelegatedExecutionGas(55_000n),
+      maxFeePerGas: 200n,
+      maxPriorityFeePerGas: 3n,
+    });
+    const signPreparedTransaction = vi.fn(async () => ({
+      confirmedAddress: '0x00000000000000000000000000000000000000e1' as const,
+      rawTransaction: '0xfeed' as const,
+    }));
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce(createCandidatePlanResponse())
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 5,
+            committed_event_ids: ['evt-hidden-swap-execution-1'],
+            execution_result: {
+              phase: 'ready_for_execution_signing',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution_preparation: {
+                execution_preparation_id: 'execprep-hidden-swap-001',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                agent_id: 'agent-oca-executor',
+                agent_wallet: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                reservation_id: 'res-hidden-swap-001',
+                required_control_path: 'spot.swap',
+                active_delegation_id: 'del-hidden-swap-001',
+                root_delegation_id: 'root-delegation-001',
+                prepared_at: '2026-04-10T12:00:00.000Z',
+              },
+              execution_signing_package: {
+                execution_preparation_id: 'execprep-hidden-swap-001',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                active_delegation_id: 'del-hidden-swap-001',
+                delegation_artifact_ref: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
+                root_delegation_artifact_ref: TEST_ROOT_DELEGATION_ARTIFACT_REF,
+                canonical_unsigned_payload_ref: 'unsigned-hidden-swap-001',
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-hidden-oca-swap-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 6,
+            committed_event_ids: ['evt-hidden-swap-submitted-1'],
+            execution_result: {
+              phase: 'completed',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution: {
+                execution_id: 'exec-hidden-swap-001',
+                status: 'submitted',
+                transaction_hash: '0xsubmittedswap',
+                successor_unit_ids: [],
+              },
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient: {
+        listTokens: vi.fn(async () => createTokens()),
+        createSwap: vi.fn(async () => swapResponse),
+      },
+      runtimeSigning,
+      runtimeSignerRef: 'oca-executor-wallet',
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+      resolveExecutionPublicClient: vi.fn(() => executionPublicClient),
+      signPreparedTransaction,
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'submitted',
+      transactionHash: '0xsubmittedswap',
+    });
+
+    expect(signPreparedTransaction).toHaveBeenCalledWith({
+      signing: runtimeSigning,
+      signerRef: 'oca-executor-wallet',
+      expectedAddress: '0x00000000000000000000000000000000000000e1',
+      chain: 'evm',
+      unsignedTransactionHex: expectedUnsignedTransactionHex,
+    });
+    expect(executionPublicClient.estimateGas).toHaveBeenCalledWith({
+      account: '0x00000000000000000000000000000000000000e1',
+      to: getDeleGatorEnvironment(42161).DelegationManager.toLowerCase(),
+      value: 0n,
+      data: expect.stringMatching(/^0x[0-9a-f]+$/),
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        method: 'subagent.submitSignedTransaction.v1',
+        params: expect.objectContaining({
+          signed_transaction: expect.objectContaining({
+            raw_transaction: '0xfeed',
+          }),
+        }),
+      }),
+    );
   });
 });

@@ -3577,6 +3577,282 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('dispatches structured spot swaps through the hidden OCA executor with the selected rooted wallet context', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'submitted' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        transactionHash: '0xsubmittedswap',
+        committedEventIds: ['evt-hidden-swap-1'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            slippageTolerance: '0.5',
+            idempotencyKey: 'idem-hidden-swap-001',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap submitted through the portfolio manager.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'hidden-oca-spot-swap',
+              status: 'submitted',
+              transactionPlanId: 'txplan-hidden-swap-001',
+              requestId: 'req-hidden-swap-001',
+              transactionHash: '0xsubmittedswap',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 8,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '1000000',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'USDC',
+        toToken: 'WETH',
+        slippageTolerance: '0.5',
+        idempotencyKey: 'idem-hidden-swap-001',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+      },
+    });
+  });
+
+  it('interrupts for PM-routed reserved-capital confirmation and stores the exact swap retry', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'conflict' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        committedEventIds: ['evt-hidden-swap-conflict-1'],
+        conflict: {
+          kind: 'reserved_for_other_agent' as const,
+          blockingReasonCode: 'reserved_for_other_agent',
+          reservationId: 'res-ember-lending-001',
+          message: 'USDC is reserved for another agent.',
+          retryOptions: ['allow_reserved_for_other_agent' as const, 'unassigned_only' as const],
+        },
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            idempotencyKey: 'idem-hidden-swap-001',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: {
+          dispatch: {
+            idempotencyKey: 'idem-hidden-swap-001',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+          },
+          conflict: {
+            reservationId: 'res-ember-lending-001',
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage:
+            'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-swap-reservation-conflict-request',
+          mirroredToActivity: false,
+          payload: {
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+    });
+  });
+
+  it('re-dispatches the exact pending swap after conflict-only user confirmation', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        transactionHash: '0xconfirmed',
+        committedEventIds: ['evt-hidden-swap-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingSpotSwapConflict: {
+            dispatch: {
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+              amount: '1000000',
+              amountType: 'exactIn',
+              fromChain: 'arbitrum',
+              toChain: 'arbitrum',
+              fromToken: 'USDC',
+              toToken: 'WETH',
+              idempotencyKey: 'idem-hidden-swap-001',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: 'res-ember-lending-001',
+              message: 'USDC is reserved for another agent.',
+              retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+            },
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-swap-reservation-conflict-request',
+          input: {
+            outcome: 'unassigned_only',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap completed through the portfolio manager.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 8,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '1000000',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'USDC',
+        toToken: 'WETH',
+        idempotencyKey: 'idem-hidden-swap-001',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+        reservationConflictHandling: {
+          kind: 'unassigned_only',
+        },
+      },
+    });
+  });
+
   it('signs, registers, and acknowledges redelegation work from the committed outbox', async () => {
     const rootSignedDelegation = createSignedRootDelegation(
       '0x00000000000000000000000000000000000000c1',
