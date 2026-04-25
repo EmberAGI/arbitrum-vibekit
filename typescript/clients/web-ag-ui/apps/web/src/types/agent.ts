@@ -183,6 +183,7 @@ export type PortfolioManagerSetupRequestInterrupt = {
   type: 'portfolio-manager-setup-request';
   message: string;
   payloadSchema?: Record<string, unknown>;
+  emberOnboardingSeed?: EmberOnboardingSeed;
 };
 
 export type FundingTokenRequestInterrupt = {
@@ -271,6 +272,24 @@ export interface ManagedMandateInput extends Record<string, unknown> {
       max_ltv_bps: number;
       min_health_factor: string;
     };
+  };
+}
+
+export interface EmberOnboardingSeed {
+  pm_setup: {
+    risk_level: 'low' | 'medium' | 'high';
+    diagnosis_summary: string;
+    portfolio_intent_summary: string;
+    operator_caveats: string[];
+  };
+  first_managed_mandate: {
+    target_agent_id: 'ember-lending';
+    target_agent_key: string;
+    managed_mandate: ManagedMandateInput;
+  };
+  future_subagent_plan: {
+    status: 'exploratory_not_persisted';
+    summary: string;
   };
 }
 

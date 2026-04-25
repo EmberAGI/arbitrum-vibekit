@@ -6,6 +6,7 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentDetailPage } from './AgentDetailPage';
+import type { EmberOnboardingSeed } from '../types/agent';
 
 vi.mock('../hooks/usePrivyWalletClient', () => {
   return {
@@ -25,6 +26,7 @@ vi.mock('../hooks/usePrivyWalletClient', () => {
 function renderPortfolioManagerSetupPage(
   container: HTMLDivElement,
   onInterruptSubmit: ReturnType<typeof vi.fn>,
+  emberOnboardingSeed?: EmberOnboardingSeed,
 ) {
   const root = createRoot(container);
 
@@ -53,6 +55,7 @@ function renderPortfolioManagerSetupPage(
         activeInterrupt: {
           type: 'portfolio-manager-setup-request',
           message: 'configure portfolio manager',
+          emberOnboardingSeed,
         },
         onInterruptSubmit,
       }),
@@ -61,6 +64,44 @@ function renderPortfolioManagerSetupPage(
 
   return root;
 }
+
+const walletProfilerSeed: EmberOnboardingSeed = {
+  pm_setup: {
+    risk_level: 'medium',
+    diagnosis_summary: 'Active DeFi user with missing reserve policy.',
+    portfolio_intent_summary:
+      'Use Portfolio Agent to preserve upside while enforcing reserve discipline.',
+    operator_caveats: [
+      'Only the lending mandate is persisted today.',
+      'The broader portfolio plan is PM context until a PM mandate contract exists.',
+    ],
+  },
+  first_managed_mandate: {
+    target_agent_id: 'ember-lending',
+    target_agent_key: 'ember-lending-primary',
+    managed_mandate: {
+      lending_policy: {
+        collateral_policy: {
+          assets: [
+            { asset: 'USDC', max_allocation_pct: 35 },
+            { asset: 'WETH', max_allocation_pct: 15 },
+          ],
+        },
+        borrow_policy: {
+          allowed_assets: [],
+        },
+        risk_policy: {
+          max_ltv_bps: 4500,
+          min_health_factor: '1.60',
+        },
+      },
+    },
+  },
+  future_subagent_plan: {
+    status: 'exploratory_not_persisted',
+    summary: 'Future subagent strategy is not persisted by current onboarding.',
+  },
+};
 
 function setInputValue(input: HTMLInputElement, value: string) {
   const descriptor = Object.getOwnPropertyDescriptor(
@@ -120,6 +161,7 @@ describe('AgentDetailPage portfolio-manager setup', () => {
 
     expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
     expect(lendingLink?.getAttribute('href')).toBe('/hire-agents/agent-ember-lending');
+    expect(container.textContent).not.toContain('Wallet profiler seed');
     expect(editCollateralPolicyButton).not.toBeNull();
     expect(container.querySelector('button[aria-label="Edit maximum LTV"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Edit minimum health factor"]')).toBeNull();
@@ -185,6 +227,49 @@ describe('AgentDetailPage portfolio-manager setup', () => {
             },
           },
         },
+      },
+    });
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('shows a wallet-profiler seed panel and submits the seeded lending mandate', () => {
+    const onInterruptSubmit = vi.fn();
+    const root = renderPortfolioManagerSetupPage(
+      container,
+      onInterruptSubmit,
+      walletProfilerSeed,
+    );
+    const submitButton = [...container.querySelectorAll('button')].find(
+      (button) => button.textContent?.includes('Approve'),
+    ) as HTMLButtonElement | undefined;
+
+    expect(container.textContent).toContain('Wallet profiler seed');
+    expect(container.textContent).toContain(walletProfilerSeed.pm_setup.diagnosis_summary);
+    expect(container.textContent).toContain(
+      walletProfilerSeed.pm_setup.portfolio_intent_summary,
+    );
+    expect(container.textContent).toContain('Risk level: medium');
+    expect(container.textContent).toContain('USDC 35%');
+    expect(container.textContent).toContain('WETH 15%');
+    expect(container.textContent).toContain('Only the lending mandate is persisted today.');
+
+    act(() => {
+      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onInterruptSubmit).toHaveBeenCalledWith({
+      walletAddress: '0x00000000000000000000000000000000000000a1',
+      portfolioMandate: {
+        approved: true,
+        riskLevel: 'medium',
+      },
+      firstManagedMandate: {
+        targetAgentId: 'ember-lending',
+        targetAgentKey: 'ember-lending-primary',
+        managedMandate: walletProfilerSeed.first_managed_mandate.managed_mandate,
       },
     });
 
