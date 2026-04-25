@@ -46,8 +46,9 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('cursor-default');
     expect(html).toContain('self-center');
-    expect(html).toContain('xl:flex-none');
-    expect(html).toContain('xl:gap-x-6');
+    expect(html).toContain('xl:justify-center');
+    expect(html).not.toContain('xl:flex-none');
+    expect(html).toContain('xl:gap-x-12');
     expect(html).toContain('xl:grid-cols-[max-content_max-content_max-content_auto]');
     expect(html).not.toContain('>Soon<');
     expect(html).toContain('Selected Benchmark');

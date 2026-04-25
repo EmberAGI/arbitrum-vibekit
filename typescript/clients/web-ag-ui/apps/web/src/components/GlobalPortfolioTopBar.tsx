@@ -137,15 +137,23 @@ function GlobalWalletControls(props: {
 
 function GlobalTopBarBrand(): React.JSX.Element {
   return (
-    <div className="flex w-[calc(312px-1rem)] items-center gap-2.5 border-r border-[#D7C5B4] pr-5 md:w-[calc(312px-1.25rem)]">
-      <Image
-        src="/ember-sidebar-logo.png"
-        alt="Ember Logo"
-        width={10}
-        height={16}
-        className="h-4 w-auto object-contain"
-      />
-      <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
+    <div className="flex w-[calc(312px-1rem)] items-center border-r border-[#D7C5B4] md:w-[calc(312px-1.25rem)]">
+      <div className="-ml-4 flex w-[312px] items-center justify-center gap-2.5 md:-ml-5">
+        <Image
+          src="/ember-sidebar-logo.png"
+          alt="Ember Logo"
+          width={10}
+          height={16}
+          className="h-4 w-auto object-contain"
+        />
+        <Image
+          src="/ember-name.svg"
+          alt="Ember"
+          width={76}
+          height={15}
+          className="h-[15px] w-auto"
+        />
+      </div>
     </div>
   );
 }

@@ -137,7 +137,11 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).toContain('border-r border-[#D7C5B4]');
     expect(html).toContain('w-[calc(312px-1rem)]');
     expect(html).toContain('md:w-[calc(312px-1.25rem)]');
-    expect(html).toContain('pr-5');
+    expect(html).toContain('justify-center');
+    expect(html).toContain('-ml-4');
+    expect(html).toContain('w-[312px]');
+    expect(html).toContain('md:-ml-5');
+    expect(html).not.toContain('pr-5');
     expect(html).toContain('xl:pl-3');
     expect(html.indexOf('src="/ember-sidebar-logo.png"')).toBeLessThan(
       html.indexOf('Gross exposure'),
