@@ -59,7 +59,10 @@ function formatWithdrawTokenAmountPercent(input: {
   decimals?: number;
   percent: 25 | 50 | 100;
 }): string {
-  return formatUnits((BigInt(input.amount) * BigInt(input.percent)) / 100n, input.decimals ?? 18);
+  return formatUnits(
+    (BigInt(input.amount) * BigInt(input.percent)) / BigInt(100),
+    input.decimals ?? 18,
+  );
 }
 
 export function getPreferredSelectedTokenKey(input: {
