@@ -92,7 +92,7 @@ function GlobalWalletControls(props: {
         <div
           role="dialog"
           aria-label="Wallet address"
-          className="pointer-events-none absolute right-0 top-[calc(100%+10px)] z-50 w-[min(28rem,calc(100vw-1.5rem))] cursor-default rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98 p-3 opacity-0 shadow-[0_18px_44px_rgba(115,78,48,0.16)] backdrop-blur-sm translate-y-1 transition duration-150 before:absolute before:-top-2 before:left-0 before:h-2 before:w-full before:content-[''] group-hover/wallet-address:pointer-events-auto group-hover/wallet-address:translate-y-0 group-hover/wallet-address:opacity-100 group-focus-within/wallet-address:pointer-events-auto group-focus-within/wallet-address:translate-y-0 group-focus-within/wallet-address:opacity-100"
+          className="pointer-events-none absolute right-0 top-[calc(100%+10px)] z-50 w-[min(28rem,calc(100vw-1.5rem))] cursor-default rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98 p-3 opacity-0 shadow-[0_18px_44px_rgba(115,78,48,0.16)] backdrop-blur-sm translate-y-1 transition duration-150 before:absolute before:-top-[10px] before:left-0 before:h-[10px] before:w-full before:content-[''] group-hover/wallet-address:pointer-events-auto group-hover/wallet-address:translate-y-0 group-hover/wallet-address:opacity-100 group-focus-within/wallet-address:pointer-events-auto group-focus-within/wallet-address:translate-y-0 group-focus-within/wallet-address:opacity-100"
         >
           <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]">
             Wallet address
@@ -279,7 +279,7 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
   }, [portfolioProjectionInput]);
 
   return (
-    <div className="sticky top-0 z-40 bg-[#F7EFE3]">
+    <div className="sticky top-0 z-40 bg-[#FFFDF8]">
       <PortfolioDashboardTopBar
         view={topbarView ?? LOADING_TOPBAR_VIEW}
         leftAccessory={<GlobalTopBarBrand />}

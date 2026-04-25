@@ -54,7 +54,8 @@ describe('WalletManagementView', () => {
     expect(html).not.toMatch(/>Portfolio</);
     expect(html).toContain('mx-auto w-full max-w-[1400px] space-y-6 px-0 pt-0 pb-6');
     expect(html).not.toContain('mx-auto w-full max-w-[1400px] p-6 space-y-6');
-    expect(html).toContain('space-y-6 px-4 pb-6 sm:px-6');
+    expect(html).toContain('space-y-6 px-4 pt-4 pb-6 sm:px-6 sm:pt-6');
+    expect(html).not.toContain('space-y-6 px-4 pb-6 sm:px-6');
     expect(html).toContain('grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]');
     expect(html).not.toContain('Benchmark');
     expect(html).not.toContain('Gross exposure');

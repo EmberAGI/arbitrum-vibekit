@@ -201,6 +201,10 @@ describe('AppSidebar activity rail', () => {
     ) as HTMLButtonElement | null;
 
     expect(collapseButton).not.toBeNull();
+    expect(container.innerHTML).toContain('w-[312px]');
+    expect(container.innerHTML).not.toContain('Agent Activity');
+    expect(collapseButton?.innerHTML).toContain('lucide-panel-left-close');
+    expect(collapseButton?.textContent).not.toContain('‹');
 
     act(() => {
       collapseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -209,6 +213,11 @@ describe('AppSidebar activity rail', () => {
     expect(
       container.querySelector('button[aria-label="Expand agent activity rail"]'),
     ).not.toBeNull();
+    expect(container.innerHTML).toContain('w-[72px]');
+    expect(container.innerHTML).not.toContain('w-[312px]');
+    expect(
+      container.querySelector('button[aria-label="Expand agent activity rail"]')?.innerHTML,
+    ).toContain('lucide-panel-left-open');
     expect(container.querySelector('button[aria-label="Ember Portfolio Agent"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Ember Lending"]')).not.toBeNull();
     expect(container.querySelector('a[aria-label="Hire specialists"]')).not.toBeNull();

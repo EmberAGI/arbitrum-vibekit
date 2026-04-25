@@ -176,7 +176,10 @@ describe('AppSidebar wallet actions', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('w-[312px]');
-    expect(html).toContain('bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]');
+    expect(html).toContain('border-r border-[#DDC8B3]');
+    expect(html).toContain('bg-[#F7EFE3]');
+    expect(html).toContain('text-[#3C2A21]');
+    expect(html).toContain('transition-[width]');
     expect(html).not.toContain('src="/ember-sidebar-logo.png"');
     expect(html).not.toContain('src="/ember-name.svg"');
     expect(html).not.toContain('>AI</span>');
@@ -230,7 +233,8 @@ describe('AppSidebar wallet actions', () => {
   it('uses mono typography for sidebar section labels and badges', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
+    expect(html).not.toContain('Agent Activity');
+    expect(html).not.toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
     expect(html).toContain('font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]');
   });
 

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLogin, usePrivy } from '@privy-io/react-auth';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
@@ -482,14 +483,20 @@ export function AppSidebar() {
     Boolean(walletError) || !privyConfigured || !authenticated || !privyWallet;
   const shouldShowFooter = shouldShowSmartAccountUpgrade || shouldShowWalletConnectionFooter;
 
+  const sidebarWidthClassName = isActivityRailCollapsed ? 'w-[72px]' : 'w-[312px]';
+  const sidebarPaddingClassName = isActivityRailCollapsed ? 'p-3' : 'p-4';
+
   return (
-    <div className="flex flex-col h-full w-[312px] flex-shrink-0 bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]">
-      <div className="flex-1 overflow-y-auto p-4">
+    <div
+      className={`flex h-full flex-shrink-0 flex-col border-r border-[#DDC8B3] bg-[#F7EFE3] text-[#3C2A21] transition-[width] duration-200 ${sidebarWidthClassName}`}
+    >
+      <div className={`flex-1 overflow-y-auto ${sidebarPaddingClassName}`}>
         <div>
-          <div className="flex items-center justify-between gap-3 px-2">
-            <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]">
-              Agent Activity
-            </div>
+          <div
+            className={`flex items-center ${
+              isActivityRailCollapsed ? 'justify-center' : 'justify-end'
+            }`}
+          >
             <button
               type="button"
               aria-label={
@@ -500,7 +507,11 @@ export function AppSidebar() {
               onClick={() => setIsActivityRailCollapsed((value) => !value)}
               className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#E7DBD0] bg-[#FCF8F3] text-[#8C7F72] transition hover:text-[#D97B3D]"
             >
-              {isActivityRailCollapsed ? '›' : '‹'}
+              {isActivityRailCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
             </button>
           </div>
 

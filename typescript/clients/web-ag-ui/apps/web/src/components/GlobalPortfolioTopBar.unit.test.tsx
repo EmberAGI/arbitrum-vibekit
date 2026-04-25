@@ -122,6 +122,8 @@ describe('GlobalPortfolioTopBar', () => {
     const html = renderToStaticMarkup(React.createElement(GlobalPortfolioTopBar));
 
     expect(html).toContain('sticky top-0 z-40');
+    expect(html).toContain('bg-[#FFFDF8]');
+    expect(html).not.toContain('sticky top-0 z-40 bg-[#F7EFE3]');
     expect(html).toContain('Gross exposure');
     expect(html).toContain('Net worth');
     expect(html).toContain('Unmanaged');
@@ -201,6 +203,8 @@ describe('GlobalPortfolioTopBar', () => {
 
     expect(html).toContain('group/wallet-address');
     expect(html).toContain('group-hover/wallet-address:pointer-events-auto');
+    expect(html).toContain('before:-top-[10px]');
+    expect(html).toContain('before:h-[10px]');
     expect(html).toContain('Wallet address');
     expect(html).not.toContain('Full wallet address');
     expect(html).toContain('0x1111111111111111111111111111111111111111');
