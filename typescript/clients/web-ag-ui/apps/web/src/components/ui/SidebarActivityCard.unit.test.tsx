@@ -30,6 +30,7 @@ describe('SidebarActivityCard', () => {
     );
 
     expect(html).toContain('border-[#E8C9AA] bg-[#FFF5EA]');
+    expect(html).toContain('bg-[#fd6731]');
     expect(html).toContain('$85');
     expect(html).toContain('$5');
     expect(html).toContain('33% of portfolio');

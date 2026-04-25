@@ -36,9 +36,19 @@ describe('RootLayout font wiring', () => {
     const source = fs.readFileSync(layoutPath, 'utf8');
 
     expect(source).toContain("import { GlobalPortfolioTopBarNoSSR }");
+    expect(source).toContain("import { AuthoritativeAgentSnapshotCacheProvider }");
+    expect(source).toContain("import { InactiveAgentProvider }");
     expect(source).toContain('flex h-screen flex-col overflow-hidden');
     expect(source).toContain('flex min-h-0 flex-1 overflow-hidden');
+    expect(source.indexOf('<AuthoritativeAgentSnapshotCacheProvider>')).toBeLessThan(
+      source.indexOf('<InactiveAgentProvider>'),
+    );
+    expect(source.indexOf('<InactiveAgentProvider>')).toBeLessThan(
+      source.indexOf('<GlobalPortfolioTopBarNoSSR />'),
+    );
     expect(source.indexOf('<GlobalPortfolioTopBarNoSSR />')).toBeLessThan(source.indexOf('<AppSidebarNoSSR />'));
     expect(source.indexOf('<GlobalPortfolioTopBarNoSSR />')).toBeLessThan(source.indexOf('{children}'));
+    expect(source.indexOf('<AppSidebarNoSSR />')).toBeLessThan(source.indexOf('<AgentRuntimeProvider>'));
+    expect(source.indexOf('<AgentRuntimeProvider>')).toBeLessThan(source.indexOf('{children}'));
   });
 });

@@ -4,11 +4,15 @@ import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLogout, usePrivy } from '@privy-io/react-auth';
 import Image from 'next/image';
+import Link from 'next/link';
 
 import { PortfolioDashboardTopBar } from '@/components/dashboard/PortfolioDashboardTopBar';
-import { HardNavLink } from '@/components/ui/HardNavLink';
+import type { DashboardTopbarView } from '@/components/dashboard/dashboardTypes';
 import { useAgent } from '@/contexts/AgentContext';
-import { useAuthoritativeAgentSnapshotCache } from '@/contexts/AuthoritativeAgentSnapshotCache';
+import {
+  useAuthoritativeAgentSnapshotCache,
+  useAuthoritativeAgentSnapshotCacheVersion,
+} from '@/contexts/AuthoritativeAgentSnapshotCache';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { buildPortfolioProjection } from '@/projections/portfolio/buildPortfolioProjection';
 import { portfolioProjectionInputSchema } from '@/projections/portfolio/schema';
@@ -19,6 +23,25 @@ import { getAgentThreadId } from '@/utils/agentThread';
 import { buildWalletDashboardView } from './wallet/walletDashboardView';
 
 const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
+const LOADING_TOPBAR_VIEW: DashboardTopbarView = {
+  benchmarkAssetLabel: 'USD',
+  metrics: [
+    {
+      label: 'Gross exposure',
+      value: '--',
+      positiveAssetsValue: '--',
+      liabilitiesValue: '--',
+    },
+    {
+      label: 'Net worth',
+      value: '--',
+    },
+    {
+      label: 'Unmanaged',
+      value: '--',
+    },
+  ],
+};
 
 type FetchedPortfolioProjectionInput = {
   walletAddress: string;
@@ -101,12 +124,12 @@ function GlobalWalletControls(props: {
       >
         Logout
       </button>
-      <HardNavLink
+      <Link
         href="/wallet"
         className="text-xs font-medium text-[#7B6758] transition hover:text-[#241813]"
       >
         Manage Wallet
-      </HardNavLink>
+      </Link>
     </div>
   );
 }
@@ -131,8 +154,10 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
   const walletAddress = privyWallet?.address ?? null;
   const agent = useAgent();
   const authoritativeSnapshotCache = useAuthoritativeAgentSnapshotCache();
+  const authoritativeSnapshotCacheVersion = useAuthoritativeAgentSnapshotCacheVersion();
   const [fetchedPortfolioProjectionInput, setFetchedPortfolioProjectionInput] =
     useState<FetchedPortfolioProjectionInput | null>(null);
+  const [portfolioProjectionRequestRetry, setPortfolioProjectionRequestRetry] = useState(0);
   const requestedPortfolioProjectionKeyRef = useRef<string | null>(null);
   const portfolioManagerThreadId = getAgentThreadId(PORTFOLIO_AGENT_ID, walletAddress);
   const portfolioManagerSnapshotCacheKey = portfolioManagerThreadId
@@ -140,6 +165,7 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
     : null;
 
   const cachedPortfolioProjectionInput = useMemo(() => {
+    void authoritativeSnapshotCacheVersion;
     const currentAgentProjectionInput =
       agent.config.id === PORTFOLIO_AGENT_ID
         ? readPortfolioProjectionInput(agent.domainProjection)
@@ -158,6 +184,7 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
     agent.config.id,
     agent.domainProjection,
     authoritativeSnapshotCache,
+    authoritativeSnapshotCacheVersion,
     portfolioManagerSnapshotCacheKey,
   ]);
 
@@ -173,6 +200,16 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
     requestedPortfolioProjectionKeyRef.current = requestKey;
 
     let canceled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRetry = () => {
+      if (canceled) {
+        return;
+      }
+      retryTimer = setTimeout(() => {
+        requestedPortfolioProjectionKeyRef.current = null;
+        setPortfolioProjectionRequestRetry((value) => value + 1);
+      }, 5_000);
+    };
 
     void (async () => {
       try {
@@ -194,16 +231,26 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
             walletAddress,
             input: projectionInput,
           });
+          return;
         }
+        scheduleRetry();
       } catch {
-        // Keep the global bar absent until the portfolio projection can be read.
+        scheduleRetry();
       }
     })();
 
     return () => {
       canceled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
-  }, [cachedPortfolioProjectionInput, portfolioManagerThreadId, walletAddress]);
+  }, [
+    cachedPortfolioProjectionInput,
+    portfolioManagerThreadId,
+    portfolioProjectionRequestRetry,
+    walletAddress,
+  ]);
 
   const portfolioProjectionInput =
     cachedPortfolioProjectionInput ??
@@ -222,14 +269,10 @@ export function GlobalPortfolioTopBar(): React.JSX.Element | null {
     }).topbar;
   }, [portfolioProjectionInput]);
 
-  if (!topbarView) {
-    return null;
-  }
-
   return (
     <div className="sticky top-0 z-40 bg-[#F7EFE3]">
       <PortfolioDashboardTopBar
-        view={topbarView}
+        view={topbarView ?? LOADING_TOPBAR_VIEW}
         leftAccessory={<GlobalTopBarBrand />}
         rightAccessory={<GlobalWalletControls walletAddress={walletAddress} />}
       />

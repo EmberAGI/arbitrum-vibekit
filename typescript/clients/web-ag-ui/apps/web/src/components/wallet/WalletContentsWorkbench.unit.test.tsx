@@ -184,9 +184,8 @@ describe('WalletContentsWorkbench', () => {
     expect(html).toContain('group relative overflow-hidden rounded-[22px]');
     expect(html).toContain('list-none cursor-pointer px-3 pb-2 pt-3');
     expect(html).toContain('absolute inset-x-0 bottom-0 flex h-7 justify-center border-t border-[#E7DBD0] bg-[#FFFCF7] pt-1');
-    expect(html).toContain('rotate-180');
-    expect(html).toContain('group-open:rotate-0');
-    expect(html).not.toContain('duration-150 group-open:rotate-180');
+    expect(html).toContain('duration-150 group-open:rotate-180');
+    expect(html).not.toContain('rotate-180 text-[#6D5B4C] transition-transform duration-150 group-open:rotate-0');
     expect(html).toContain('viewBox="0 0 24 24"');
     expect(html).not.toContain('mt-3 flex justify-center border-t border-[#E7DBD0] bg-[#FFFCF7] pt-2');
     expect(html).toContain('grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3');

@@ -408,7 +408,7 @@ function FeaturedCard(props: {
           <svg
             aria-hidden="true"
             viewBox="0 0 24 24"
-            className="h-4 w-4 rotate-180 text-[#6D5B4C] transition-transform duration-150 group-open:rotate-0"
+            className="h-4 w-4 text-[#6D5B4C] transition-transform duration-150 group-open:rotate-180"
           >
             <path
               d="M6 9l6 6 6-6"

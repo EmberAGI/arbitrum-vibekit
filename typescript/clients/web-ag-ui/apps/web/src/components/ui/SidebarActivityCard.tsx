@@ -435,12 +435,18 @@ export function SidebarActivityCard(props: {
     <button
       type="button"
       onClick={props.onClick}
-      className={`w-full rounded-[18px] border px-3 pt-4 pb-3 text-left transition ${
+      className={`relative w-full overflow-hidden rounded-[18px] border px-3 pt-4 pb-3 text-left transition ${
         props.active
           ? 'border-[#E8C9AA] bg-[#FFF5EA] shadow-[0_12px_28px_rgba(68,46,21,0.08)]'
           : 'border-[#E7DBD0] bg-[#FCF8F3] hover:border-[#E8C9AA] hover:bg-[#FFF7F2]'
       }`}
     >
+      {props.active ? (
+        <span
+          className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-[#fd6731]"
+          aria-hidden="true"
+        />
+      ) : null}
       <div className="flex items-start gap-3">
         <SidebarAgentAvatar agentId={props.card.id} />
         <div className="min-w-0 flex-1">

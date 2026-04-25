@@ -115,6 +115,7 @@ vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => {
       getSnapshot: getAuthoritativeSnapshotMock,
       setSnapshot: vi.fn(),
     }),
+    useAuthoritativeAgentSnapshotCacheVersion: () => 0,
   };
 });
 
@@ -181,26 +182,32 @@ describe('AppSidebar wallet actions', () => {
     expect(html).not.toContain('>AI</span>');
   });
 
-  it('links the platform chat entry to the portfolio agent conversation', () => {
+  it('does not render the old primary navigation section', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Ember Portfolio Agent');
-    expect(html).toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+    expect(html).not.toContain('Platform');
+    expect(html).not.toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+    expect(html).not.toContain('>Agents</span>');
+    expect(html).not.toContain('>Hire</a>');
+    expect(html).not.toContain('>Acquire</a>');
+    expect(html).not.toContain('Leaderboard');
   });
 
-  it('does not keep the hire nav item highlighted on the portfolio agent route', () => {
+  it('does not render primary nav active markers on the portfolio agent route', () => {
     pathnameMock = '/hire-agents/agent-portfolio-manager';
 
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
     const activeMarkers = html.match(/w-px h-6 bg-\[#fd6731\]/g) ?? [];
 
-    expect(activeMarkers).toHaveLength(1);
+    expect(activeMarkers).toHaveLength(0);
   });
 
-  it('uses simplified sidebar icons for agents and activity state', () => {
+  it('does not render old primary nav icons or activity state icons', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('lucide-bot');
+    expect(html).not.toContain('lucide-message-square');
+    expect(html).not.toContain('lucide-bot');
+    expect(html).not.toContain('lucide-trophy');
     expect(html).not.toContain('lucide-terminal');
     expect(html).not.toContain('lucide-alert-circle');
     expect(html).not.toContain('lucide-check-circle');
@@ -211,11 +218,11 @@ describe('AppSidebar wallet actions', () => {
     expect(html).not.toContain('text-blue-400');
   });
 
-  it('uses a thin left nav indicator with light hover surfaces', () => {
+  it('keeps light sidebar hover surfaces without the old nav indicator', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('w-px h-6 bg-[#fd6731]');
-    expect(html).toContain('hover:bg-[#F0E2D2]');
+    expect(html).toContain('hover:bg-[#FFF7F2]');
+    expect(html).not.toContain('w-px h-6 bg-[#fd6731]');
     expect(html).not.toContain('hover:bg-[#1B1C21]');
     expect(html).not.toContain('text-white bg-[#1C1D23] border border-[#2F313B]');
   });
@@ -249,7 +256,7 @@ describe('AppSidebar wallet actions', () => {
     ]);
     useAgentListMock.mockReturnValue({
       agents: {
-        'agent-portfolio-manager': { taskState: 'running' },
+        'agent-portfolio-manager': { synced: true, taskState: 'running' },
         'agent-pi-example': { taskState: 'running' },
       },
     });

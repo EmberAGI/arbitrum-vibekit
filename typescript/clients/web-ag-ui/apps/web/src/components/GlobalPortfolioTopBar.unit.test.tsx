@@ -1,8 +1,19 @@
+// @vitest-environment jsdom
+
 import React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { GlobalPortfolioTopBar } from './GlobalPortfolioTopBar';
+
+const { handleHardNavigationClickMock } = vi.hoisted(() => ({
+  handleHardNavigationClickMock: vi.fn(),
+}));
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 const projectionInput = {
   benchmarkAsset: 'USD',
@@ -24,9 +35,38 @@ const projectionInput = {
   ownedUnits: [],
   activePositionScopes: [],
 };
+let domainProjectionMock: Record<string, unknown> = {
+  portfolioProjectionInput: projectionInput,
+};
 
 vi.mock('next/image', () => ({
   default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => React.createElement('img', props),
+}));
+
+vi.mock('next/link', () => ({
+  default: (
+    props: React.PropsWithChildren<{
+      href: string;
+      className?: string;
+      onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+    }>,
+  ) =>
+    React.createElement(
+      'a',
+      {
+        href: props.href,
+        className: props.className,
+        onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+          event.preventDefault();
+          props.onClick?.(event);
+        },
+      },
+      props.children,
+    ),
+}));
+
+vi.mock('@/utils/hardNavigation', () => ({
+  handleHardNavigationClick: handleHardNavigationClickMock,
 }));
 
 vi.mock('@/hooks/usePrivyWalletClient', () => ({
@@ -55,9 +95,7 @@ vi.mock('@/contexts/AgentContext', () => ({
     config: {
       id: 'agent-portfolio-manager',
     },
-    domainProjection: {
-      portfolioProjectionInput: projectionInput,
-    },
+    domainProjection: domainProjectionMock,
   }),
 }));
 
@@ -65,6 +103,7 @@ vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => ({
   useAuthoritativeAgentSnapshotCache: () => ({
     getSnapshot: () => null,
   }),
+  useAuthoritativeAgentSnapshotCacheVersion: () => 0,
 }));
 
 vi.mock('@/utils/agentCommandRoute', () => ({
@@ -72,6 +111,13 @@ vi.mock('@/utils/agentCommandRoute', () => ({
 }));
 
 describe('GlobalPortfolioTopBar', () => {
+  beforeEach(() => {
+    handleHardNavigationClickMock.mockReset();
+    domainProjectionMock = {
+      portfolioProjectionInput: projectionInput,
+    };
+  });
+
   it('renders the portfolio metrics and benchmark in a persistent sticky site bar', () => {
     const html = renderToStaticMarkup(React.createElement(GlobalPortfolioTopBar));
 
@@ -107,6 +153,36 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).toContain('href="/wallet"');
   });
 
+  it('does not hard reload the page when opening Manage Wallet', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(React.createElement(GlobalPortfolioTopBar));
+    });
+
+    const manageWalletLink = Array.from(container.querySelectorAll('a')).find(
+      (link) => link.textContent === 'Manage Wallet',
+    );
+
+    expect(manageWalletLink?.getAttribute('href')).toBe('/wallet');
+
+    act(() => {
+      manageWalletLink?.dispatchEvent(
+        new MouseEvent('click', {
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+    expect(handleHardNavigationClickMock).not.toHaveBeenCalled();
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
   it('renders benchmark and wallet pills with the same fixed height', () => {
     const html = renderToStaticMarkup(React.createElement(GlobalPortfolioTopBar));
 
@@ -123,5 +199,19 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).not.toContain('Full wallet address');
     expect(html).toContain('0x1111111111111111111111111111111111111111');
     expect(html).toContain('Copy');
+  });
+
+  it('keeps the site bar visible while portfolio metrics are loading', () => {
+    domainProjectionMock = {};
+
+    const html = renderToStaticMarkup(React.createElement(GlobalPortfolioTopBar));
+
+    expect(html).toContain('sticky top-0 z-40');
+    expect(html).toContain('src="/ember-sidebar-logo.png"');
+    expect(html).toContain('Gross exposure');
+    expect(html).toContain('Net worth');
+    expect(html).toContain('Unmanaged');
+    expect(html).toContain('Benchmark');
+    expect(html).toContain('0x1111...1111');
   });
 });

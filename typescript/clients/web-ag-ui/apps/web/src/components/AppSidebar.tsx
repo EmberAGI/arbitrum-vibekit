@@ -1,20 +1,17 @@
 'use client';
 
-import {
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
-  Bot,
-  Trophy,
-} from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLogin, usePrivy } from '@privy-io/react-auth';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useAgent } from '@/contexts/AgentContext';
-import { useAuthoritativeAgentSnapshotCache } from '@/contexts/AuthoritativeAgentSnapshotCache';
+import {
+  useAuthoritativeAgentSnapshotCache,
+  useAuthoritativeAgentSnapshotCacheVersion,
+} from '@/contexts/AuthoritativeAgentSnapshotCache';
 import { useAgentList } from '@/contexts/AgentListContext';
 import type { AgentConfig } from '@/config/agents';
 import { getVisibleAgents } from '@/config/agents';
@@ -33,8 +30,6 @@ import { isPrivyConfigured } from '@/utils/privyConfig';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
 import { normalizeSymbolKey } from '@/utils/iconResolution';
-import { navigateToHref } from '@/utils/hardNavigation';
-import { HardNavLink } from '@/components/ui/HardNavLink';
 import {
   SidebarActivityCard,
   SidebarAgentAvatar,
@@ -74,6 +69,11 @@ type FetchedPortfolioProjectionInput = {
   input: PortfolioProjectionInput;
 };
 
+type OptimisticActiveAgent = {
+  agentId: string;
+  sourcePathname: string | null;
+};
+
 export function getSidebarAgentHref(agentId: string): string {
   return agentId === PORTFOLIO_AGENT_ID ? PORTFOLIO_AGENT_CHAT_HREF : `/hire-agents/${agentId}`;
 }
@@ -90,8 +90,10 @@ function getActiveSidebarAgentId(pathname: string | null): string | null {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [isAgentsExpanded, setIsAgentsExpanded] = useState(true);
+  const router = useRouter();
   const [isActivityRailCollapsed, setIsActivityRailCollapsed] = useState(false);
+  const [optimisticActiveAgent, setOptimisticActiveAgent] =
+    useState<OptimisticActiveAgent | null>(null);
   const privyConfigured = isPrivyConfigured();
 
   const { ready, authenticated } = usePrivy();
@@ -112,9 +114,16 @@ export function AppSidebar() {
   // Get agent activity data from shared context
   const agent = useAgent();
   const authoritativeSnapshotCache = useAuthoritativeAgentSnapshotCache();
+  const authoritativeSnapshotCacheVersion = useAuthoritativeAgentSnapshotCacheVersion();
   const { agents: listAgents } = useAgentList();
 
   const agentConfigs = useMemo(() => getVisibleAgents(), []);
+  useEffect(() => {
+    agentConfigs.forEach((config) => {
+      router.prefetch?.(getSidebarAgentHref(config.id));
+    });
+  }, [agentConfigs, router]);
+
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.uiState.task?.id;
@@ -128,6 +137,7 @@ export function AppSidebar() {
     : null;
   const [fetchedPortfolioProjectionInput, setFetchedPortfolioProjectionInput] =
     useState<FetchedPortfolioProjectionInput | null>(null);
+  const [portfolioProjectionRequestRetry, setPortfolioProjectionRequestRetry] = useState(0);
   const requestedPortfolioProjectionKeyRef = useRef<string | null>(null);
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
   const runtimeTaskMessage = extractTaskStatusMessage(agent.uiState.task?.taskStatus?.message);
@@ -206,6 +216,7 @@ export function AppSidebar() {
   });
 
   const cachedPortfolioProjectionInput = useMemo(() => {
+    void authoritativeSnapshotCacheVersion;
     const currentAgentProjectionInput =
       agent.config.id === PORTFOLIO_AGENT_ID
         ? readPortfolioProjectionInput(agent.domainProjection)
@@ -224,6 +235,7 @@ export function AppSidebar() {
     agent.config.id,
     agent.domainProjection,
     authoritativeSnapshotCache,
+    authoritativeSnapshotCacheVersion,
     portfolioManagerSnapshotCacheKey,
   ]);
 
@@ -239,6 +251,16 @@ export function AppSidebar() {
     requestedPortfolioProjectionKeyRef.current = requestKey;
 
     let canceled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRetry = () => {
+      if (canceled) {
+        return;
+      }
+      retryTimer = setTimeout(() => {
+        requestedPortfolioProjectionKeyRef.current = null;
+        setPortfolioProjectionRequestRetry((value) => value + 1);
+      }, 5_000);
+    };
 
     void (async () => {
       try {
@@ -260,16 +282,26 @@ export function AppSidebar() {
             walletAddress: privyWallet.address,
             input: projectionInput,
           });
+          return;
         }
+        scheduleRetry();
       } catch {
-        // Keep the existing metric-based fallback when the shared projection is unavailable.
+        scheduleRetry();
       }
     })();
 
     return () => {
       canceled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
-  }, [cachedPortfolioProjectionInput, portfolioManagerThreadId, privyWallet?.address]);
+  }, [
+    cachedPortfolioProjectionInput,
+    portfolioManagerThreadId,
+    portfolioProjectionRequestRetry,
+    privyWallet?.address,
+  ]);
 
   const allActivityAgents = pinnedAgents;
   const portfolioProjectionInput =
@@ -285,7 +317,11 @@ export function AppSidebar() {
 
     return buildPortfolioProjection(portfolioProjectionInput);
   }, [portfolioProjectionInput]);
-  const activeSidebarAgentId = getActiveSidebarAgentId(pathname);
+  const routeActiveSidebarAgentId = getActiveSidebarAgentId(pathname);
+  const activeSidebarAgentId =
+    optimisticActiveAgent?.sourcePathname === pathname
+      ? optimisticActiveAgent.agentId
+      : routeActiveSidebarAgentId;
   const totalKnownExposureUsd = allActivityAgents.reduce((total, activity) => {
     const nextValue = resolveGrossExposureUsd(activity.entry);
     return nextValue !== undefined ? total + nextValue : total;
@@ -365,14 +401,13 @@ export function AppSidebar() {
 
   // Navigate to agent detail page when clicking on an agent in the sidebar
   const handleAgentClick = (agentId: string) => {
-    navigateToHref(getSidebarAgentHref(agentId));
+    setOptimisticActiveAgent({
+      agentId,
+      sourcePathname: pathname,
+    });
+    router.push(getSidebarAgentHref(agentId));
   };
 
-  const isPortfolioAgentActive = pathname?.startsWith(`/hire-agents/${PORTFOLIO_AGENT_ID}`);
-  const isHireAgentsActive =
-    pathname === '/hire-agents' || (pathname?.startsWith('/hire-agents/') && !isPortfolioAgentActive);
-  const isAcquireActive = pathname === '/acquire';
-  const isLeaderboardActive = pathname === '/leaderboard';
   const shouldShowSmartAccountUpgrade =
     privyConfigured &&
     authenticated &&
@@ -385,97 +420,7 @@ export function AppSidebar() {
 
   return (
     <div className="flex flex-col h-full w-[312px] flex-shrink-0 bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]">
-      {/* Main Navigation */}
       <div className="flex-1 overflow-y-auto p-4">
-        {/* Platform Section */}
-        <div className="mb-6">
-          <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em] px-2 mb-3">
-            Platform
-          </div>
-          <div className="space-y-1">
-            <HardNavLink
-              href={PORTFOLIO_AGENT_CHAT_HREF}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
-                isPortfolioAgentActive
-                  ? 'text-[#241813]'
-                  : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-              }`}
-            >
-              {isPortfolioAgentActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-              )}
-              <MessageSquare className="w-4 h-4 text-[#9B7C63]" />
-              <span className="text-sm font-medium text-[#2C1E17]">Ember Portfolio Agent</span>
-            </HardNavLink>
-
-            {/* Agents */}
-            <div>
-              <button
-                onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-[#F0E2D2]"
-              >
-                <div className="flex items-center gap-3">
-                  <Bot className="w-4 h-4 text-[#9B7C63]" />
-                  <span className="text-sm font-medium text-[#2C1E17]">Agents</span>
-                </div>
-                {isAgentsExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-[#9B7C63]" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-[#9B7C63]" />
-                )}
-              </button>
-
-              {isAgentsExpanded && (
-                <div className="ml-7 mt-1.5 space-y-1">
-                  <HardNavLink
-                    href={HIRE_AGENTS_HREF}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
-                      isHireAgentsActive
-                        ? 'text-[#241813]'
-                        : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-                    }`}
-                  >
-                    {isHireAgentsActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-                    )}
-                    Hire
-                  </HardNavLink>
-                  <HardNavLink
-                    href="/acquire"
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
-                      isAcquireActive
-                        ? 'text-[#241813]'
-                        : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-                    }`}
-                  >
-                    {isAcquireActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-                    )}
-                    Acquire
-                  </HardNavLink>
-                </div>
-              )}
-            </div>
-
-            {/* Leaderboard */}
-            <HardNavLink
-              href="/leaderboard"
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
-                isLeaderboardActive
-                  ? 'text-[#241813]'
-                  : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-              }`}
-            >
-              {isLeaderboardActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-              )}
-              <Trophy className="w-4 h-4 text-[#9B7C63]" />
-              <span className="text-sm font-medium text-[#2C1E17]">Leaderboard</span>
-            </HardNavLink>
-          </div>
-        </div>
-
-        {/* Agent Activity Section */}
         <div>
           <div className="flex items-center justify-between gap-3 px-2">
             <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]">
@@ -640,13 +585,13 @@ function SpecialistActivitySection({
           Specialists
         </div>
         {addAgentHref ? (
-          <HardNavLink
+          <Link
             href={addAgentHref}
             aria-label="Hire agents"
             className="inline-flex h-6 w-6 items-center justify-center rounded-[8px] border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[11px] leading-none text-[#8C7F72] opacity-0 transition group-hover/specialists:opacity-100 group-focus-within/specialists:opacity-100 hover:border-[#E8C9AA] hover:text-[#D97B3D]"
           >
             +
-          </HardNavLink>
+          </Link>
         ) : null}
       </div>
 
@@ -732,20 +677,20 @@ function CollapsedActivityRail(props: {
         </div>
       ) : null}
 
-      <HardNavLink
+      <Link
         href={props.hireAgentsHref}
         aria-label="Hire specialists"
         className="mt-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[11px] leading-none text-[#8C7F72] transition hover:border-[#E8C9AA] hover:text-[#D97B3D]"
       >
         +
-      </HardNavLink>
+      </Link>
     </div>
   );
 }
 
 function AddAgentCard(props: { href: string }) {
   return (
-    <HardNavLink
+    <Link
       href={props.href}
       aria-label="Add agent"
       className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#E1D4C7] bg-[#FBF7F2] px-3 py-3 text-left transition hover:border-[#E8C9AA] hover:bg-[#FFF7F2]"
@@ -761,7 +706,7 @@ function AddAgentCard(props: { href: string }) {
           Add specialist
         </span>
       </span>
-    </HardNavLink>
+    </Link>
   );
 }
 
