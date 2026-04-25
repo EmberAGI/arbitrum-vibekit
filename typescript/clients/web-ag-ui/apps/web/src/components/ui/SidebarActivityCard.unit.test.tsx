@@ -17,6 +17,9 @@ describe('SidebarActivityCard', () => {
           liabilitiesUsd: 5,
           allocationShare: 1 / 3,
           allocationShareLabel: 'portfolio',
+          avatarUri: '/ember-lending-avatar.svg',
+          avatarBackground: '#9896FF',
+          usesBrandedAvatar: true,
           tokenBreakdown: [
             { asset: 'USDC', share: 0.5 },
             { asset: 'ETH', share: 0.2 },
@@ -30,7 +33,10 @@ describe('SidebarActivityCard', () => {
     );
 
     expect(html).toContain('border-[#E8C9AA] bg-[#FFF5EA]');
-    expect(html).toContain('bg-[#fd6731]');
+    expect(html).toContain('left-0 top-0 bottom-0 w-1 rounded-r-full bg-[#fd6731]');
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('background:#9896FF');
+    expect(html).not.toContain('bg-[linear-gradient(135deg,#F0E4D6_0%,#D8C4AF_100%)]');
     expect(html).toContain('$85');
     expect(html).toContain('$5');
     expect(html).toContain('33% of portfolio');

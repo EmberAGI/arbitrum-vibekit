@@ -30,6 +30,9 @@ export type SidebarActivityCardView = {
   label: string;
   statusLabel?: string;
   statusTone: 'active' | 'blocked' | 'completed';
+  avatarUri?: string | null;
+  avatarBackground?: string;
+  usesBrandedAvatar?: boolean;
   valueUsd?: number;
   positiveAssetsUsd?: number;
   liabilitiesUsd?: number;
@@ -97,7 +100,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export function SidebarAgentAvatar(props: {
+export function GeneratedSidebarAgentAvatarPlaceholder(props: {
   agentId: string;
   className?: string;
 }) {
@@ -116,6 +119,39 @@ export function SidebarAgentAvatar(props: {
       />
       <span
         className={`absolute right-[14%] top-[18%] h-[34%] w-[34%] rounded-full ${tone.dotClassName}`}
+      />
+    </span>
+  );
+}
+
+export function SidebarAgentAvatar(props: {
+  agentId: string;
+  className?: string;
+  avatarUri?: string | null;
+  avatarBackground?: string;
+  usesBrandedAvatar?: boolean;
+}) {
+  if (!props.avatarUri) {
+    return (
+      <GeneratedSidebarAgentAvatarPlaceholder
+        agentId={props.agentId}
+        className={props.className}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`relative inline-flex shrink-0 overflow-hidden border border-[#E7D9CB] bg-[#FCF8F3] ${props.className ?? 'h-10 w-10 rounded-[14px]'}`}
+      style={props.avatarBackground ? { background: props.avatarBackground } : undefined}
+      aria-hidden="true"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={proxyIconUri(props.avatarUri)}
+        alt=""
+        decoding="async"
+        className={`h-full w-full ${props.usesBrandedAvatar ? 'object-contain p-1.5' : 'object-cover'}`}
       />
     </span>
   );
@@ -443,12 +479,17 @@ export function SidebarActivityCard(props: {
     >
       {props.active ? (
         <span
-          className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-[#fd6731]"
+          className="absolute left-0 top-0 bottom-0 w-1 rounded-r-full bg-[#fd6731]"
           aria-hidden="true"
         />
       ) : null}
       <div className="flex items-start gap-3">
-        <SidebarAgentAvatar agentId={props.card.id} />
+        <SidebarAgentAvatar
+          agentId={props.card.id}
+          avatarUri={props.card.avatarUri}
+          avatarBackground={props.card.avatarBackground}
+          usesBrandedAvatar={props.card.usesBrandedAvatar}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3 pt-[3px]">
             <div className="min-w-0">

@@ -16,6 +16,7 @@ import { useAgentList } from '@/contexts/AgentListContext';
 import type { AgentConfig } from '@/config/agents';
 import { getVisibleAgents } from '@/config/agents';
 import type { AgentListEntry } from '@/contexts/agentListTypes';
+import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import { buildPortfolioProjection } from '@/projections/portfolio/buildPortfolioProjection';
 import { portfolioProjectionInputSchema } from '@/projections/portfolio/schema';
 import type {
@@ -29,7 +30,7 @@ import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { isPrivyConfigured } from '@/utils/privyConfig';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
-import { normalizeSymbolKey } from '@/utils/iconResolution';
+import { normalizeNameKey, normalizeSymbolKey, resolveAgentAvatarUri } from '@/utils/iconResolution';
 import {
   SidebarActivityCard,
   SidebarAgentAvatar,
@@ -355,27 +356,89 @@ export function AppSidebar() {
       ) as Record<string, SidebarActivityCardView>,
     [allActivityAgents, projectionCardDataByAgentId, specialistControlBreakdown, totalKnownExposureUsd],
   );
+  const sidebarChainNames = useMemo(() => {
+    const seen = new Set<string>();
+    const chains: string[] = [];
+
+    allActivityAgents.forEach((activity) => {
+      const activityChains = activity.entry?.profile?.chains ?? activity.config.chains ?? [];
+      activityChains.forEach((chain) => {
+        const name = chain.trim();
+        if (name.length === 0 || seen.has(name)) {
+          return;
+        }
+        seen.add(name);
+        chains.push(name);
+      });
+    });
+
+    return chains;
+  }, [allActivityAgents]);
   const sidebarTokenSymbols = useMemo(() => {
     const seen = new Set<string>();
     const tokens: string[] = [];
+    const addToken = (symbol: string | undefined) => {
+      const normalizedSymbol = symbol?.trim();
+      if (!normalizedSymbol || seen.has(normalizedSymbol)) {
+        return;
+      }
+      seen.add(normalizedSymbol);
+      tokens.push(normalizedSymbol);
+    };
 
     Object.values(baseActivityCardViewsById).forEach((card) => {
       card.tokenBreakdown.forEach((slice) => {
-        const symbol = slice.asset.trim();
-        if (symbol.length === 0 || seen.has(symbol)) {
-          return;
-        }
-        seen.add(symbol);
-        tokens.push(symbol);
+        addToken(slice.asset);
+      });
+    });
+    allActivityAgents.forEach((activity) => {
+      const protocols = activity.entry?.profile?.protocols ?? activity.config.protocols ?? [];
+      protocols.forEach((protocol) => {
+        addToken(PROTOCOL_TOKEN_FALLBACK[protocol]);
       });
     });
 
     return tokens;
-  }, [baseActivityCardViewsById]);
-  const { tokenIconBySymbol: sidebarTokenIconBySymbol } = useOnchainActionsIconMaps({
-    chainNames: [],
+  }, [allActivityAgents, baseActivityCardViewsById]);
+  const {
+    chainIconByName: sidebarChainIconByName,
+    tokenIconBySymbol: sidebarTokenIconBySymbol,
+  } = useOnchainActionsIconMaps({
+    chainNames: sidebarChainNames,
     tokenSymbols: sidebarTokenSymbols,
   });
+  const sidebarAvatarByAgentId = useMemo(
+    () =>
+      Object.fromEntries(
+        allActivityAgents.map((activity) => {
+          const protocols = activity.entry?.profile?.protocols ?? activity.config.protocols ?? [];
+          const chains = activity.entry?.profile?.chains ?? activity.config.chains ?? [];
+          const avatarUri =
+            resolveAgentAvatarUri({
+              imageUrl: activity.config.imageUrl,
+              protocols,
+              tokenIconBySymbol: sidebarTokenIconBySymbol,
+            }) ??
+            (chains.length > 0 ? sidebarChainIconByName[normalizeNameKey(chains[0])] ?? null : null);
+
+          return [
+            activity.id,
+            {
+              avatarUri,
+              avatarBackground:
+                activity.config.imageUrl && activity.config.avatarBg
+                  ? activity.config.avatarBg
+                  : undefined,
+              usesBrandedAvatar: Boolean(activity.config.imageUrl),
+            },
+          ];
+        }),
+      ) as Record<
+        string,
+        Pick<SidebarActivityCardView, 'avatarUri' | 'avatarBackground' | 'usesBrandedAvatar'>
+      >,
+    [allActivityAgents, sidebarChainIconByName, sidebarTokenIconBySymbol],
+  );
   const activityCardViewsById = useMemo(
     () =>
       Object.fromEntries(
@@ -383,6 +446,7 @@ export function AppSidebar() {
           agentId,
           {
             ...card,
+            ...sidebarAvatarByAgentId[agentId],
             tokenBreakdown: card.tokenBreakdown.map((slice) => ({
               ...slice,
               iconUri:
@@ -394,7 +458,7 @@ export function AppSidebar() {
           },
         ]),
       ) as Record<string, SidebarActivityCardView>,
-    [baseActivityCardViewsById, sidebarTokenIconBySymbol],
+    [baseActivityCardViewsById, sidebarAvatarByAgentId, sidebarTokenIconBySymbol],
   );
   const portfolioActivity = allActivityAgents.find((activity) => activity.id === PORTFOLIO_AGENT_ID) ?? null;
   const specialistActivities = allActivityAgents.filter((activity) => activity.id !== PORTFOLIO_AGENT_ID);
@@ -444,6 +508,7 @@ export function AppSidebar() {
             <CollapsedActivityRail
               portfolioActivity={portfolioActivity}
               specialistActivities={specialistActivities}
+              cardViews={activityCardViewsById}
               activeAgentId={activeSidebarAgentId}
               onAgentClick={handleAgentClick}
               hireAgentsHref={HIRE_AGENTS_HREF}
@@ -627,6 +692,7 @@ function SpecialistActivitySection({
 function CollapsedActivityRail(props: {
   portfolioActivity: AgentActivity | null;
   specialistActivities: AgentActivity[];
+  cardViews: Record<string, SidebarActivityCardView>;
   activeAgentId: string | null;
   onAgentClick?: (agentId: string) => void;
   hireAgentsHref: string;
@@ -648,6 +714,9 @@ function CollapsedActivityRail(props: {
         >
           <SidebarAgentAvatar
             agentId={portfolioActivity.id}
+            avatarUri={props.cardViews[portfolioActivity.id]?.avatarUri}
+            avatarBackground={props.cardViews[portfolioActivity.id]?.avatarBackground}
+            usesBrandedAvatar={props.cardViews[portfolioActivity.id]?.usesBrandedAvatar}
             className="h-8 w-8 rounded-[10px]"
           />
         </button>
@@ -671,7 +740,13 @@ function CollapsedActivityRail(props: {
                   : 'hover:ring-1 hover:ring-[#E8C9AA]'
               }`}
             >
-              <SidebarAgentAvatar agentId={activity.id} className="h-8 w-8 rounded-[10px]" />
+              <SidebarAgentAvatar
+                agentId={activity.id}
+                avatarUri={props.cardViews[activity.id]?.avatarUri}
+                avatarBackground={props.cardViews[activity.id]?.avatarBackground}
+                usesBrandedAvatar={props.cardViews[activity.id]?.usesBrandedAvatar}
+                className="h-8 w-8 rounded-[10px]"
+              />
             </button>
           ))}
         </div>
@@ -716,6 +791,10 @@ function buildFallbackCardView(activity: AgentActivity): SidebarActivityCardView
     label: activity.name,
     statusLabel: activity.subtitle,
     statusTone: activity.status,
+    avatarUri: activity.config.imageUrl ?? null,
+    avatarBackground:
+      activity.config.imageUrl && activity.config.avatarBg ? activity.config.avatarBg : undefined,
+    usesBrandedAvatar: Boolean(activity.config.imageUrl),
     tokenBreakdown: [],
   };
 }
@@ -738,6 +817,12 @@ function buildSidebarActivityCardView(params: {
     label: params.activity.name,
     statusLabel: params.activity.subtitle,
     statusTone: params.activity.status,
+    avatarUri: params.activity.config.imageUrl ?? null,
+    avatarBackground:
+      params.activity.config.imageUrl && params.activity.config.avatarBg
+        ? params.activity.config.avatarBg
+        : undefined,
+    usesBrandedAvatar: Boolean(params.activity.config.imageUrl),
     valueUsd: grossExposureUsd,
     positiveAssetsUsd:
       params.projectionCardData?.positiveAssetsUsd ??

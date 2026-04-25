@@ -279,6 +279,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -325,6 +327,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -457,6 +461,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -505,6 +511,8 @@ describe('AppSidebar wallet actions', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('rounded-[18px]');
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('background:#9896FF');
     expect(html).toContain('px-3 pt-4 pb-3');
     expect(html).toContain('$12k gross');
     expect(html).toContain('$4k gross');
