@@ -16,6 +16,16 @@ import {
   true;
 
 describe('WalletWithdrawPanel', () => {
+  const manyBalances = Array.from({ length: 7 }, (_, index) => ({
+    tokenUid: {
+      chainId: '42161',
+      address: `0x${String(index + 1).padStart(40, '0')}`,
+    },
+    symbol: `TOK${index + 1}`,
+    amount: String(index + 1),
+    decimals: 0,
+  }));
+
   it('defaults token selection to the first available balance when current selection is empty or stale', () => {
     const balances = [
       {
@@ -94,6 +104,9 @@ describe('WalletWithdrawPanel', () => {
 
     expect(html).toContain('Connected wallet');
     expect(html).toContain('0x2222222222222222222222222222222222222222');
+    expect(html).toContain('whitespace-nowrap');
+    expect(html).toContain('min-w-0 break-all rounded-lg');
+    expect(html).not.toContain('ml-2 font-mono text-xs text-gray-400');
   });
 
   it('renders token buttons with icons and balance affordances', () => {
@@ -140,7 +153,7 @@ describe('WalletWithdrawPanel', () => {
     expect(formatWithdrawTokenAmount({ amount: '42', decimals: 0 })).toBe('42');
   });
 
-  it('fills the amount input with the selected token balance when Max is clicked', () => {
+  it('fills the amount input with the selected token balance shortcuts', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
 
@@ -179,14 +192,66 @@ describe('WalletWithdrawPanel', () => {
       usdcButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    const maxButton = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Max',
+    const amountShortcutButtons = Array.from(container.querySelectorAll('button')).filter((button) =>
+      ['25%', '50%', 'Max'].includes(button.textContent ?? ''),
     );
+    expect(amountShortcutButtons.map((button) => button.textContent)).toEqual(['25%', '50%', 'Max']);
+
+    const [quarterButton, halfButton, maxButton] = amountShortcutButtons;
+    act(() => {
+      quarterButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(amountInput?.value).toBe('0.308625');
+
+    act(() => {
+      halfButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(amountInput?.value).toBe('0.61725');
+
     act(() => {
       maxButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-
     expect(amountInput?.value).toBe('1.2345');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('paginates withdraw token choices five per page', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        React.createElement(WalletWithdrawPanel, {
+          sourceAddress: '0x1111111111111111111111111111111111111111',
+          connectedDestinationAddress: null,
+          walletClient: null,
+          balances: manyBalances,
+          onWithdrawSubmitted: vi.fn(),
+        }),
+      );
+    });
+
+    expect(container.textContent).toContain('Page 1 of 2');
+    expect(container.querySelectorAll('[data-token-withdraw-choice="true"]')).toHaveLength(5);
+    expect(container.textContent).toContain('TOK1');
+    expect(container.textContent).toContain('TOK5');
+    expect(container.textContent).not.toContain('TOK6');
+
+    const nextButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Next',
+    );
+    act(() => {
+      nextButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Page 2 of 2');
+    expect(container.querySelectorAll('[data-token-withdraw-choice="true"]')).toHaveLength(2);
+    expect(container.textContent).toContain('TOK6');
+    expect(container.textContent).toContain('TOK7');
+    expect(container.textContent).not.toContain('TOK1');
 
     act(() => {
       root.unmount();
