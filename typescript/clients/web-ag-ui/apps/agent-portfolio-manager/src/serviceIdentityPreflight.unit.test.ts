@@ -507,6 +507,99 @@ describe('ensureHiddenOcaExecutorServiceIdentity', () => {
     });
   });
 
+  it('repairs an existing hidden executor identity when internal worker metadata is stale', async () => {
+    const handleJsonRpc = vi.fn(async (request: unknown) => {
+      const jsonRpcRequest =
+        typeof request === 'object' && request !== null
+          ? (request as { method?: string; params?: Record<string, unknown> })
+          : {};
+
+      if (jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-read',
+          result: {
+            protocol_version: 'v1',
+            revision: 12,
+            agent_service_identity: {
+              identity_ref: 'agent-service-identity-agent-oca-executor-subagent-2',
+              agent_id: 'agent-oca-executor',
+              role: 'subagent',
+              wallet_address: '0x00000000000000000000000000000000000000e1',
+              wallet_source: 'ember_local_write',
+              capability_metadata: {
+                visibility: 'public',
+                control_paths: [],
+              },
+              registration_version: 2,
+              registered_at: '2026-04-09T12:00:00.000Z',
+            },
+          },
+        };
+      }
+
+      if (jsonRpcRequest.method === 'orchestrator.writeAgentServiceIdentity.v1') {
+        expect(jsonRpcRequest.params?.['expected_revision']).toBe(12);
+        expect(jsonRpcRequest.params?.['agent_service_identity']).toMatchObject({
+          identity_ref: 'agent-service-identity-agent-oca-executor-subagent-3',
+          agent_id: 'agent-oca-executor',
+          role: 'subagent',
+          wallet_address: '0x00000000000000000000000000000000000000e1',
+          wallet_source: 'ember_local_write',
+          capability_metadata: {
+            visibility: 'internal',
+            owner_agent_id: 'agent-portfolio-manager',
+            worker_kind: 'execution',
+            execution_surface: 'onchain_actions',
+            control_paths: ['spot.swap'],
+          },
+          registration_version: 3,
+          registered_at: '2026-04-10T13:00:00.000Z',
+        });
+
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-write',
+          result: {
+            protocol_version: 'v1',
+            revision: 13,
+            committed_event_ids: ['evt-agent-service-identity-hidden-3'],
+            agent_service_identity: jsonRpcRequest.params?.['agent_service_identity'],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest.method)}`);
+    });
+
+    await expect(
+      ensureHiddenOcaExecutorServiceIdentity({
+        protocolHost: {
+          handleJsonRpc,
+          readCommittedEventOutbox: vi.fn(),
+          acknowledgeCommittedEventOutbox: vi.fn(),
+        },
+        readExecutorWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000e1' as const,
+        ),
+        now: () => new Date('2026-04-10T13:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      revision: 13,
+      wroteIdentity: true,
+      identity: {
+        registration_version: 3,
+        capability_metadata: {
+          visibility: 'internal',
+          owner_agent_id: 'agent-portfolio-manager',
+          worker_kind: 'execution',
+          execution_surface: 'onchain_actions',
+          control_paths: ['spot.swap'],
+        },
+      },
+    });
+  });
+
   it('fails when Shared Ember does not confirm the written hidden executor identity', async () => {
     const handleJsonRpc = vi.fn(async (request: unknown) => {
       const jsonRpcRequest =

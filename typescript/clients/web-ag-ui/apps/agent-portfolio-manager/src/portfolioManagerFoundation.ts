@@ -3,6 +3,7 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import {
   createPortfolioManagerDomain,
+  refreshPortfolioManagerRedelegationWork,
   type PortfolioManagerLifecycleState,
 } from './sharedEmberAdapter.js';
 import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
@@ -152,6 +153,23 @@ export function createPortfolioManagerAgentConfig(
               ...(options.hiddenOcaExecutorWalletAddress
                 ? { executorWalletAddress: options.hiddenOcaExecutorWalletAddress }
                 : {}),
+              requestRedelegationRefresh: async ({ threadId, transactionPlanId, requestId }) => {
+                const result = await refreshPortfolioManagerRedelegationWork({
+                  protocolHost,
+                  threadId,
+                  agentId: 'portfolio-manager',
+                  runtimeSigning: options.runtimeSigning,
+                  runtimeSignerRef: options.runtimeSignerRef,
+                  controllerWalletAddress: options.controllerWalletAddress,
+                  controllerSignerAddress: options.controllerSignerAddress,
+                  expectedRequestId: requestId,
+                  expectedTransactionPlanId: transactionPlanId,
+                });
+
+                if (result.status !== 'completed') {
+                  throw new Error(result.statusMessage);
+                }
+              },
               ...(env.ONCHAIN_ACTIONS_API_URL
                 ? { onchainActionsBaseUrl: env.ONCHAIN_ACTIONS_API_URL }
                 : {}),

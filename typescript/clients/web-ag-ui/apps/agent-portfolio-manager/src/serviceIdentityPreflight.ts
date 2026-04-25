@@ -1,3 +1,5 @@
+import { isAddress, isAddressEqual } from 'viem';
+
 import {
   PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID,
   type PortfolioManagerSharedEmberProtocolHost,
@@ -99,11 +101,59 @@ function readString(value: unknown): string | null {
 
 function readHexAddress(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
-  return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
+  return normalized && isAddress(normalized, { strict: false })
+    ? (normalized.toLowerCase() as `0x${string}`)
+    : null;
 }
 
 function readInt(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
+}
+
+function metadataValueMatches(expected: unknown, actual: unknown): boolean {
+  if (Array.isArray(expected)) {
+    return (
+      Array.isArray(actual) &&
+      expected.length === actual.length &&
+      expected.every((entry, index) => metadataValueMatches(entry, actual[index]))
+    );
+  }
+
+  if (isRecord(expected)) {
+    if (!isRecord(actual)) {
+      return false;
+    }
+
+    return Object.entries(expected).every(([key, value]) =>
+      metadataValueMatches(value, actual[key]),
+    );
+  }
+
+  return actual === expected;
+}
+
+function capabilityMetadataMatches(input: {
+  actual: Record<string, unknown>;
+  expected: Record<string, unknown>;
+}): boolean {
+  return Object.entries(input.expected).every(([key, value]) =>
+    metadataValueMatches(value, input.actual[key]),
+  );
+}
+
+function serviceIdentityMatchesSpec(input: {
+  identity: AgentServiceIdentity;
+  walletAddress: `0x${string}`;
+  spec: AgentServiceIdentitySpec;
+}): boolean {
+  return (
+    isAddressEqual(input.identity.wallet_address, input.walletAddress) &&
+    input.identity.wallet_source === input.spec.walletSource &&
+    capabilityMetadataMatches({
+      actual: input.identity.capability_metadata,
+      expected: input.spec.capabilityMetadata,
+    })
+  );
 }
 
 function readAgentServiceIdentity(
@@ -208,14 +258,19 @@ async function writeIdentity(input: {
 }
 
 function requireConfirmedIdentity(input: {
-  expectedIdentity: Pick<AgentServiceIdentity, 'agent_id' | 'role' | 'wallet_address'>;
+  expectedIdentity: AgentServiceIdentity;
   identity: AgentServiceIdentity | null;
+  spec: AgentServiceIdentitySpec;
   unconfirmedIdentityError: string;
 }): AgentServiceIdentity {
   if (
     input.identity?.agent_id !== input.expectedIdentity.agent_id ||
     input.identity?.role !== input.expectedIdentity.role ||
-    input.identity?.wallet_address !== input.expectedIdentity.wallet_address
+    !serviceIdentityMatchesSpec({
+      identity: input.identity,
+      walletAddress: input.expectedIdentity.wallet_address,
+      spec: input.spec,
+    })
   ) {
     throw new Error(input.unconfirmedIdentityError);
   }
@@ -235,7 +290,14 @@ async function ensureAgentServiceIdentity(input: {
     spec: input.spec,
   });
 
-  if (current.identity?.wallet_address === walletAddress) {
+  if (
+    current.identity &&
+    serviceIdentityMatchesSpec({
+      identity: current.identity,
+      walletAddress,
+      spec: input.spec,
+    })
+  ) {
     return {
       revision: current.revision,
       wroteIdentity: false,
@@ -263,6 +325,7 @@ async function ensureAgentServiceIdentity(input: {
   const confirmedIdentity = requireConfirmedIdentity({
     expectedIdentity: identity,
     identity: written.identity,
+    spec: input.spec,
     unconfirmedIdentityError: input.spec.unconfirmedIdentityError,
   });
 

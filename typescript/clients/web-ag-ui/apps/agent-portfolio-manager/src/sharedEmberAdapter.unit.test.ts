@@ -3671,10 +3671,63 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('rejects initial spot swap dispatches that try to pre-authorize reserved-capital conflict handling', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            reservationConflictHandling: {
+              kind: 'allow_reserved_for_other_agent',
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Spot swap reserved-capital conflict handling can only be supplied by the portfolio-manager conflict confirmation retry.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).not.toHaveBeenCalled();
+  });
+
   it('interrupts for PM-routed reserved-capital confirmation and stores the exact swap retry', async () => {
     const hiddenExecutor = {
       executeSpotSwap: vi.fn(async () => ({
         status: 'conflict' as const,
+        idempotencyKey: 'idem-generated-hidden-swap-001',
         swapSummary: {
           fromToken: 'USDC',
           toToken: 'WETH',
@@ -3724,7 +3777,6 @@ describe('createPortfolioManagerDomain', () => {
             toChain: 'arbitrum',
             fromToken: 'USDC',
             toToken: 'WETH',
-            idempotencyKey: 'idem-hidden-swap-001',
           },
         },
       }),
@@ -3732,7 +3784,7 @@ describe('createPortfolioManagerDomain', () => {
       state: {
         pendingSpotSwapConflict: {
           dispatch: {
-            idempotencyKey: 'idem-hidden-swap-001',
+            idempotencyKey: 'idem-generated-hidden-swap-001',
             rootedWalletContextId: 'rwc-user-protocol-001',
           },
           conflict: {
@@ -3752,6 +3804,67 @@ describe('createPortfolioManagerDomain', () => {
           payload: {
             retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
           },
+        },
+      },
+    });
+  });
+
+  it('does not report hidden spot swaps as completed while executor redelegation remains pending', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'awaiting_redelegation' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        committedEventIds: ['evt-hidden-swap-redelegation-1'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            idempotencyKey: 'idem-hidden-swap-001',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Spot swap execution is waiting for Shared Ember redelegation readiness and was not completed.',
         },
       },
     });

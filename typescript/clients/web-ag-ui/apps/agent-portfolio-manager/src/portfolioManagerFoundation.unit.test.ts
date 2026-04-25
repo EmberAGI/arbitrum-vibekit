@@ -1,8 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createHiddenOcaSpotSwapExecutorMock } = vi.hoisted(() => ({
+  createHiddenOcaSpotSwapExecutorMock: vi.fn(() => ({
+    executeSpotSwap: vi.fn(),
+  })),
+}));
+
+vi.mock('./hiddenOcaSwapExecutor.js', () => ({
+  createHiddenOcaSpotSwapExecutor: createHiddenOcaSpotSwapExecutorMock,
+}));
 
 import { createPortfolioManagerAgentConfig } from './portfolioManagerFoundation.js';
 
 describe('createPortfolioManagerAgentConfig', () => {
+  beforeEach(() => {
+    createHiddenOcaSpotSwapExecutorMock.mockClear();
+    createHiddenOcaSpotSwapExecutorMock.mockImplementation(() => ({
+      executeSpotSwap: vi.fn(),
+    }));
+  });
+
   it('builds an OpenRouter-backed agent-runtime config for portfolio-manager startup', async () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
@@ -115,6 +133,37 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'read_wallet_accounting_state',
         }),
       ]),
+    );
+  });
+
+  it('wires the hidden OCA swap executor with PM-owned redelegation refresh', () => {
+    const runtimeSigning = {
+      readAddress: vi.fn<AgentRuntimeSigningService['readAddress']>(),
+      signPayload: vi.fn<AgentRuntimeSigningService['signPayload']>(),
+    };
+
+    createPortfolioManagerAgentConfig(
+      {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
+      },
+      {
+        runtimeSigning,
+        runtimeSignerRef: 'controller-wallet',
+        controllerWalletAddress: '0x00000000000000000000000000000000000000c2',
+        controllerSignerAddress: '0x00000000000000000000000000000000000000c1',
+        hiddenOcaExecutorWalletAddress: '0x00000000000000000000000000000000000000e1',
+        hiddenOcaExecutorRuntimeSignerRef: 'oca-executor-wallet',
+      },
+    );
+
+    expect(createHiddenOcaSpotSwapExecutorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSigning,
+        runtimeSignerRef: 'oca-executor-wallet',
+        executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+        requestRedelegationRefresh: expect.any(Function),
+      }),
     );
   });
 

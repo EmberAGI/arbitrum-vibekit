@@ -9,7 +9,7 @@ import {
 import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedEvmTransaction } from 'agent-runtime/internal';
-import { createPublicClient, http, serializeTransaction } from 'viem';
+import { createPublicClient, http, isAddress, isAddressEqual, isHex, serializeTransaction } from 'viem';
 import { arbitrum, mainnet } from 'viem/chains';
 
 import {
@@ -90,6 +90,7 @@ type HiddenOcaSpotSwapExecutionInput = {
 
 export type HiddenOcaSpotSwapResult = {
   status: 'completed' | 'submitted' | 'conflict' | 'awaiting_redelegation' | 'blocked' | 'failed';
+  idempotencyKey?: string;
   swapSummary: {
     fromToken: string;
     toToken: string;
@@ -181,6 +182,14 @@ type SharedEmberRevisionResponse = {
   };
 };
 
+function isSharedEmberRevisionConflict(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message.includes('Shared Ember Domain Service JSON-RPC error: protocol_conflict') &&
+    error.message.includes('expected_revision')
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -191,7 +200,9 @@ function readString(value: unknown): string | null {
 
 function readHexAddress(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
-  return normalized?.startsWith('0x') ? (normalized as `0x${string}`) : null;
+  return normalized && isAddress(normalized, { strict: false })
+    ? (normalized.toLowerCase() as `0x${string}`)
+    : null;
 }
 
 function readInt(value: unknown): number | null {
@@ -378,6 +389,19 @@ function buildSwapSummary(input: {
   };
 }
 
+function buildInputOnlySwapSummary(
+  request: HiddenOcaSpotSwapInput,
+): HiddenOcaSpotSwapResult['swapSummary'] {
+  return {
+    fromToken: request.fromToken,
+    toToken: request.toToken,
+    amount: request.amount,
+    amountType: request.amountType,
+    displayFromAmount: '',
+    displayToAmount: '',
+  };
+}
+
 async function readCurrentSharedEmberRevision(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   threadId: string;
@@ -400,10 +424,24 @@ async function runSharedEmberCommandWithResolvedRevision<T>(input: {
   currentRevision: number | null;
   buildRequest: (expectedRevision: number) => unknown;
 }): Promise<T> {
-  const expectedRevision =
+  let expectedRevision =
     input.currentRevision ?? (await readCurrentSharedEmberRevision(input));
 
-  return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
+  try {
+    return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
+  } catch (error) {
+    if (!isSharedEmberRevisionConflict(error)) {
+      throw error;
+    }
+
+    const refreshedRevision = await readCurrentSharedEmberRevision(input);
+    if (refreshedRevision === expectedRevision) {
+      throw error;
+    }
+
+    expectedRevision = refreshedRevision;
+    return (await input.protocolHost.handleJsonRpc(input.buildRequest(expectedRevision))) as T;
+  }
 }
 
 function buildCreateTransactionRequest(input: {
@@ -517,11 +555,13 @@ function buildBlockedResult(input: {
   swapResponse: OnchainActionsSwapResponse;
   executionResult: Record<string, unknown>;
   committedEventIds: string[];
+  idempotencyKey?: string;
 }): HiddenOcaSpotSwapResult {
   const conflict = readBlockedConflict(input.executionResult);
 
   return {
     status: conflict ? 'conflict' : 'blocked',
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     swapSummary: buildSwapSummary({
       request: input.request,
       swapResponse: input.swapResponse,
@@ -546,11 +586,13 @@ function buildCompletedResult(input: {
   swapResponse: OnchainActionsSwapResponse;
   executionResult: Record<string, unknown>;
   committedEventIds: string[];
+  idempotencyKey?: string;
 }): HiddenOcaSpotSwapResult {
   const executionStatus = readCompletedExecutionStatus(input.executionResult);
 
   return {
     status: executionStatus === 'submitted' ? 'submitted' : 'completed',
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     swapSummary: buildSwapSummary({
       request: input.request,
       swapResponse: input.swapResponse,
@@ -690,13 +732,13 @@ async function signAndSubmitPreparedExecution(input: {
   const executionPreparation = readExecutionPreparation(input.executionResult);
   const executionSigningPackage = readExecutionSigningPackage(input.executionResult);
   const preparedWalletAddress = readHexAddress(executionPreparation?.['agent_wallet']);
-  const expectedWalletAddress = input.options.executorWalletAddress;
+  const expectedWalletAddress = readHexAddress(input.options.executorWalletAddress);
   if (!expectedWalletAddress || !preparedWalletAddress) {
     throw new Error(
       'Hidden swap execution signing could not continue because the executor wallet identity is incomplete.',
     );
   }
-  if (preparedWalletAddress !== expectedWalletAddress) {
+  if (!isAddressEqual(preparedWalletAddress, expectedWalletAddress)) {
     throw new Error(
       'Hidden swap execution signing could not continue because the prepared signing package does not match the hidden executor wallet.',
     );
@@ -775,9 +817,11 @@ function createFailedResult(input: {
   requestId: string | null;
   committedEventIds: string[];
   failureReason: string;
+  idempotencyKey?: string;
 }): HiddenOcaSpotSwapResult {
   return {
     status: 'failed',
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     swapSummary: buildSwapSummary({
       request: input.request,
       swapResponse: input.swapResponse,
@@ -789,10 +833,27 @@ function createFailedResult(input: {
   };
 }
 
+function createInputFailedResult(input: {
+  request: HiddenOcaSpotSwapInput;
+  idempotencyKey?: string;
+  failureReason: string;
+}): HiddenOcaSpotSwapResult {
+  return {
+    status: 'failed',
+    ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+    swapSummary: buildInputOnlySwapSummary(input.request),
+    transactionPlanId: null,
+    requestId: null,
+    committedEventIds: [],
+    failureReason: input.failureReason,
+  };
+}
+
 async function runExecutionFlow(input: {
   options: HiddenOcaSpotSwapExecutorOptions;
   threadId: string;
   idempotencyKey: string;
+  resultIdempotencyKey: string;
   currentRevision: number | null;
   transactionPlanId: string;
   request: HiddenOcaSpotSwapInput;
@@ -830,6 +891,7 @@ async function runExecutionFlow(input: {
         requestId: null,
         committedEventIds,
         failureReason: 'Shared Ember did not return a hidden swap execution result.',
+        idempotencyKey: input.resultIdempotencyKey,
       });
     }
 
@@ -839,6 +901,7 @@ async function runExecutionFlow(input: {
         swapResponse: input.swapResponse,
         executionResult,
         committedEventIds,
+        idempotencyKey: input.resultIdempotencyKey,
       });
     }
 
@@ -848,29 +911,44 @@ async function runExecutionFlow(input: {
         swapResponse: input.swapResponse,
         executionResult,
         committedEventIds,
+        idempotencyKey: input.resultIdempotencyKey,
       });
     }
 
     if (phase === 'ready_for_redelegation') {
       const requestId = readExecutionRequestId(executionResult);
       if (!requestId || !input.options.requestRedelegationRefresh) {
-        return {
-          status: 'awaiting_redelegation',
-          swapSummary: buildSwapSummary({
-            request: input.request,
-            swapResponse: input.swapResponse,
-          }),
+        return createFailedResult({
+          request: input.request,
+          swapResponse: input.swapResponse,
           transactionPlanId: input.transactionPlanId,
           requestId,
           committedEventIds,
-        };
+          failureReason:
+            'Hidden swap execution reached redelegation readiness, but no redelegation refresh handler is configured.',
+          idempotencyKey: input.resultIdempotencyKey,
+        });
       }
 
-      await input.options.requestRedelegationRefresh({
-        threadId: input.threadId,
-        transactionPlanId: input.transactionPlanId,
-        requestId,
-      });
+      try {
+        await input.options.requestRedelegationRefresh({
+          threadId: input.threadId,
+          transactionPlanId: input.transactionPlanId,
+          requestId,
+        });
+      } catch (error) {
+        return createFailedResult({
+          request: input.request,
+          swapResponse: input.swapResponse,
+          transactionPlanId: input.transactionPlanId,
+          requestId,
+          committedEventIds,
+          failureReason:
+            error instanceof Error ? error.message : 'Unknown hidden swap redelegation failure.',
+          idempotencyKey: input.resultIdempotencyKey,
+        });
+      }
+      revision = null;
       attempt += 1;
       continue;
     }
@@ -897,6 +975,7 @@ async function runExecutionFlow(input: {
           requestId: readExecutionRequestId(executionResult),
           committedEventIds,
           failureReason: error instanceof Error ? error.message : 'Unknown hidden swap signing failure.',
+          idempotencyKey: input.resultIdempotencyKey,
         });
       }
 
@@ -906,6 +985,7 @@ async function runExecutionFlow(input: {
           swapResponse: input.swapResponse,
           executionResult,
           committedEventIds,
+          idempotencyKey: input.resultIdempotencyKey,
         });
       }
 
@@ -916,6 +996,7 @@ async function runExecutionFlow(input: {
         requestId: readExecutionRequestId(executionResult),
         committedEventIds,
         failureReason: 'Shared Ember did not complete hidden swap signed-transaction submission.',
+        idempotencyKey: input.resultIdempotencyKey,
       });
     }
 
@@ -929,6 +1010,7 @@ async function runExecutionFlow(input: {
     requestId: null,
     committedEventIds,
     failureReason: 'Shared Ember did not complete hidden swap execution readiness.',
+    idempotencyKey: input.resultIdempotencyKey,
   });
 }
 
@@ -957,6 +1039,37 @@ function readTokensResponse(value: unknown): OnchainActionsToken[] {
   });
 }
 
+function readSwapTransaction(value: unknown): OnchainActionsTransactionRequest | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const type = readString(value['type']);
+  const to = readHexAddress(value['to']);
+  const chainId = readString(value['chainId']);
+  const data = readString(value['data']);
+  const transactionValue = value['value'] === undefined ? undefined : readString(value['value']);
+
+  if (
+    type === null ||
+    to === null ||
+    chainId === null ||
+    data === null ||
+    !isHex(data) ||
+    (value['value'] !== undefined && transactionValue === null)
+  ) {
+    return null;
+  }
+
+  return {
+    type,
+    to,
+    ...(transactionValue ? { value: transactionValue } : {}),
+    data: data.toLowerCase() as `0x${string}`,
+    chainId,
+  };
+}
+
 function readSwapResponse(value: unknown): OnchainActionsSwapResponse {
   if (!isRecord(value) || !Array.isArray(value['transactions']) || value['transactions'].length === 0) {
     throw new Error('Onchain Actions swap response did not include executable transactions.');
@@ -968,17 +1081,13 @@ function readSwapResponse(value: unknown): OnchainActionsSwapResponse {
   const displayFromAmount = readString(value['displayFromAmount']);
   const exactToAmount = readString(value['exactToAmount']);
   const displayToAmount = readString(value['displayToAmount']);
-  const transactions = value['transactions'].filter(
-    (transaction): transaction is OnchainActionsTransactionRequest =>
-      isRecord(transaction) &&
-      readString(transaction['type']) !== null &&
-      readHexAddress(transaction['to']) !== null &&
-      readString(transaction['chainId']) !== null &&
-      typeof transaction['data'] === 'string' &&
-      transaction['data'].startsWith('0x'),
-  );
+  const transactions = value['transactions'].map(readSwapTransaction);
 
-  if (!fromToken || !toToken || !exactFromAmount || !displayFromAmount || !exactToAmount || !displayToAmount || transactions.length === 0) {
+  if (transactions.some((transaction) => transaction === null)) {
+    throw new Error('Onchain Actions swap response included malformed transaction entries.');
+  }
+
+  if (!fromToken || !toToken || !exactFromAmount || !displayFromAmount || !exactToAmount || !displayToAmount) {
     throw new Error('Onchain Actions swap response was incomplete.');
   }
 
@@ -989,7 +1098,7 @@ function readSwapResponse(value: unknown): OnchainActionsSwapResponse {
     displayFromAmount,
     exactToAmount,
     displayToAmount,
-    transactions,
+    transactions: transactions as OnchainActionsTransactionRequest[],
   };
 }
 
@@ -1055,8 +1164,31 @@ export function createHiddenOcaSpotSwapExecutor(
 
   return {
     async executeSpotSwap({ threadId, currentRevision = null, input }) {
-      const fromChainId = resolveChainId(input.fromChain);
-      const toChainId = resolveChainId(input.toChain);
+      const inputIdempotencyKey = input.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(input);
+      const walletAddress = readHexAddress(input.walletAddress);
+      if (walletAddress === null) {
+        return createInputFailedResult({
+          request: input,
+          idempotencyKey: inputIdempotencyKey,
+          failureReason: 'Hidden OCA spot swap requires a valid EVM wallet address.',
+        });
+      }
+
+      const request: HiddenOcaSpotSwapInput = {
+        ...input,
+        walletAddress,
+      };
+      const idempotencyKey = request.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(request);
+      const fromChainId = resolveChainId(request.fromChain);
+      const toChainId = resolveChainId(request.toChain);
+      if (fromChainId !== toChainId) {
+        return createInputFailedResult({
+          request,
+          idempotencyKey,
+          failureReason: 'Hidden OCA spot swaps currently require fromChain and toChain to match.',
+        });
+      }
+
       const fromTokens = await onchainActionsClient.listTokens({ chainIds: [fromChainId] });
       const toTokens =
         toChainId === fromChainId
@@ -1065,24 +1197,22 @@ export function createHiddenOcaSpotSwapExecutor(
       const fromToken = resolveToken({
         tokens: fromTokens,
         chainId: fromChainId,
-        token: input.fromToken,
+        token: request.fromToken,
       });
       const toToken = resolveToken({
         tokens: toTokens,
         chainId: toChainId,
-        token: input.toToken,
+        token: request.toToken,
       });
       const swapResponse = await onchainActionsClient.createSwap({
-        walletAddress: input.walletAddress,
-        amount: input.amount,
-        amountType: input.amountType,
+        walletAddress: request.walletAddress,
+        amount: request.amount,
+        amountType: request.amountType,
         fromTokenUid: fromToken.tokenUid,
         toTokenUid: toToken.tokenUid,
-        ...(input.slippageTolerance ? { slippageTolerance: input.slippageTolerance } : {}),
-        ...(input.expiration ? { expiration: input.expiration } : {}),
+        ...(request.slippageTolerance ? { slippageTolerance: request.slippageTolerance } : {}),
+        ...(request.expiration ? { expiration: request.expiration } : {}),
       });
-      const idempotencyKey =
-        input.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(input);
       const createResponse = await runSharedEmberCommandWithResolvedRevision({
         protocolHost: options.protocolHost,
         threadId,
@@ -1092,22 +1222,23 @@ export function createHiddenOcaSpotSwapExecutor(
             threadId,
             idempotencyKey,
             expectedRevision,
-            rootedWalletContextId: input.rootedWalletContextId,
-            request: input,
+            rootedWalletContextId: request.rootedWalletContextId,
+            request,
             swapResponse,
             fromToken,
-            network: normalizeNetworkName(input.fromChain),
+            network: normalizeNetworkName(request.fromChain),
           }),
       });
       const transactionPlanId = readCandidatePlanId(createResponse);
       if (!transactionPlanId) {
         return createFailedResult({
-          request: input,
+          request,
           swapResponse,
           transactionPlanId: null,
           requestId: null,
           committedEventIds: readCommittedEventIds(createResponse),
           failureReason: 'Shared Ember did not return a hidden swap transaction plan.',
+          idempotencyKey,
         });
       }
 
@@ -1115,9 +1246,10 @@ export function createHiddenOcaSpotSwapExecutor(
         options,
         threadId,
         idempotencyKey: sanitizeIdSegment(idempotencyKey),
+        resultIdempotencyKey: idempotencyKey,
         currentRevision: readResultRevision(createResponse),
         transactionPlanId,
-        request: input,
+        request,
         swapResponse,
       });
     },

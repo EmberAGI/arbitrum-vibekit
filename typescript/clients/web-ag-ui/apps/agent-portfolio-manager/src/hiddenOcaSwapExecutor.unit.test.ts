@@ -9,7 +9,10 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { serializeTransaction } from 'viem';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createHiddenOcaSpotSwapExecutor } from './hiddenOcaSwapExecutor.js';
+import {
+  createHiddenOcaOnchainActionsClient,
+  createHiddenOcaSpotSwapExecutor,
+} from './hiddenOcaSwapExecutor.js';
 
 const TEST_UNSIGNED_TRANSACTION_HEX =
   '0x02e982a4b1018405f5e100843b9aca008252089400000000000000000000000000000000000000c18080c0' as const;
@@ -319,6 +322,146 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
     });
   });
 
+  it('retries a stale Shared Ember expected revision once with the current hidden executor revision', async () => {
+    const onchainActionsClient = {
+      listTokens: vi.fn(async () => createTokens()),
+      createSwap: vi.fn(async () => createSwapResponse()),
+    };
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new Error(
+            'Shared Ember Domain Service JSON-RPC error: protocol_conflict: expected_revision must match the current service revision',
+          ),
+        )
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-hidden-oca-executor-revision',
+          result: {
+            revision: 9,
+          },
+        })
+        .mockResolvedValueOnce(createCandidatePlanResponse())
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-hidden-swap-execution-1'],
+            execution_result: {
+              phase: 'completed',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution: {
+                execution_id: 'exec-hidden-swap-001',
+                status: 'confirmed',
+                transaction_hash: '0xswapconfirmed',
+                successor_unit_ids: [],
+              },
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient,
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      transactionHash: '0xswapconfirmed',
+    });
+
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: 'subagent.createTransaction.v1',
+        params: expect.objectContaining({
+          expected_revision: 3,
+        }),
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(2, {
+      jsonrpc: '2.0',
+      id: 'shared-ember-thread-1-read-hidden-oca-executor-revision',
+      method: 'subagent.readPortfolioState.v1',
+      params: {
+        agent_id: 'agent-oca-executor',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        method: 'subagent.createTransaction.v1',
+        params: expect.objectContaining({
+          expected_revision: 9,
+        }),
+      }),
+    );
+  });
+
+  it('fails closed before OCA planning for unsupported cross-chain swap inputs', async () => {
+    const onchainActionsClient = {
+      listTokens: vi.fn(async () => createTokens()),
+      createSwap: vi.fn(async () => createSwapResponse()),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost: {
+        handleJsonRpc: vi.fn(),
+        readCommittedEventOutbox: vi.fn(),
+        acknowledgeCommittedEventOutbox: vi.fn(),
+      },
+      onchainActionsClient,
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'mainnet',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      failureReason: 'Hidden OCA spot swaps currently require fromChain and toChain to match.',
+      transactionPlanId: null,
+      requestId: null,
+    });
+
+    expect(onchainActionsClient.listTokens).not.toHaveBeenCalled();
+    expect(onchainActionsClient.createSwap).not.toHaveBeenCalled();
+  });
+
   it('returns structured reserved-capital conflict details without retrying automatically', async () => {
     const onchainActionsClient = {
       listTokens: vi.fn(async () => createTokens()),
@@ -476,6 +619,202 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
     );
   });
 
+  it('continues through redelegation refresh before signing and submitting the hidden swap', async () => {
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000e1' as const,
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const requestRedelegationRefresh = vi.fn(async () => undefined);
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce(createCandidatePlanResponse())
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 5,
+            committed_event_ids: ['evt-hidden-swap-redelegation-1'],
+            execution_result: {
+              phase: 'ready_for_redelegation',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-read-hidden-oca-executor-revision',
+          result: {
+            revision: 6,
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 7,
+            committed_event_ids: ['evt-hidden-swap-execution-1'],
+            execution_result: {
+              phase: 'ready_for_execution_signing',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution_preparation: {
+                execution_preparation_id: 'execprep-hidden-swap-001',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                agent_id: 'agent-oca-executor',
+                agent_wallet: '0x00000000000000000000000000000000000000e1',
+              },
+              execution_signing_package: {
+                execution_preparation_id: 'execprep-hidden-swap-001',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                active_delegation_id: 'del-hidden-swap-001',
+                canonical_unsigned_payload_ref: 'unsigned-hidden-swap-001',
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-hidden-oca-swap-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 8,
+            committed_event_ids: ['evt-hidden-swap-submitted-1'],
+            execution_result: {
+              phase: 'completed',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution: {
+                execution_id: 'exec-hidden-swap-001',
+                status: 'submitted',
+                transaction_hash: '0xsubmittedswap',
+                successor_unit_ids: [],
+              },
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient: {
+        listTokens: vi.fn(async () => createTokens()),
+        createSwap: vi.fn(async () => createSwapResponse()),
+      },
+      runtimeSigning,
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+      requestRedelegationRefresh,
+      resolvePreparedUnsignedTransactionHex: vi.fn(async () => TEST_UNSIGNED_TRANSACTION_HEX),
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'submitted',
+      transactionHash: '0xsubmittedswap',
+    });
+
+    expect(requestRedelegationRefresh).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      transactionPlanId: 'txplan-hidden-swap-001',
+      requestId: 'req-hidden-swap-001',
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        method: 'subagent.readPortfolioState.v1',
+      }),
+    );
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      4,
+      expect.objectContaining({
+        method: 'subagent.requestExecution.v1',
+        params: expect.objectContaining({
+          expected_revision: 6,
+        }),
+      }),
+    );
+  });
+
+  it('fails closed instead of waiting indefinitely when redelegation refresh is not configured', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce(createCandidatePlanResponse())
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 5,
+            committed_event_ids: ['evt-hidden-swap-redelegation-1'],
+            execution_result: {
+              phase: 'ready_for_redelegation',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient: {
+        listTokens: vi.fn(async () => createTokens()),
+        createSwap: vi.fn(async () => createSwapResponse()),
+      },
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      failureReason:
+        'Hidden swap execution reached redelegation readiness, but no redelegation refresh handler is configured.',
+    });
+  });
+
   it('signs and submits an execution-signing package with the hidden executor wallet', async () => {
     const runtimeSigning = createRuntimeSigningStub(
       vi.fn(async () => ({
@@ -506,7 +845,7 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
                 transaction_plan_id: 'txplan-hidden-swap-001',
                 request_id: 'req-hidden-swap-001',
                 agent_id: 'agent-oca-executor',
-                agent_wallet: '0x00000000000000000000000000000000000000e1',
+                agent_wallet: '0x00000000000000000000000000000000000000E1',
                 root_user_wallet: '0x00000000000000000000000000000000000000a1',
                 network: 'arbitrum',
                 reservation_id: 'res-hidden-swap-001',
@@ -781,5 +1120,51 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
         }),
       }),
     );
+  });
+
+  it('rejects an OCA swap response with any malformed transaction entry', async () => {
+    const fetchImpl = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          ...createSwapResponse(),
+          transactions: [
+            createSwapResponse().transactions[0],
+            {
+              type: 'EVM_TX',
+              to: '0xnot-an-address',
+              value: '0',
+              data: '0xabcdef',
+              chainId: '42161',
+            },
+          ],
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      );
+    });
+    const client = createHiddenOcaOnchainActionsClient({
+      baseUrl: 'https://onchain-actions.test',
+      fetch: fetchImpl as typeof fetch,
+    });
+
+    await expect(
+      client.createSwap({
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '1000000',
+        amountType: 'exactIn',
+        fromTokenUid: {
+          chainId: '42161',
+          address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+        },
+        toTokenUid: {
+          chainId: '42161',
+          address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+        },
+      }),
+    ).rejects.toThrow('Onchain Actions swap response included malformed transaction entries.');
   });
 });
