@@ -9,10 +9,22 @@ type EnsurePortfolioManagerServiceIdentityInput = {
   now?: () => Date;
 };
 
+type EnsureHiddenOcaExecutorServiceIdentityInput = {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  readExecutorWalletAddress: () => Promise<`0x${string}`>;
+  now?: () => Date;
+};
+
+type EnsurePortfolioManagerServiceIdentitiesInput = EnsurePortfolioManagerServiceIdentityInput & {
+  readExecutorWalletAddress?: () => Promise<`0x${string}`>;
+};
+
+type AgentServiceIdentityRole = 'orchestrator' | 'subagent';
+
 type AgentServiceIdentity = {
   identity_ref: string;
   agent_id: string;
-  role: 'orchestrator';
+  role: AgentServiceIdentityRole;
   wallet_address: `0x${string}`;
   wallet_source: string;
   capability_metadata: Record<string, unknown>;
@@ -20,14 +32,62 @@ type AgentServiceIdentity = {
   registered_at: string;
 };
 
+type EnsureServiceIdentityResult = {
+  revision: number | null;
+  wroteIdentity: boolean;
+  identity: AgentServiceIdentity;
+};
+
+type DeferredHiddenWorkerIdentity = {
+  status: 'deferred';
+  reason: string;
+};
+
+type AgentServiceIdentitySpec = {
+  agentId: string;
+  role: AgentServiceIdentityRole;
+  walletSource: string;
+  capabilityMetadata: Record<string, unknown>;
+  unconfirmedIdentityError: string;
+};
+
+export const HIDDEN_OCA_EXECUTOR_AGENT_ID = 'agent-oca-executor';
+export const HIDDEN_OCA_EXECUTOR_OWNER_AGENT_ID = 'agent-portfolio-manager';
+export const HIDDEN_OCA_EXECUTOR_CONTROL_PATH = 'spot.swap';
+
 const PORTFOLIO_MANAGER_SERVICE_ROLE = 'orchestrator';
 const PORTFOLIO_MANAGER_WALLET_SOURCE = 'ember_local_write';
 const PORTFOLIO_MANAGER_CAPABILITY_METADATA = {
   onboarding: true,
   root_registration: true,
 };
+const HIDDEN_OCA_EXECUTOR_SERVICE_ROLE = 'subagent';
+const HIDDEN_OCA_EXECUTOR_WALLET_SOURCE = 'ember_local_write';
+const HIDDEN_OCA_EXECUTOR_CAPABILITY_METADATA = {
+  visibility: 'internal',
+  owner_agent_id: HIDDEN_OCA_EXECUTOR_OWNER_AGENT_ID,
+  worker_kind: 'execution',
+  execution_surface: 'onchain_actions',
+  control_paths: [HIDDEN_OCA_EXECUTOR_CONTROL_PATH],
+};
 const UNCONFIRMED_ORCHESTRATOR_IDENTITY_ERROR =
   'Portfolio-manager startup identity preflight failed because Shared Ember did not confirm the expected orchestrator identity.';
+const UNCONFIRMED_HIDDEN_OCA_EXECUTOR_IDENTITY_ERROR =
+  'Portfolio-manager startup identity preflight failed because Shared Ember did not confirm the expected hidden Onchain Actions executor identity.';
+const PORTFOLIO_MANAGER_IDENTITY_SPEC: AgentServiceIdentitySpec = {
+  agentId: PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID,
+  role: PORTFOLIO_MANAGER_SERVICE_ROLE,
+  walletSource: PORTFOLIO_MANAGER_WALLET_SOURCE,
+  capabilityMetadata: PORTFOLIO_MANAGER_CAPABILITY_METADATA,
+  unconfirmedIdentityError: UNCONFIRMED_ORCHESTRATOR_IDENTITY_ERROR,
+};
+const HIDDEN_OCA_EXECUTOR_IDENTITY_SPEC: AgentServiceIdentitySpec = {
+  agentId: HIDDEN_OCA_EXECUTOR_AGENT_ID,
+  role: HIDDEN_OCA_EXECUTOR_SERVICE_ROLE,
+  walletSource: HIDDEN_OCA_EXECUTOR_WALLET_SOURCE,
+  capabilityMetadata: HIDDEN_OCA_EXECUTOR_CAPABILITY_METADATA,
+  unconfirmedIdentityError: UNCONFIRMED_HIDDEN_OCA_EXECUTOR_IDENTITY_ERROR,
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -46,7 +106,10 @@ function readInt(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
-function readAgentServiceIdentity(value: unknown): AgentServiceIdentity | null {
+function readAgentServiceIdentity(
+  value: unknown,
+  spec: Pick<AgentServiceIdentitySpec, 'agentId' | 'role'>,
+): AgentServiceIdentity | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -73,18 +136,18 @@ function readAgentServiceIdentity(value: unknown): AgentServiceIdentity | null {
     return null;
   }
 
-  if (agentId !== PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID) {
+  if (agentId !== spec.agentId) {
     return null;
   }
 
-  if (readString(value['role']) !== PORTFOLIO_MANAGER_SERVICE_ROLE) {
+  if (readString(value['role']) !== spec.role) {
     return null;
   }
 
   return {
     identity_ref: identityRef,
     agent_id: agentId,
-    role: PORTFOLIO_MANAGER_SERVICE_ROLE,
+    role: spec.role,
     wallet_address: walletAddress,
     wallet_source: walletSource,
     capability_metadata: capabilityMetadata,
@@ -95,6 +158,7 @@ function readAgentServiceIdentity(value: unknown): AgentServiceIdentity | null {
 
 async function readCurrentIdentity(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  spec: AgentServiceIdentitySpec;
 }): Promise<{
   revision: number;
   identity: AgentServiceIdentity | null;
@@ -104,15 +168,15 @@ async function readCurrentIdentity(input: {
     id: 'rpc-agent-service-identity-read',
     method: 'orchestrator.readAgentServiceIdentity.v1',
     params: {
-      agent_id: PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID,
-      role: PORTFOLIO_MANAGER_SERVICE_ROLE,
+      agent_id: input.spec.agentId,
+      role: input.spec.role,
     },
   });
   const result = isRecord(response) && isRecord(response['result']) ? response['result'] : null;
 
   return {
     revision: readInt(result?.['revision']) ?? 0,
-    identity: readAgentServiceIdentity(result?.['agent_service_identity'] ?? null),
+    identity: readAgentServiceIdentity(result?.['agent_service_identity'] ?? null, input.spec),
   };
 }
 
@@ -120,6 +184,7 @@ async function writeIdentity(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   expectedRevision: number;
   identity: AgentServiceIdentity;
+  spec: AgentServiceIdentitySpec;
 }): Promise<{
   revision: number | null;
   identity: AgentServiceIdentity | null;
@@ -138,35 +203,36 @@ async function writeIdentity(input: {
 
   return {
     revision: readInt(result?.['revision']),
-    identity: readAgentServiceIdentity(result?.['agent_service_identity'] ?? null),
+    identity: readAgentServiceIdentity(result?.['agent_service_identity'] ?? null, input.spec),
   };
 }
 
 function requireConfirmedIdentity(input: {
   expectedIdentity: Pick<AgentServiceIdentity, 'agent_id' | 'role' | 'wallet_address'>;
   identity: AgentServiceIdentity | null;
+  unconfirmedIdentityError: string;
 }): AgentServiceIdentity {
   if (
     input.identity?.agent_id !== input.expectedIdentity.agent_id ||
     input.identity?.role !== input.expectedIdentity.role ||
     input.identity?.wallet_address !== input.expectedIdentity.wallet_address
   ) {
-    throw new Error(UNCONFIRMED_ORCHESTRATOR_IDENTITY_ERROR);
+    throw new Error(input.unconfirmedIdentityError);
   }
 
   return input.identity;
 }
 
-export async function ensurePortfolioManagerServiceIdentity(
-  input: EnsurePortfolioManagerServiceIdentityInput,
-): Promise<{
-  revision: number | null;
-  wroteIdentity: boolean;
-  identity: AgentServiceIdentity;
-}> {
-  const walletAddress = await input.readControllerWalletAddress();
+async function ensureAgentServiceIdentity(input: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  readWalletAddress: () => Promise<`0x${string}`>;
+  now?: () => Date;
+  spec: AgentServiceIdentitySpec;
+}): Promise<EnsureServiceIdentityResult> {
+  const walletAddress = await input.readWalletAddress();
   const current = await readCurrentIdentity({
     protocolHost: input.protocolHost,
+    spec: input.spec,
   });
 
   if (current.identity?.wallet_address === walletAddress) {
@@ -179,12 +245,12 @@ export async function ensurePortfolioManagerServiceIdentity(
 
   const registrationVersion = (current.identity?.registration_version ?? 0) + 1;
   const identity: AgentServiceIdentity = {
-    identity_ref: `agent-service-identity-${PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID}-${PORTFOLIO_MANAGER_SERVICE_ROLE}-${registrationVersion}`,
-    agent_id: PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID,
-    role: PORTFOLIO_MANAGER_SERVICE_ROLE,
+    identity_ref: `agent-service-identity-${input.spec.agentId}-${input.spec.role}-${registrationVersion}`,
+    agent_id: input.spec.agentId,
+    role: input.spec.role,
     wallet_address: walletAddress,
-    wallet_source: PORTFOLIO_MANAGER_WALLET_SOURCE,
-    capability_metadata: PORTFOLIO_MANAGER_CAPABILITY_METADATA,
+    wallet_source: input.spec.walletSource,
+    capability_metadata: input.spec.capabilityMetadata,
     registration_version: registrationVersion,
     registered_at: (input.now ?? (() => new Date()))().toISOString(),
   };
@@ -192,10 +258,12 @@ export async function ensurePortfolioManagerServiceIdentity(
     protocolHost: input.protocolHost,
     expectedRevision: current.revision,
     identity,
+    spec: input.spec,
   });
   const confirmedIdentity = requireConfirmedIdentity({
     expectedIdentity: identity,
     identity: written.identity,
+    unconfirmedIdentityError: input.spec.unconfirmedIdentityError,
   });
 
   return {
@@ -203,4 +271,60 @@ export async function ensurePortfolioManagerServiceIdentity(
     wroteIdentity: true,
     identity: confirmedIdentity,
   };
+}
+
+export async function ensurePortfolioManagerServiceIdentity(
+  input: EnsurePortfolioManagerServiceIdentityInput,
+): Promise<EnsureServiceIdentityResult> {
+  return ensureAgentServiceIdentity({
+    protocolHost: input.protocolHost,
+    readWalletAddress: input.readControllerWalletAddress,
+    now: input.now,
+    spec: PORTFOLIO_MANAGER_IDENTITY_SPEC,
+  });
+}
+
+export async function ensureHiddenOcaExecutorServiceIdentity(
+  input: EnsureHiddenOcaExecutorServiceIdentityInput,
+): Promise<EnsureServiceIdentityResult> {
+  return ensureAgentServiceIdentity({
+    protocolHost: input.protocolHost,
+    readWalletAddress: input.readExecutorWalletAddress,
+    now: input.now,
+    spec: HIDDEN_OCA_EXECUTOR_IDENTITY_SPEC,
+  });
+}
+
+export async function ensurePortfolioManagerServiceIdentities(
+  input: EnsurePortfolioManagerServiceIdentitiesInput,
+): Promise<{
+  orchestrator: EnsureServiceIdentityResult;
+  hiddenOcaExecutor: EnsureServiceIdentityResult | DeferredHiddenWorkerIdentity | null;
+}> {
+  const orchestrator = await ensurePortfolioManagerServiceIdentity(input);
+  if (!input.readExecutorWalletAddress) {
+    return {
+      orchestrator,
+      hiddenOcaExecutor: null,
+    };
+  }
+
+  try {
+    return {
+      orchestrator,
+      hiddenOcaExecutor: await ensureHiddenOcaExecutorServiceIdentity({
+        protocolHost: input.protocolHost,
+        readExecutorWalletAddress: input.readExecutorWalletAddress,
+        now: input.now,
+      }),
+    };
+  } catch (error) {
+    return {
+      orchestrator,
+      hiddenOcaExecutor: {
+        status: 'deferred',
+        reason: error instanceof Error ? error.message : 'Unknown hidden worker identity error.',
+      },
+    };
+  }
 }

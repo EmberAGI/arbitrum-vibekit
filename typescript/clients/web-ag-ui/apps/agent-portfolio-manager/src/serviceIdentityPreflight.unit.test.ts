@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { ensurePortfolioManagerServiceIdentity } from './serviceIdentityPreflight.js';
+import {
+  ensureHiddenOcaExecutorServiceIdentity,
+  ensurePortfolioManagerServiceIdentities,
+  ensurePortfolioManagerServiceIdentity,
+} from './serviceIdentityPreflight.js';
 
 describe('ensurePortfolioManagerServiceIdentity', () => {
   it('reuses the durable orchestrator identity when the OWS controller wallet already matches', async () => {
@@ -418,5 +422,217 @@ describe('ensurePortfolioManagerServiceIdentity', () => {
     ).rejects.toThrow(
       'Portfolio-manager startup identity preflight failed because Shared Ember did not confirm the expected orchestrator identity.',
     );
+  });
+});
+
+describe('ensureHiddenOcaExecutorServiceIdentity', () => {
+  it('registers the hidden Onchain Actions executor identity with internal worker metadata', async () => {
+    const handleJsonRpc = vi.fn(async (request: unknown) => {
+      const jsonRpcRequest =
+        typeof request === 'object' && request !== null
+          ? (request as { method?: string; params?: Record<string, unknown> })
+          : {};
+
+      if (jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1') {
+        expect(jsonRpcRequest.params).toMatchObject({
+          agent_id: 'agent-oca-executor',
+          role: 'subagent',
+        });
+
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-read',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            agent_service_identity: null,
+          },
+        };
+      }
+
+      if (jsonRpcRequest.method === 'orchestrator.writeAgentServiceIdentity.v1') {
+        expect(jsonRpcRequest.params?.['expected_revision']).toBe(9);
+        expect(jsonRpcRequest.params?.['agent_service_identity']).toMatchObject({
+          identity_ref: 'agent-service-identity-agent-oca-executor-subagent-1',
+          agent_id: 'agent-oca-executor',
+          role: 'subagent',
+          wallet_address: '0x00000000000000000000000000000000000000e1',
+          wallet_source: 'ember_local_write',
+          capability_metadata: {
+            visibility: 'internal',
+            owner_agent_id: 'agent-portfolio-manager',
+            worker_kind: 'execution',
+            execution_surface: 'onchain_actions',
+            control_paths: ['spot.swap'],
+          },
+          registration_version: 1,
+          registered_at: '2026-04-10T12:00:00.000Z',
+        });
+
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-write',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            committed_event_ids: ['evt-agent-service-identity-hidden-1'],
+            agent_service_identity: jsonRpcRequest.params?.['agent_service_identity'],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest.method)}`);
+    });
+
+    await expect(
+      ensureHiddenOcaExecutorServiceIdentity({
+        protocolHost: {
+          handleJsonRpc,
+          readCommittedEventOutbox: vi.fn(),
+          acknowledgeCommittedEventOutbox: vi.fn(),
+        },
+        readExecutorWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000e1' as const,
+        ),
+        now: () => new Date('2026-04-10T12:00:00.000Z'),
+      }),
+    ).resolves.toMatchObject({
+      revision: 10,
+      wroteIdentity: true,
+      identity: {
+        agent_id: 'agent-oca-executor',
+        role: 'subagent',
+        wallet_address: '0x00000000000000000000000000000000000000e1',
+      },
+    });
+  });
+
+  it('fails when Shared Ember does not confirm the written hidden executor identity', async () => {
+    const handleJsonRpc = vi.fn(async (request: unknown) => {
+      const jsonRpcRequest =
+        typeof request === 'object' && request !== null
+          ? (request as { method?: string; params?: Record<string, unknown> })
+          : {};
+
+      if (jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-read',
+          result: {
+            protocol_version: 'v1',
+            revision: 9,
+            agent_service_identity: null,
+          },
+        };
+      }
+
+      if (jsonRpcRequest.method === 'orchestrator.writeAgentServiceIdentity.v1') {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-write',
+          result: {
+            protocol_version: 'v1',
+            revision: 10,
+            agent_service_identity: {
+              ...(jsonRpcRequest.params?.['agent_service_identity'] as Record<string, unknown>),
+              agent_id: 'portfolio-manager',
+            },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest.method)}`);
+    });
+
+    await expect(
+      ensureHiddenOcaExecutorServiceIdentity({
+        protocolHost: {
+          handleJsonRpc,
+          readCommittedEventOutbox: vi.fn(),
+          acknowledgeCommittedEventOutbox: vi.fn(),
+        },
+        readExecutorWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000e1' as const,
+        ),
+        now: () => new Date('2026-04-10T12:00:00.000Z'),
+      }),
+    ).rejects.toThrow(
+      'Portfolio-manager startup identity preflight failed because Shared Ember did not confirm the expected hidden Onchain Actions executor identity.',
+    );
+  });
+});
+
+describe('ensurePortfolioManagerServiceIdentities', () => {
+  it('keeps portfolio-manager activation non-blocking when hidden executor readiness fails', async () => {
+    const handleJsonRpc = vi.fn(async (request: unknown) => {
+      const jsonRpcRequest =
+        typeof request === 'object' && request !== null
+          ? (request as { method?: string; params?: Record<string, unknown> })
+          : {};
+
+      if (
+        jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1' &&
+        jsonRpcRequest.params?.['agent_id'] === 'portfolio-manager'
+      ) {
+        return {
+          jsonrpc: '2.0',
+          id: 'rpc-agent-service-identity-read',
+          result: {
+            protocol_version: 'v1',
+            revision: 2,
+            agent_service_identity: {
+              identity_ref: 'agent-service-identity-portfolio-manager-orchestrator-1',
+              agent_id: 'portfolio-manager',
+              role: 'orchestrator',
+              wallet_address: '0x00000000000000000000000000000000000000c1',
+              wallet_source: 'ember_local_write',
+              capability_metadata: {
+                onboarding: true,
+                root_registration: true,
+              },
+              registration_version: 1,
+              registered_at: '2026-04-02T09:30:00.000Z',
+            },
+          },
+        };
+      }
+
+      if (
+        jsonRpcRequest.method === 'orchestrator.readAgentServiceIdentity.v1' &&
+        jsonRpcRequest.params?.['agent_id'] === 'agent-oca-executor'
+      ) {
+        throw new Error('Shared Ember is temporarily unavailable for hidden worker identity');
+      }
+
+      throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest.method)}`);
+    });
+
+    await expect(
+      ensurePortfolioManagerServiceIdentities({
+        protocolHost: {
+          handleJsonRpc,
+          readCommittedEventOutbox: vi.fn(),
+          acknowledgeCommittedEventOutbox: vi.fn(),
+        },
+        readControllerWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000c1' as const,
+        ),
+        readExecutorWalletAddress: vi.fn(
+          async () => '0x00000000000000000000000000000000000000e1' as const,
+        ),
+      }),
+    ).resolves.toMatchObject({
+      orchestrator: {
+        wroteIdentity: false,
+        identity: {
+          agent_id: 'portfolio-manager',
+          role: 'orchestrator',
+        },
+      },
+      hiddenOcaExecutor: {
+        status: 'deferred',
+        reason: 'Shared Ember is temporarily unavailable for hidden worker identity',
+      },
+    });
   });
 });
