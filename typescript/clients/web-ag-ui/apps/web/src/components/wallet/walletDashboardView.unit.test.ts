@@ -429,7 +429,7 @@ describe('wallet dashboard view', () => {
       },
     });
 
-    const wethFamily = view.contents.families.find((family) => family.label === 'WETH');
+    const wethFamily = view.contents.families.find((family) => family.label === 'ETH');
     const usdcFamily = view.contents.families.find((family) => family.label === 'USDC');
 
     expect(wethFamily?.observedAssets[0]).toMatchObject({

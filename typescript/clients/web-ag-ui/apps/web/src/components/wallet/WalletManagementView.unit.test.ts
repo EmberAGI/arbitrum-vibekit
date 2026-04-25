@@ -32,7 +32,10 @@ describe('WalletManagementView', () => {
             ],
             pendle: [
               {
-                marketIdentifier: { chainId: '42161', address: '0x3333333333333333333333333333333333333333' },
+                marketIdentifier: {
+                  chainId: '42161',
+                  address: '0x3333333333333333333333333333333333333333',
+                },
                 pt: { exactAmount: '1' },
                 yt: { exactAmount: '2' },
               },

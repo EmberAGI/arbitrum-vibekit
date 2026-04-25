@@ -93,6 +93,44 @@ restart.
     wallet and verifies ordinary portfolio reads ingest the resulting
     ingress/egress changes without repeated phantom deltas on follow-up reads.
 
+- `pnpm stack:wallet-qa`
+  - Boots the local wallet QA stack for issue-driven debugging:
+    `onchain-actions`, repo-local Shared Ember, `agent-portfolio-manager`,
+    `agent-ember-lending`, and `apps/web`.
+  - If `WALLET_QA_ONCHAIN_ACTIONS_API_URL` is set, the launcher treats
+    `onchain-actions` as an external dependency, checks `/health` on that base
+    URL, and skips starting the local `onchain-actions` worktree entirely.
+  - Builds `apps/web` with the resolved wallet-QA env, then starts it through
+    `next start` instead of `next dev` so the QA stack matches a production-like
+    runtime path.
+  - Resolves the session bundle and `onchain-actions` worktree from the active
+    Forge session layout by default, then rewrites the archived envs at process
+    start so the live stack uses the real extracted OWS vault paths and the
+    actual `onchain-actions` origin.
+  - Prefers an exported `OPENROUTER_API_KEY` over the archived bundle value for
+    both managed agents, so live caller-provided credentials can be used without
+    editing tracked env files.
+  - Uses `postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime` for the
+    managed agents unless `WALLET_QA_PI_DATABASE_URL` is set.
+  - Uses `postgresql://ember:ember@127.0.0.1:55433/ember` for Shared Ember
+    unless `WALLET_QA_SHARED_EMBER_DATABASE_URL` is set.
+  - If those local Postgres endpoints are unreachable and Docker is available,
+    it tries to start `pi-runtime-postgres` and `shared-ember-postgres`
+    automatically.
+  - If Docker is unavailable but the session is running on a Debian host with
+    `apt` and `dpkg-deb`, it falls back to
+    `scripts/smoke/ensure-session-postgres.sh` and boots real Postgres 17
+    clusters under the session runtime.
+  - If the archived OWS vault contains duplicate wallet names, the launcher
+    disambiguates them to exact wallet IDs before boot so the managed agents do
+    not fail on ambiguous `*_OWS_WALLET_NAME` resolution.
+  - `pnpm stack:wallet-qa -- --check` validates the resolved session paths,
+    planned ports, and database readiness without starting the long-lived app
+    processes.
+  - `scripts/smoke/boot-wallet-qa-stack.sh` prefers the session-local
+    `runtime/bin/node` wrapper when present, so Vibekit child processes inherit
+    the recovered Node 22 binary from the active session runtime.
+
 ## Typical Local Flow
 
 ```bash

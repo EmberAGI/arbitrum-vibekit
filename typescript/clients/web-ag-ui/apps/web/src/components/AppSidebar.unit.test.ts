@@ -47,7 +47,8 @@ vi.mock('next/link', () => {
 
 vi.mock('next/image', () => {
   return {
-    default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => React.createElement('img', props),
+    default: (props: React.ImgHTMLAttributes<HTMLImageElement>) =>
+      React.createElement('img', props),
   };
 });
 
@@ -705,6 +706,179 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('Unmanaged');
     expect(html).not.toContain('$12k gross');
     expect(html).not.toContain('$4k gross');
+  });
+
+  it('does not inflate lending cards from duplicated Aave owned-unit fragments', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC', 'ETH', 'WBTC'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC', 'ETH', 'WBTC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 14.21,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 58.03,
+          },
+        },
+      },
+    });
+    getAuthoritativeSnapshotMock.mockReturnValue({
+      thread: {
+        domainProjection: {
+          portfolioProjectionInput: {
+            benchmarkAsset: 'USD',
+            walletContents: [
+              {
+                asset: 'ETH',
+                network: 'arbitrum',
+                quantity: '1051504785051886',
+                valueUsd: 2.44127473,
+              },
+              {
+                asset: 'WETH',
+                network: 'arbitrum',
+                quantity: '1943700537301869',
+                valueUsd: 4.51268228,
+              },
+              {
+                asset: 'WBTC',
+                network: 'arbitrum',
+                quantity: '3',
+                valueUsd: 0.00232299,
+              },
+            ],
+            ownedUnits: [
+              {
+                unitId: 'unit-usdc-collateral-primary',
+                rootAsset: 'USDC',
+                network: 'arbitrum',
+                quantity: '7254853',
+                benchmarkAsset: 'USD',
+                benchmarkValue: 7.2537305,
+                reservationId: 'res-active-borrow',
+                positionScopeId: 'scope-aave',
+              },
+              ...Array.from({ length: 7 }, (_, index) => ({
+                unitId: `unit-usdc-collateral-fragment-${index + 1}`,
+                rootAsset: 'USDC',
+                network: 'arbitrum',
+                quantity: '1',
+                benchmarkAsset: 'USD',
+                benchmarkValue: 7.2537305,
+                reservationId: 'res-active-borrow',
+                positionScopeId: 'scope-aave',
+              })),
+            ],
+            reservations: [
+              {
+                reservationId: 'res-active-borrow',
+                agentId: 'ember-lending',
+                purpose: 'refresh borrow coverage',
+                controlPath: 'lending.borrow',
+                createdAt: '2026-04-23T21:29:21.768Z',
+                status: 'active',
+                unitAllocations: [
+                  {
+                    unitId: 'unit-usdc-collateral-primary',
+                    quantity: '7254853',
+                  },
+                  ...Array.from({ length: 7 }, (_, index) => ({
+                    unitId: `unit-usdc-collateral-fragment-${index + 1}`,
+                    quantity: '1',
+                  })),
+                ],
+              },
+            ],
+            activePositionScopes: [
+              {
+                scopeId: 'scope-aave',
+                kind: 'lending',
+                network: 'arbitrum',
+                protocolSystem: 'aave',
+                containerRef: 'aave:arbitrum:0x540c144afc3b3a97eeded55376ab257ee706f0ca',
+                status: 'active',
+                marketState: {
+                  availableBorrowsUsd: '5.44029712',
+                  borrowableHeadroomUsd: '5.44029712',
+                  currentLtvBps: 0,
+                  liquidationThresholdBps: 7800,
+                  healthFactor: '-1',
+                },
+                members: [
+                  {
+                    memberId: 'scope-aave:collateral:aArbUSDCn',
+                    role: 'collateral',
+                    asset: 'aArbUSDCn',
+                    quantity: '7254853',
+                    valueUsd: 7.2537305,
+                    economicExposures: [
+                      {
+                        asset: 'USDC',
+                        quantity: '7.254853',
+                      },
+                    ],
+                    state: {
+                      withdrawableQuantity: '0.80609489',
+                      supplyApr: null,
+                      borrowApr: null,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('$14 gross');
+    expect(html).toContain('$7.3 gross');
+    expect(html).toContain('51% of portfolio');
+    expect(html).not.toContain('$58 gross');
+    expect(html).not.toContain('408% of portfolio');
   });
 
   it('routes portfolio agent sidebar clicks to the chat tab deep link', () => {

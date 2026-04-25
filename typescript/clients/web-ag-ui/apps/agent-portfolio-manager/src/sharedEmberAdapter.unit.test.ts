@@ -12,26 +12,22 @@ function createRuntimeSigningStub(signPayload: AgentRuntimeSigningService['signP
   };
 }
 
-function decodeDelegationArtifactRef(
-  artifactRef: string,
-): Record<string, unknown> {
+function decodeDelegationArtifactRef(artifactRef: string): Record<string, unknown> {
   const prefix = 'metamask-delegation:';
 
   if (!artifactRef.startsWith(prefix)) {
     throw new Error(`Unsupported delegation artifact ref: ${artifactRef}`);
   }
 
-  return JSON.parse(Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8')) as Record<
-    string,
-    unknown
-  >;
+  return JSON.parse(
+    Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8'),
+  ) as Record<string, unknown>;
 }
 
 function encodeDelegationArtifactRef(delegation: Record<string, unknown>): string {
-  return `metamask-delegation:${Buffer.from(
-    JSON.stringify(delegation),
-    'utf8',
-  ).toString('base64url')}`;
+  return `metamask-delegation:${Buffer.from(JSON.stringify(delegation), 'utf8').toString(
+    'base64url',
+  )}`;
 }
 
 function createSignedRootDelegation(delegate: `0x${string}`) {
@@ -48,8 +44,7 @@ function createSignedRootDelegation(delegate: `0x${string}`) {
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const TEST_DELEGATION_MANAGER = '0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3';
-const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS =
-  '0x00000000000000000000000000000000000000c2' as const;
+const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS = '0x00000000000000000000000000000000000000c2' as const;
 
 function createAgentServiceIdentityResponse(input: {
   agentId: string;
@@ -117,7 +112,9 @@ type PortfolioManagerSetupInputFixture = {
 type ManagedMandateFixture =
   PortfolioManagerSetupInputFixture['firstManagedMandate']['managedMandate'];
 
-function createManagedLendingPolicy(overrides: Partial<ManagedMandateFixture['lending_policy']> = {}) {
+function createManagedLendingPolicy(
+  overrides: Partial<ManagedMandateFixture['lending_policy']> = {},
+) {
   return {
     collateral_policy: {
       assets: [
@@ -308,6 +305,8 @@ function createLiveManagedAgentPortfolioState() {
         network: 'arbitrum',
         protocol_system: 'aave',
         container_ref: 'aave:position-scope-aave-arbitrum-usdc',
+        owner_type: 'agent',
+        owner_id: 'ember-lending',
         status: 'active',
         market_state: {
           available_borrows_usd: '18',
@@ -460,7 +459,8 @@ describe('createPortfolioManagerDomain', () => {
       outputs: {
         status: {
           executionStatus: 'interrupted',
-          statusMessage: 'Review and sign the delegation needed to activate your portfolio manager.',
+          statusMessage:
+            'Review and sign the delegation needed to activate your portfolio manager.',
         },
         interrupt: {
           type: 'portfolio-manager-delegation-signing-request',
@@ -471,7 +471,9 @@ describe('createPortfolioManagerDomain', () => {
             delegatorAddress: '0x00000000000000000000000000000000000000a1',
             delegateeAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
             delegationManager: TEST_DELEGATION_MANAGER,
-            descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
+            descriptions: [
+              'Authorize the portfolio manager to operate through your root delegation.',
+            ],
             delegationsToSign: [
               expect.objectContaining({
                 delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
@@ -531,7 +533,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -865,14 +869,14 @@ describe('createPortfolioManagerDomain', () => {
       (mandate) => mandate.agent_id === 'ember-lending',
     )?.mandate_ref;
     expect(managedMandateRef).toEqual(expect.any(String));
-    expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(managedMandateRef);
+    expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(
+      managedMandateRef,
+    );
     expect(rootedBootstrapRequest.params?.handoff).toMatchObject({
       artifact_ref: expect.stringMatching(/^metamask-delegation:/),
     });
     expect(
-      decodeDelegationArtifactRef(
-        rootedBootstrapRequest.params?.handoff?.artifact_ref as string,
-      ),
+      decodeDelegationArtifactRef(rootedBootstrapRequest.params?.handoff?.artifact_ref as string),
     ).toEqual(signedDelegation);
 
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('capitalObservation');
@@ -886,7 +890,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1090,7 +1096,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
 
         if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
           const params =
@@ -1098,10 +1106,7 @@ describe('createPortfolioManagerDomain', () => {
               ? (jsonRpcRequest['params'] as Record<string, unknown>)
               : null;
 
-          if (
-            params?.['agent_id'] === 'portfolio-manager' &&
-            params['role'] === 'orchestrator'
-          ) {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
             return {
               jsonrpc: '2.0',
               id: 'rpc-agent-service-identity-read',
@@ -1231,14 +1236,15 @@ describe('createPortfolioManagerDomain', () => {
     const firstSignedDelegation = createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS);
     const secondSignedDelegation = {
       ...createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS),
-      signature:
-        '0x5678' as const,
+      signature: '0x5678' as const,
     };
     const rootedBootstrapKeys: string[] = [];
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1262,7 +1268,9 @@ describe('createPortfolioManagerDomain', () => {
           }
         }
 
-        if (jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1') {
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1'
+        ) {
           const idempotencyKey = params?.['idempotency_key'];
           if (typeof idempotencyKey !== 'string') {
             throw new Error('expected rooted-bootstrap idempotency key');
@@ -1419,7 +1427,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1443,7 +1453,9 @@ describe('createPortfolioManagerDomain', () => {
           }
         }
 
-        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+        throw new Error(
+          `Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`,
+        );
       }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
@@ -1538,7 +1550,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1559,7 +1573,9 @@ describe('createPortfolioManagerDomain', () => {
           };
         }
 
-        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+        throw new Error(
+          `Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`,
+        );
       }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
@@ -1657,7 +1673,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1675,7 +1693,9 @@ describe('createPortfolioManagerDomain', () => {
           });
         }
 
-        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+        throw new Error(
+          `Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`,
+        );
       }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
@@ -1773,7 +1793,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1958,7 +1980,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -2112,7 +2136,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -2722,13 +2748,17 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
             : null;
 
-        if (jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1') {
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1'
+        ) {
           const idempotencyKey = params?.['idempotency_key'];
           if (typeof idempotencyKey !== 'string') {
             throw new Error('expected rooted-bootstrap idempotency key');
@@ -3068,9 +3098,13 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as { params?: unknown }) : null;
+          typeof request === 'object' && request !== null
+            ? (request as { params?: unknown })
+            : null;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -3244,6 +3278,8 @@ describe('createPortfolioManagerDomain', () => {
               network: 'arbitrum',
               protocolSystem: 'aave',
               containerRef: 'aave:position-scope-aave-arbitrum-usdc',
+              ownerType: 'agent',
+              ownerId: 'ember-lending',
               status: 'active',
               marketState: {
                 availableBorrowsUsd: '18',
@@ -3286,9 +3322,13 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as { params?: unknown }) : null;
+          typeof request === 'object' && request !== null
+            ? (request as { params?: unknown })
+            : null;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -3407,7 +3447,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -3766,8 +3808,7 @@ describe('createPortfolioManagerDomain', () => {
       },
     });
 
-    const signedRedelegation =
-      registerSignedRedelegationRequest.params.signed_redelegation;
+    const signedRedelegation = registerSignedRedelegationRequest.params.signed_redelegation;
     const decodedArtifact = decodeDelegationArtifactRef(
       signedRedelegation['artifact_ref'] as string,
     );
@@ -4070,7 +4111,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -4193,7 +4236,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -4376,7 +4421,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -4384,7 +4431,10 @@ describe('createPortfolioManagerDomain', () => {
           throw new Error('managed-agent portfolio state unavailable');
         }
 
-        if (method === 'orchestrator.readOnboardingState.v1' && params?.agent_id === 'ember-lending') {
+        if (
+          method === 'orchestrator.readOnboardingState.v1' &&
+          params?.agent_id === 'ember-lending'
+        ) {
           return {
             jsonrpc: '2.0',
             id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
@@ -4459,7 +4509,10 @@ describe('createPortfolioManagerDomain', () => {
           };
         }
 
-        if (method === 'orchestrator.readOnboardingState.v1' && params?.agent_id === 'ember-rebalance') {
+        if (
+          method === 'orchestrator.readOnboardingState.v1' &&
+          params?.agent_id === 'ember-rebalance'
+        ) {
           return {
             jsonrpc: '2.0',
             id: 'shared-ember-wallet-accounting-ember-rebalance-0x00000000000000000000000000000000000000a1',

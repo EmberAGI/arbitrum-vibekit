@@ -61,6 +61,8 @@ export type ActivePositionScopeMemberInput = {
 export type ActivePositionScopeInput = {
   scopeId: string;
   kind: string;
+  ownerType?: 'user_idle' | 'agent';
+  ownerId?: string;
   network: string;
   protocolSystem: string;
   containerRef: string;

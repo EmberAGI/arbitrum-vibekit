@@ -103,7 +103,9 @@ function AccountingWidget(props: {
         <div
           className="grid h-28 min-w-0 text-right"
           style={{
-            gridTemplateRows: props.view.accounting.segments.map((segment) => segment.meter).join(' '),
+            gridTemplateRows: props.view.accounting.segments
+              .map((segment) => segment.meter)
+              .join(' '),
           }}
         >
           {props.view.accounting.segments.map((segment) => (
@@ -166,6 +168,10 @@ function formatScaledNumber(value: number): string {
     .toFixed(1)
     .replace(/\.0$/, '')
     .replace(/(\.\d*[1-9])0+$/, '$1');
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 export type { WalletManagementViewProps, WalletPortfolioView };

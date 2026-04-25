@@ -60,6 +60,8 @@ export const activePositionScopeMemberInputSchema = z.object({
 export const activePositionScopeInputSchema = z.object({
   scopeId: z.string().min(1),
   kind: z.string().min(1),
+  ownerType: z.enum(['user_idle', 'agent']).default('user_idle'),
+  ownerId: z.string().min(1).default('user_idle'),
   network: z.string().min(1),
   protocolSystem: z.string().min(1),
   containerRef: z.string().min(1),
