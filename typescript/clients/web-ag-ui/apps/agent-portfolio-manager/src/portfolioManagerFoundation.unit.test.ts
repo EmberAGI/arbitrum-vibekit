@@ -47,6 +47,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     });
     expect(config.systemPrompt).toContain('portfolio manager orchestrator');
     expect(config.systemPrompt).toContain('Never suggest releasing or adjusting a reservation');
+    expect(config.systemPrompt).toContain('Do not call dispatch_spot_swap again');
     expect(config.databaseUrl).toBe('postgresql://portfolio:secret@db.internal:5432/pi_runtime');
     expect(config.tools).toEqual([]);
     expect(config.domain?.lifecycle).toMatchObject({
@@ -107,6 +108,12 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(spotSwapCommand?.description).toContain('capitalPool');
     expect(spotSwapCommand?.description).toContain('reserved_or_assigned');
     expect(spotSwapCommand?.description).toContain('Never suggest releasing or adjusting');
+    const swapConflictInterrupt = config.domain?.lifecycle.interrupts.find(
+      (interrupt) => interrupt.type === 'portfolio-manager-swap-reservation-conflict-request',
+    );
+    expect(swapConflictInterrupt?.description).toContain('yes');
+    expect(swapConflictInterrupt?.description).toContain('allow_reserved_for_other_agent');
+    expect(swapConflictInterrupt?.description).toContain('Do not repeat dispatch_spot_swap');
     expect(config.agentOptions?.getApiKey?.(undefined as never)).toBe('test-openrouter-key');
     expect(
       await config.domain?.systemContext?.({

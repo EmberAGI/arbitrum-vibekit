@@ -833,6 +833,13 @@ const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
   'portfolio-manager-swap-reservation-conflict-request';
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE =
   'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.';
+const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_DESCRIPTION = [
+  'Ask whether a spot swap may touch capital reserved for another agent or should retry with unassigned capital only.',
+  'When this interrupt is pending and the user says yes, confirm, proceed, or equivalent, answer this interrupt with inputJson {"outcome":"allow_reserved_for_other_agent"}.',
+  'When the user asks for unassigned/free capital only, answer this interrupt with inputJson {"outcome":"unassigned_only"}.',
+  'When the user cancels, answer this interrupt with inputJson {"outcome":"cancel"}.',
+  'Do not repeat dispatch_spot_swap for a pending reserved-capital confirmation.',
+].join(' ');
 const PORTFOLIO_MANAGER_ROOT_AUTHORITY = ROOT_AUTHORITY;
 const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
@@ -2836,8 +2843,7 @@ export function createPortfolioManagerDomain(
         },
         {
           type: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE,
-          description:
-            'Ask whether a spot swap may touch capital reserved for another agent or should retry with unassigned capital only.',
+          description: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_DESCRIPTION,
           mirroredToActivity: false,
         },
       ],
@@ -2903,6 +2909,36 @@ export function createPortfolioManagerDomain(
         context.push(
           `  <pending_onboarding_wallet_address source="onboarding_setup">${currentState.pendingOnboardingWalletAddress}</pending_onboarding_wallet_address>`,
         );
+      }
+
+      if (currentState.pendingSpotSwapConflict) {
+        context.push('  <pending_spot_swap_conflict>');
+        context.push(
+          `    <confirmation_operation>${PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE}</confirmation_operation>`,
+        );
+        context.push(
+          '    <affirmative_user_reply_outcome>allow_reserved_for_other_agent</affirmative_user_reply_outcome>',
+        );
+        context.push(
+          '    <unassigned_only_user_reply_outcome>unassigned_only</unassigned_only_user_reply_outcome>',
+        );
+        context.push('    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>');
+        context.push(
+          '    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Answer this pending interrupt with outcome allow_reserved_for_other_agent.</instruction>',
+        );
+        appendStructuredXmlNode({
+          lines: context,
+          indent: '    ',
+          tag: 'dispatch',
+          value: currentState.pendingSpotSwapConflict.dispatch,
+        });
+        appendStructuredXmlNode({
+          lines: context,
+          indent: '    ',
+          tag: 'conflict',
+          value: currentState.pendingSpotSwapConflict.conflict,
+        });
+        context.push('  </pending_spot_swap_conflict>');
       }
 
       const approvedSetup = readApprovedSetupFromOnboardingBootstrap(

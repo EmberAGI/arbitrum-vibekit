@@ -4974,6 +4974,66 @@ describe('createPortfolioManagerDomain', () => {
     );
   });
 
+  it('surfaces pending reserved-capital swap confirmation instructions in system context', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    const context = await domain.systemContext?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'active',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 9,
+        lastRootDelegation: {
+          root_delegation_id: 'root-a1',
+        },
+        lastOnboardingBootstrap: createOnboardingBootstrap(),
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: null,
+        pendingSpotSwapConflict: {
+          dispatch: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '680295188055654',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'WBTC',
+            capitalPool: 'reserved_or_assigned',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+          },
+          conflict: {
+            kind: 'reserved_for_other_agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            reservationId: 'res-ember-lending-weth-001',
+            message: 'WETH is reserved for another agent.',
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+    });
+
+    expect(context).toEqual(
+      expect.arrayContaining([
+        '  <pending_spot_swap_conflict>',
+        '    <confirmation_operation>portfolio-manager-swap-reservation-conflict-request</confirmation_operation>',
+        '    <affirmative_user_reply_outcome>allow_reserved_for_other_agent</affirmative_user_reply_outcome>',
+        '    <unassigned_only_user_reply_outcome>unassigned_only</unassigned_only_user_reply_outcome>',
+        '    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>',
+        '    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Answer this pending interrupt with outcome allow_reserved_for_other_agent.</instruction>',
+        '    <dispatch>',
+        '      <fromToken>WETH</fromToken>',
+        '      <toToken>WBTC</toToken>',
+        '      <capitalPool>reserved_or_assigned</capitalPool>',
+        '    <conflict>',
+        '      <reservationId>res-ember-lending-weth-001</reservationId>',
+        '  </pending_spot_swap_conflict>',
+      ]),
+    );
+  });
+
   it('appends aggregated live Shared Ember accounting context to the system prompt context when a wallet is active', async () => {
     const onboardingBootstrap = {
       ...createOnboardingBootstrap(),
