@@ -5,7 +5,7 @@ import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedDelegation } from 'agent-runtime/internal';
-import { formatUnits, keccak256, toHex } from 'viem';
+import { keccak256, toHex } from 'viem';
 import type {
   HiddenOcaReservationConflictHandling,
   HiddenOcaSpotSwapInput,
@@ -18,6 +18,7 @@ import {
   readManagedAgentAccountingState,
   type OnboardingState as SharedEmberOnboardingState,
 } from './sharedEmberOnboardingState.js';
+import { buildTokenDisplayQuantity } from './tokenQuantityDisplay.js';
 
 export type PortfolioManagerSharedEmberProtocolHost = {
   handleJsonRpc: (input: unknown) => Promise<unknown>;
@@ -1215,46 +1216,6 @@ function readNumberLike(value: unknown): number | null {
 
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-const TOKEN_DECIMALS_BY_ASSET = new Map<string, number>([
-  ['ETH', 18],
-  ['WETH', 18],
-  ['USDC', 6],
-  ['USDCN', 6],
-  ['USDT', 6],
-  ['WBTC', 8],
-]);
-
-function normalizeAssetForDisplayDecimals(asset: string): string {
-  const upperAsset = asset.toUpperCase();
-  if (upperAsset.startsWith('AARB')) {
-    return upperAsset.slice('AARB'.length);
-  }
-  if (upperAsset.startsWith('VARIABLEDEBT')) {
-    return upperAsset.slice('VARIABLEDEBT'.length);
-  }
-  if (upperAsset.startsWith('STABLEDEBT')) {
-    return upperAsset.slice('STABLEDEBT'.length);
-  }
-  return upperAsset;
-}
-
-function buildTokenDisplayQuantity(input: {
-  asset: string;
-  quantity: string;
-  explicitDisplayQuantity?: string | null;
-}): string | undefined {
-  if (input.explicitDisplayQuantity) {
-    return input.explicitDisplayQuantity;
-  }
-
-  if (!/^\d+$/.test(input.quantity)) {
-    return input.quantity;
-  }
-
-  const decimals = TOKEN_DECIMALS_BY_ASSET.get(normalizeAssetForDisplayDecimals(input.asset));
-  return decimals === undefined ? undefined : formatUnits(BigInt(input.quantity), decimals);
 }
 
 function readEconomicExposureInputs(value: unknown): PortfolioProjectionEconomicExposureInput[] {
