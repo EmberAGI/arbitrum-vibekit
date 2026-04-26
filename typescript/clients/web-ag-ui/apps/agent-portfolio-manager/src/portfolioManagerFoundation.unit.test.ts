@@ -47,7 +47,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     });
     expect(config.systemPrompt).toContain('portfolio manager orchestrator');
     expect(config.systemPrompt).toContain('Never suggest releasing or adjusting a reservation');
-    expect(config.systemPrompt).toContain('Do not call dispatch_spot_swap again');
+    expect(config.systemPrompt).toContain('confirm_spot_swap_reserved_capital');
     expect(config.databaseUrl).toBe('postgresql://portfolio:secret@db.internal:5432/pi_runtime');
     expect(config.tools).toEqual([]);
     expect(config.domain?.lifecycle).toMatchObject({
@@ -75,6 +75,9 @@ describe('createPortfolioManagerAgentConfig', () => {
         },
         {
           name: 'dispatch_spot_swap',
+        },
+        {
+          name: 'confirm_spot_swap_reserved_capital',
         },
         {
           name: 'complete_rooted_bootstrap_from_user_signing',
@@ -108,6 +111,13 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(spotSwapCommand?.description).toContain('capitalPool');
     expect(spotSwapCommand?.description).toContain('reserved_or_assigned');
     expect(spotSwapCommand?.description).toContain('Never suggest releasing or adjusting');
+    const spotSwapConfirmationCommand = config.domain?.lifecycle.commands.find(
+      (command) => command.name === 'confirm_spot_swap_reserved_capital',
+    );
+    expect(spotSwapConfirmationCommand?.description).toContain('allow_reserved_for_other_agent');
+    expect(spotSwapConfirmationCommand?.description).toContain('unassigned_only');
+    expect(spotSwapConfirmationCommand?.description).toContain('cancel');
+    expect(spotSwapConfirmationCommand?.description).toContain('yes');
     const swapConflictInterrupt = config.domain?.lifecycle.interrupts.find(
       (interrupt) => interrupt.type === 'portfolio-manager-swap-reservation-conflict-request',
     );

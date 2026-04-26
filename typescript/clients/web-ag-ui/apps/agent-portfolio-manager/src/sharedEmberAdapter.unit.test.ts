@@ -4164,6 +4164,102 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('re-dispatches reserved-capital confirmations through the tool-callable confirmation command', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'WBTC',
+          amount: '680295188055654',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.000680295188055654',
+          displayToAmount: '0.000005',
+        },
+        transactionPlanId: 'txplan-hidden-swap-reserved-002',
+        requestId: 'req-hidden-swap-reserved-002',
+        transactionHash: '0xconfirmedreservedcommand',
+        committedEventIds: ['evt-hidden-swap-reserved-command-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 9,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingSpotSwapConflict: {
+            dispatch: {
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+              amount: '680295188055654',
+              amountType: 'exactIn',
+              fromChain: 'arbitrum',
+              toChain: 'arbitrum',
+              fromToken: 'WETH',
+              toToken: 'WBTC',
+              capitalPool: 'reserved_or_assigned',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: 'res-ember-lending-weth-001',
+              message: 'WETH is reserved for another agent.',
+              retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+            },
+          },
+        },
+        operation: {
+          source: 'tool',
+          name: 'confirm_spot_swap_reserved_capital',
+          input: {
+            outcome: 'allow_reserved_for_other_agent',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap completed through the portfolio manager.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 9,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '680295188055654',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'WETH',
+        toToken: 'WBTC',
+        capitalPool: 'reserved_or_assigned',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+        reservationConflictHandling: {
+          kind: 'allow_reserved_for_other_agent',
+        },
+      },
+    });
+  });
+
   it('signs, registers, and acknowledges redelegation work from the committed outbox', async () => {
     const rootSignedDelegation = createSignedRootDelegation(
       '0x00000000000000000000000000000000000000c1',
@@ -5019,10 +5115,11 @@ describe('createPortfolioManagerDomain', () => {
       expect.arrayContaining([
         '  <pending_spot_swap_conflict>',
         '    <confirmation_operation>portfolio-manager-swap-reservation-conflict-request</confirmation_operation>',
+        '    <tool_command>confirm_spot_swap_reserved_capital</tool_command>',
         '    <affirmative_user_reply_outcome>allow_reserved_for_other_agent</affirmative_user_reply_outcome>',
         '    <unassigned_only_user_reply_outcome>unassigned_only</unassigned_only_user_reply_outcome>',
         '    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>',
-        '    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Answer this pending interrupt with outcome allow_reserved_for_other_agent.</instruction>',
+        '    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Use confirm_spot_swap_reserved_capital with outcome allow_reserved_for_other_agent.</instruction>',
         '    <dispatch>',
         '      <fromToken>WETH</fromToken>',
         '      <toToken>WBTC</toToken>',

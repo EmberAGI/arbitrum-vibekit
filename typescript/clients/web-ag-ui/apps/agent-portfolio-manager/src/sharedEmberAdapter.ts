@@ -818,6 +818,7 @@ const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-s
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
 const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND = 'dispatch_spot_swap';
+const PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND = 'confirm_spot_swap_reserved_capital';
 const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
   'Dispatch a structured spot swap through the portfolio-manager owned hidden Onchain Actions executor.',
   'When using this command, put a JSON object string in inputJson with required fields walletAddress, amount, amountType, fromChain, toChain, fromToken, and toToken.',
@@ -829,15 +830,26 @@ const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
   'Do not set reservationConflictHandling in inputJson; it is supplied only by the portfolio-manager conflict confirmation retry.',
   'Example inputJson: {"walletAddress":"0x...","amount":"894102247158860","amountType":"exactIn","fromChain":"arbitrum","toChain":"arbitrum","fromToken":"WETH","toToken":"USDC","capitalPool":"reserved_or_assigned"}.',
 ].join(' ');
+const PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND_DESCRIPTION = [
+  'Resolve the exact pending reserved-capital spot swap confirmation through the tool-callable command path.',
+  'Use this command when pending_spot_swap_conflict is present and the user replies yes, confirm, proceed, use reserved funds, use unassigned only, or cancel.',
+  'Required inputJson field: outcome.',
+  'For yes, confirm, proceed, or use reserved funds, set outcome to "allow_reserved_for_other_agent".',
+  'For unassigned/free capital only, set outcome to "unassigned_only".',
+  'For cancel/stop, set outcome to "cancel".',
+  'Do not call dispatch_spot_swap again for the same pending reserved-capital confirmation.',
+  'Example inputJson: {"outcome":"allow_reserved_for_other_agent"}.',
+].join(' ');
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
   'portfolio-manager-swap-reservation-conflict-request';
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE =
   'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.';
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_DESCRIPTION = [
   'Ask whether a spot swap may touch capital reserved for another agent or should retry with unassigned capital only.',
-  'When this interrupt is pending and the user says yes, confirm, proceed, or equivalent, answer this interrupt with inputJson {"outcome":"allow_reserved_for_other_agent"}.',
-  'When the user asks for unassigned/free capital only, answer this interrupt with inputJson {"outcome":"unassigned_only"}.',
-  'When the user cancels, answer this interrupt with inputJson {"outcome":"cancel"}.',
+  `In normal chat, use the ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND} command because lifecycle interrupts are not model tool-callable.`,
+  'When a client forwards an interrupt resume directly and the user says yes, confirm, proceed, or equivalent, resume with inputJson {"outcome":"allow_reserved_for_other_agent"}.',
+  'When the user asks for unassigned/free capital only, resume with inputJson {"outcome":"unassigned_only"}.',
+  'When the user cancels, resume with inputJson {"outcome":"cancel"}.',
   'Do not repeat dispatch_spot_swap for a pending reserved-capital confirmation.',
 ].join(' ');
 const PORTFOLIO_MANAGER_ROOT_AUTHORITY = ROOT_AUTHORITY;
@@ -2823,6 +2835,10 @@ export function createPortfolioManagerDomain(
           description: PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION,
         },
         {
+          name: PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND,
+          description: PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND_DESCRIPTION,
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
           description:
             'Complete the rooted bootstrap in one Shared Ember command using onboarding data and the signing handoff.',
@@ -2917,6 +2933,9 @@ export function createPortfolioManagerDomain(
           `    <confirmation_operation>${PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE}</confirmation_operation>`,
         );
         context.push(
+          `    <tool_command>${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND}</tool_command>`,
+        );
+        context.push(
           '    <affirmative_user_reply_outcome>allow_reserved_for_other_agent</affirmative_user_reply_outcome>',
         );
         context.push(
@@ -2924,7 +2943,7 @@ export function createPortfolioManagerDomain(
         );
         context.push('    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>');
         context.push(
-          '    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Answer this pending interrupt with outcome allow_reserved_for_other_agent.</instruction>',
+          `    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Use ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND} with outcome allow_reserved_for_other_agent.</instruction>`,
         );
         appendStructuredXmlNode({
           lines: context,
@@ -3842,6 +3861,7 @@ export function createPortfolioManagerDomain(
             result,
           });
         }
+        case PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND:
         case PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE: {
           const outcome = readSpotSwapConflictOutcome(operation.input);
           const pendingConflict = currentState.pendingSpotSwapConflict ?? null;
