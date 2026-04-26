@@ -482,6 +482,19 @@ function buildInputOnlySwapSummary(
   };
 }
 
+function applyDefaultReservationConflictHandling(
+  request: HiddenOcaSpotSwapInput,
+): HiddenOcaSpotSwapInput {
+  return request.reservationConflictHandling
+    ? request
+    : {
+        ...request,
+        reservationConflictHandling: {
+          kind: 'unassigned_only',
+        },
+      };
+}
+
 function normalizeSpotSwapAmount(input: {
   request: HiddenOcaSpotSwapInput;
   fromToken: OnchainActionsToken;
@@ -744,6 +757,30 @@ function readBlockedConflict(
   };
 }
 
+function appendSentencePunctuation(value: string): string {
+  return /[.!?]$/u.test(value) ? value : `${value}.`;
+}
+
+function readBlockedFailureReason(executionResult: Record<string, unknown>): string {
+  const requestResult = readRecordKey(executionResult, 'request_result');
+  const blockingReasonCode = readString(requestResult?.['blocking_reason_code']);
+  const message = readString(requestResult?.['message']);
+
+  if (blockingReasonCode && message) {
+    return `Shared Ember blocked hidden swap execution (${blockingReasonCode}): ${appendSentencePunctuation(message)}`;
+  }
+
+  if (message) {
+    return `Shared Ember blocked hidden swap execution: ${appendSentencePunctuation(message)}`;
+  }
+
+  if (blockingReasonCode) {
+    return `Shared Ember blocked hidden swap execution (${blockingReasonCode}).`;
+  }
+
+  return 'Shared Ember blocked hidden swap execution.';
+}
+
 function buildBlockedResult(input: {
   request: HiddenOcaSpotSwapInput;
   swapResponse: OnchainActionsSwapResponse;
@@ -764,6 +801,7 @@ function buildBlockedResult(input: {
     requestId: readExecutionRequestId(input.executionResult),
     committedEventIds: input.committedEventIds,
     ...(conflict ? { conflict } : {}),
+    ...(conflict ? {} : { failureReason: readBlockedFailureReason(input.executionResult) }),
   };
 }
 
@@ -1412,10 +1450,10 @@ export function createHiddenOcaSpotSwapExecutor(
         });
       }
 
-      const request: HiddenOcaSpotSwapInput = {
+      const request: HiddenOcaSpotSwapInput = applyDefaultReservationConflictHandling({
         ...input,
         walletAddress,
-      };
+      });
       const idempotencyKey = request.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(request);
       let fromChainId: string;
       let toChainId: string;

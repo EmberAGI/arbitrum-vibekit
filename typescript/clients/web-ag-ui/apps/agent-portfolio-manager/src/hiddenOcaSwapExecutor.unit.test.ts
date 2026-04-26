@@ -345,6 +345,9 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
         idempotency_key: 'idem-hidden-swap-001:request-execution:1',
         expected_revision: 4,
         transaction_plan_id: 'txplan-hidden-swap-001',
+        reservation_conflict_handling: {
+          kind: 'unassigned_only',
+        },
       },
     });
   });
@@ -885,6 +888,85 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
         reservationId: 'res-ember-lending-001',
         retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
       },
+    });
+  });
+
+  it('surfaces non-conflict blocked execution reasons from Shared Ember', async () => {
+    const onchainActionsClient = {
+      listTokens: vi.fn(async () => createTokens()),
+      createSwap: vi.fn(async () => createSwapResponse()),
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const method =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: string }).method
+            : null;
+
+        if (method === 'subagent.createTransaction.v1') {
+          return createCandidatePlanResponse();
+        }
+
+        if (method === 'subagent.requestExecution.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+            result: {
+              protocol_version: 'v1',
+              revision: 5,
+              committed_event_ids: ['evt-hidden-swap-blocked-1'],
+              execution_result: {
+                phase: 'blocked',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                request_result: {
+                  result: 'denied',
+                  request_id: 'req-hidden-swap-001',
+                  message: 'no active reservation admits the requested execution',
+                  active_delegation_id: null,
+                  reservation_id: null,
+                  blocking_reason_code: 'no_active_reservation',
+                  next_action: 'stop',
+                },
+                portfolio_state: {},
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient,
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'blocked',
+      failureReason:
+        'Shared Ember blocked hidden swap execution (no_active_reservation): no active reservation admits the requested execution.',
+      transactionPlanId: 'txplan-hidden-swap-001',
+      requestId: 'req-hidden-swap-001',
     });
   });
 
