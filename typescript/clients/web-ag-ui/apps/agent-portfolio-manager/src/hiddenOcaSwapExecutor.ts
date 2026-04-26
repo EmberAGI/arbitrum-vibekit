@@ -89,6 +89,8 @@ export type HiddenOcaReservationConflictHandling =
       kind: 'unassigned_only';
     };
 
+export type HiddenOcaSpotSwapCapitalPool = 'unassigned_only' | 'reserved_or_assigned' | 'all';
+
 export type HiddenOcaSpotSwapInput = {
   idempotencyKey?: string;
   rootedWalletContextId?: string;
@@ -101,6 +103,7 @@ export type HiddenOcaSpotSwapInput = {
   toToken: string;
   slippageTolerance?: string;
   expiration?: string;
+  capitalPool?: HiddenOcaSpotSwapCapitalPool;
   reservationConflictHandling?: HiddenOcaReservationConflictHandling;
 };
 

@@ -3723,6 +3723,108 @@ describe('createPortfolioManagerDomain', () => {
     expect(hiddenExecutor.executeSpotSwap).not.toHaveBeenCalled();
   });
 
+  it('interrupts before execution when the selected swap pool includes reserved capital', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'submitted' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'USDC',
+          amount: '680295188055654',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.000680295188055654',
+          displayToAmount: '2.1',
+        },
+        transactionPlanId: 'txplan-hidden-swap-should-not-run',
+        requestId: 'req-hidden-swap-should-not-run',
+        committedEventIds: ['evt-hidden-swap-should-not-run'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 9,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '680295188055654',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'USDC',
+            capitalPool: 'reserved_or_assigned',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: {
+          dispatch: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '680295188055654',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'USDC',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+            capitalPool: 'reserved_or_assigned',
+          },
+          conflict: {
+            kind: 'reserved_for_other_agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            reservationId: null,
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage:
+            'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-swap-reservation-conflict-request',
+          mirroredToActivity: false,
+          payload: {
+            swap: {
+              fromToken: 'WETH',
+              toToken: 'USDC',
+              amount: '680295188055654',
+              amountType: 'exactIn',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: null,
+            },
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).not.toHaveBeenCalled();
+  });
+
   it('interrupts for PM-routed reserved-capital confirmation and stores the exact swap retry', async () => {
     const hiddenExecutor = {
       executeSpotSwap: vi.fn(async () => ({

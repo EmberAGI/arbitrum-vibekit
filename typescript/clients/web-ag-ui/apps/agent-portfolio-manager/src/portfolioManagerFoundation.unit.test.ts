@@ -46,6 +46,7 @@ describe('createPortfolioManagerAgentConfig', () => {
       maxTokens: 4_096,
     });
     expect(config.systemPrompt).toContain('portfolio manager orchestrator');
+    expect(config.systemPrompt).toContain('Never suggest releasing or adjusting a reservation');
     expect(config.databaseUrl).toBe('postgresql://portfolio:secret@db.internal:5432/pi_runtime');
     expect(config.tools).toEqual([]);
     expect(config.domain?.lifecycle).toMatchObject({
@@ -103,6 +104,9 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(spotSwapCommand?.description).toContain('fromChain');
     expect(spotSwapCommand?.description).toContain('toToken');
     expect(spotSwapCommand?.description).toContain('base-unit');
+    expect(spotSwapCommand?.description).toContain('capitalPool');
+    expect(spotSwapCommand?.description).toContain('reserved_or_assigned');
+    expect(spotSwapCommand?.description).toContain('Never suggest releasing or adjusting');
     expect(config.agentOptions?.getApiKey?.(undefined as never)).toBe('test-openrouter-key');
     expect(
       await config.domain?.systemContext?.({

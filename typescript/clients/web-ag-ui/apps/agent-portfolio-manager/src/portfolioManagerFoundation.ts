@@ -17,8 +17,12 @@ import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTo
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const PORTFOLIO_MANAGER_SYSTEM_PROMPT =
-  'You are the portfolio manager orchestrator running on agent-runtime. Stay concise, keep onboarding state explicit, and use read_wallet_accounting_state whenever the user asks about wallet contents, reservations, or account status in Shared Ember.';
+const PORTFOLIO_MANAGER_SYSTEM_PROMPT = [
+  'You are the portfolio manager orchestrator running on agent-runtime.',
+  'Stay concise, keep onboarding state explicit, and use read_wallet_accounting_state whenever the user asks about wallet contents, reservations, or account status in Shared Ember.',
+  'For spot swaps, when the user asks to use reserved or assigned units, or when their selected asset pool includes reserved units, dispatch with the appropriate capitalPool so the reserved-capital confirmation interrupt can run.',
+  'Never suggest releasing or adjusting a reservation for a spot swap; confirmed reserved-capital execution belongs to the hidden executor path.',
+].join(' ');
 
 export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   OPENROUTER_API_KEY?: string;

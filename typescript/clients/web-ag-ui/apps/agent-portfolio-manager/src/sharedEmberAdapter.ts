@@ -821,10 +821,13 @@ const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND = 'dispatch_spot_swap';
 const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
   'Dispatch a structured spot swap through the portfolio-manager owned hidden Onchain Actions executor.',
   'When using this command, put a JSON object string in inputJson with required fields walletAddress, amount, amountType, fromChain, toChain, fromToken, and toToken.',
-  'Optional fields are slippageTolerance, expiration, idempotencyKey, and rootedWalletContextId.',
+  'Optional fields are slippageTolerance, expiration, idempotencyKey, rootedWalletContextId, and capitalPool.',
   'amount should be a base-unit integer string; decimal token-unit strings are accepted only when token decimals are known.',
   'amountType must be "exactIn" or "exactOut"; for requests like "half my WETH" or "$3 of WETH", infer the token amount from current portfolio state when possible before dispatching.',
-  'Example inputJson: {"walletAddress":"0x...","amount":"894102247158860","amountType":"exactIn","fromChain":"arbitrum","toChain":"arbitrum","fromToken":"WETH","toToken":"USDC"}.',
+  'capitalPool may be "unassigned_only", "reserved_or_assigned", or "all"; use reserved_or_assigned when the user explicitly asks to use reserved or assigned units, and use all when the selected asset pool should include both free and reserved units.',
+  'Never suggest releasing or adjusting a reservation for spot swaps; dispatch with capitalPool instead and let the reserved-capital confirmation interrupt ask the user to proceed or retry with unassigned capital only.',
+  'Do not set reservationConflictHandling in inputJson; it is supplied only by the portfolio-manager conflict confirmation retry.',
+  'Example inputJson: {"walletAddress":"0x...","amount":"894102247158860","amountType":"exactIn","fromChain":"arbitrum","toChain":"arbitrum","fromToken":"WETH","toToken":"USDC","capitalPool":"reserved_or_assigned"}.',
 ].join(' ');
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
   'portfolio-manager-swap-reservation-conflict-request';
@@ -1832,6 +1835,12 @@ function readSpotSwapReservationConflictHandling(
   return { kind };
 }
 
+function readSpotSwapCapitalPool(value: unknown): HiddenOcaSpotSwapInput['capitalPool'] | null {
+  return value === 'unassigned_only' || value === 'reserved_or_assigned' || value === 'all'
+    ? value
+    : null;
+}
+
 function parseSpotSwapDispatchInput(input: unknown): HiddenOcaSpotSwapInput | null {
   if (!isRecord(input)) {
     return null;
@@ -1860,6 +1869,7 @@ function parseSpotSwapDispatchInput(input: unknown): HiddenOcaSpotSwapInput | nu
   const reservationConflictHandling = readSpotSwapReservationConflictHandling(
     input['reservationConflictHandling'],
   );
+  const capitalPool = readSpotSwapCapitalPool(input['capitalPool']);
 
   return {
     walletAddress,
@@ -1879,6 +1889,7 @@ function parseSpotSwapDispatchInput(input: unknown): HiddenOcaSpotSwapInput | nu
     ...(readString(input['rootedWalletContextId'])
       ? { rootedWalletContextId: readString(input['rootedWalletContextId'])! }
       : {}),
+    ...(capitalPool ? { capitalPool } : {}),
     ...(reservationConflictHandling ? { reservationConflictHandling } : {}),
   };
 }
@@ -1928,6 +1939,52 @@ function buildSpotSwapCompletionMessage(status: HiddenOcaSpotSwapResult['status'
     default:
       return 'Spot swap execution finished through the portfolio manager.';
   }
+}
+
+function shouldConfirmSpotSwapReservedCapital(dispatch: HiddenOcaSpotSwapInput): boolean {
+  return dispatch.capitalPool === 'reserved_or_assigned' || dispatch.capitalPool === 'all';
+}
+
+function buildSpotSwapDispatchSummary(
+  dispatch: HiddenOcaSpotSwapInput,
+): HiddenOcaSpotSwapResult['swapSummary'] {
+  return {
+    fromToken: dispatch.fromToken,
+    toToken: dispatch.toToken,
+    amount: dispatch.amount,
+    amountType: dispatch.amountType,
+    displayFromAmount: '',
+    displayToAmount: '',
+  };
+}
+
+function buildSpotSwapReservedCapitalConfirmationResult(input: {
+  currentState: PortfolioManagerLifecycleState;
+  dispatch: HiddenOcaSpotSwapInput;
+}) {
+  const conflict: NonNullable<HiddenOcaSpotSwapResult['conflict']> = {
+    kind: 'reserved_for_other_agent',
+    blockingReasonCode: 'reserved_for_other_agent',
+    reservationId: null,
+    message:
+      input.dispatch.capitalPool === 'all'
+        ? 'The selected swap pool includes capital reserved for another agent.'
+        : 'The requested swap capital is reserved for another agent.',
+    retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+  };
+
+  return buildSpotSwapOperationResult({
+    currentState: input.currentState,
+    dispatch: input.dispatch,
+    result: {
+      status: 'conflict',
+      swapSummary: buildSpotSwapDispatchSummary(input.dispatch),
+      transactionPlanId: null,
+      requestId: null,
+      committedEventIds: [],
+      conflict,
+    },
+  });
 }
 
 function buildSpotSwapOperationResult(input: {
@@ -3728,6 +3785,13 @@ export function createPortfolioManagerDomain(
                 },
               },
             };
+          }
+
+          if (shouldConfirmSpotSwapReservedCapital(dispatch)) {
+            return buildSpotSwapReservedCapitalConfirmationResult({
+              currentState,
+              dispatch,
+            });
           }
 
           const result = await options.hiddenOcaSpotSwapExecutor.executeSpotSwap({
