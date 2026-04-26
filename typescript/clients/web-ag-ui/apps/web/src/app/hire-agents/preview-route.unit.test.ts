@@ -16,9 +16,10 @@ describe('Hire agents preview route wiring', () => {
     expect(source).toContain("const requestedTab = parseAgentRouteTab(searchParams.get('tab'));");
     expect(source).toContain("const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;");
     expect(source).toContain("const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;");
-    expect(source).toContain(
-      "const walletProfilerSeed = uiPreviewEnabled\n    ? parseWalletProfilerSeedParam(searchParams.get('__walletProfilerSeed'))\n    : null;",
-    );
+    expect(source).toContain("const walletProfilerSeedId = uiPreviewEnabled ? searchParams.get('seedId') : null;");
+    expect(source).toContain('const walletProfilerSeed =\n    encodedWalletProfilerSeed ??');
+    expect(source).toContain('seedIdWalletProfilerSeed?.seedId === walletProfilerSeedId');
+    expect(source).toContain("fetch(`/api/dev/wallet-profiler-seed/${encodeURIComponent(walletProfilerSeedId)}`)");
     expect(source).toContain('const selectedTab = requestedTab ?? uiPreviewTab;');
     expect(source).toContain('const previewLifecycleState = buildUiPreviewLifecycleState({');
     expect(source).toContain('const previewDomainProjection = buildUiPreviewDomainProjection({');

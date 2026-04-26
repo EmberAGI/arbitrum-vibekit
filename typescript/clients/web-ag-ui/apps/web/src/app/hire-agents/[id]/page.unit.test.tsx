@@ -199,6 +199,7 @@ function readCapturedProps(): Record<string, unknown> {
 describe('AgentDetailRoute managed mandate wiring', () => {
   let container: HTMLDivElement;
   let root: Root;
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     delete process.env.NEXT_PUBLIC_UI_PREVIEW;
@@ -233,6 +234,7 @@ describe('AgentDetailRoute managed mandate wiring', () => {
       root.unmount();
     });
     container.remove();
+    globalThis.fetch = originalFetch;
   });
 
   async function renderRoute(agentId: string): Promise<void> {
@@ -444,6 +446,47 @@ describe('AgentDetailRoute managed mandate wiring', () => {
     mocks.searchParams.set('__walletProfilerSeed', encodeURIComponent('{"pm_setup":{}'));
 
     await renderRoute('agent-portfolio-manager');
+
+    expect(readCapturedProps().activeInterrupt).toBeNull();
+  });
+
+  it('fetches a wallet-profiler seed by seedId in UI preview mode', async () => {
+    process.env.NEXT_PUBLIC_UI_PREVIEW = 'true';
+    mocks.searchParams.set('__uiState', 'onboarding');
+    mocks.searchParams.set('__fixture', 'wallet-profiler-seed');
+    mocks.searchParams.set('seedId', 'seed-123');
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      expect(input.toString()).toBe('/api/dev/wallet-profiler-seed/seed-123');
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          emberOnboardingSeed: walletProfilerSeed,
+        }),
+        { status: 200 },
+      );
+    });
+
+    await renderRoute('agent-portfolio-manager');
+    await flushEffects();
+    await flushEffects();
+
+    expect(readCapturedProps().activeInterrupt).toEqual({
+      type: 'portfolio-manager-setup-request',
+      message: 'Review the wallet-profiler onboarding seed.',
+      emberOnboardingSeed: walletProfilerSeed,
+    });
+  });
+
+  it('ignores unknown seedId lookups instead of passing a seeded interrupt', async () => {
+    process.env.NEXT_PUBLIC_UI_PREVIEW = 'true';
+    mocks.searchParams.set('__uiState', 'onboarding');
+    mocks.searchParams.set('__fixture', 'wallet-profiler-seed');
+    mocks.searchParams.set('seedId', 'missing');
+    globalThis.fetch = vi.fn(async () => new Response('not found', { status: 404 }));
+
+    await renderRoute('agent-portfolio-manager');
+    await flushEffects();
+    await flushEffects();
 
     expect(readCapturedProps().activeInterrupt).toBeNull();
   });
