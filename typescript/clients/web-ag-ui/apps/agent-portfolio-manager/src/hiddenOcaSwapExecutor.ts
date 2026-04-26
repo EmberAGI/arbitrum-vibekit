@@ -224,6 +224,15 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value : null;
 }
 
+function readUserFacingFailureReason(error: unknown, fallback: string): string {
+  const shortMessage = isRecord(error) ? readString(error['shortMessage']) : null;
+  if (shortMessage) {
+    return shortMessage;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+}
+
 function readHexAddress(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
   return normalized && isAddress(normalized, { strict: false })
@@ -379,6 +388,12 @@ function normalizeNetworkName(chain: string): string {
   }
 }
 
+const TOKEN_ADDRESS_ALIASES_BY_CHAIN: Record<string, Record<string, readonly `0x${string}`[]>> = {
+  '42161': {
+    usdt: ['0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9'],
+  },
+};
+
 function uniqueTokensByAddress(tokens: OnchainActionsToken[]): OnchainActionsToken[] {
   const seen = new Set<string>();
   const unique: OnchainActionsToken[] = [];
@@ -451,6 +466,20 @@ function resolveToken(input: {
   });
   if (resolvedName) {
     return resolvedName;
+  }
+
+  const aliasAddresses = TOKEN_ADDRESS_ALIASES_BY_CHAIN[input.chainId]?.[needle] ?? [];
+  for (const aliasAddress of aliasAddresses) {
+    const resolvedAlias = resolveUnambiguousTokenMatch({
+      matches: candidates.filter(
+        (token) => token.tokenUid.address.toLowerCase() === aliasAddress.toLowerCase(),
+      ),
+      token: input.token,
+      chainId: input.chainId,
+    });
+    if (resolvedAlias) {
+      return resolvedAlias;
+    }
   }
 
   throw new Error(
@@ -1265,7 +1294,10 @@ async function runExecutionFlow(input: {
           transactionPlanId: input.transactionPlanId,
           requestId: readExecutionRequestId(executionResult),
           committedEventIds,
-          failureReason: error instanceof Error ? error.message : 'Unknown hidden swap signing failure.',
+          failureReason: readUserFacingFailureReason(
+            error,
+            'Unknown hidden swap signing failure.',
+          ),
           idempotencyKey: input.resultIdempotencyKey,
         });
       }
