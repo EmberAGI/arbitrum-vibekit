@@ -50,6 +50,7 @@ const DEFAULT_PI_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:55432/
 const DEFAULT_ONCHAIN_ACTIONS_PORT = 50051;
 const DEFAULT_SHARED_EMBER_PORT = 4010;
 const DEFAULT_WEB_PORT = 3000;
+const WALLET_QA_MANAGED_AGENT_IDS = ['ember-lending', 'agent-oca-executor'] as const;
 const HOST = '127.0.0.1';
 const HEALTH_TIMEOUT_MS = 90_000;
 
@@ -877,7 +878,7 @@ async function main() {
     sharedEmberServer = await startManagedSharedEmberHarness({
       specRoot: workspace.specRoot,
       vibekitRoot: workspace.vibekitRoot,
-      managedAgentId: 'ember-lending',
+      managedAgentIds: WALLET_QA_MANAGED_AGENT_IDS,
       host: HOST,
       port: sharedEmberPort.port,
     });

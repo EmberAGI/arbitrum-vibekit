@@ -38,6 +38,7 @@ type StartManagedSharedEmberHarnessDependencies =
   };
 
 const DEFAULT_MANAGED_AGENT_ID = 'ember-lending';
+const HIDDEN_OCA_EXECUTOR_AGENT_ID = 'agent-oca-executor';
 const DEFAULT_OWS_CHAIN = 'evm';
 const MAX_DECIMAL_TYPED_DATA_BIGINT = 1n << 128n;
 const EIP712_DOMAIN_TYPE = [
@@ -56,9 +57,34 @@ function readHexAddress(value: unknown): `0x${string}` | null {
   return normalized?.startsWith('0x') ? (normalized.toLowerCase() as `0x${string}`) : null;
 }
 
-function withDefaultManagedPlannerAgentId(input: {
+function normalizeManagedAgentIds(input: {
+  managedAgentId?: string;
+  managedAgentIds?: readonly string[];
+}): string[] {
+  const managedAgentIds = new Set<string>();
+
+  for (const agentId of input.managedAgentIds ?? []) {
+    const normalized = readString(agentId);
+    if (normalized !== null) {
+      managedAgentIds.add(normalized);
+    }
+  }
+
+  const managedAgentId = readString(input.managedAgentId);
+  if (managedAgentId !== null) {
+    managedAgentIds.add(managedAgentId);
+  }
+
+  if (managedAgentIds.size === 0) {
+    managedAgentIds.add(DEFAULT_MANAGED_AGENT_ID);
+  }
+
+  return Array.from(managedAgentIds);
+}
+
+function withManagedPlannerAgentIds(input: {
   env?: NodeJS.ProcessEnv;
-  managedAgentId: string;
+  managedAgentIds: readonly string[];
 }): NodeJS.ProcessEnv {
   const env = input.env ?? process.env;
   const configuredAgentIds = new Set(
@@ -68,7 +94,9 @@ function withDefaultManagedPlannerAgentId(input: {
       .filter(Boolean),
   );
 
-  configuredAgentIds.add(input.managedAgentId);
+  for (const managedAgentId of input.managedAgentIds) {
+    configuredAgentIds.add(managedAgentId);
+  }
 
   return {
     ...env,
@@ -91,6 +119,14 @@ function hasManagedSubmissionBinding(input: {
     | Record<string, unknown>
     | undefined;
   return submissionBackends?.[input.managedAgentId] !== undefined;
+}
+
+function formatMissingManagedSubmissionBindingMessage(managedAgentIds: readonly string[]): string {
+  if (managedAgentIds.length === 1) {
+    return `Managed Shared Ember bootstrap requires a seeded subagent runtime binding for ${managedAgentIds[0]}.`;
+  }
+
+  return `Managed Shared Ember bootstrap requires seeded subagent runtime bindings for ${managedAgentIds.join(', ')}.`;
 }
 
 export function parseDotEnvFile(filePath: string): Record<string, string> {
@@ -393,28 +429,49 @@ async function maybeCreateSubagentRuntimes(input: {
   const lendingEnv = parseDotEnvFile(
     path.join(input.vibekitRoot, 'typescript/clients/web-ag-ui/apps/agent-ember-lending/.env'),
   );
-  const lendingWalletName =
-    readString(process.env.EMBER_LENDING_OWS_WALLET_NAME) ??
-    readString(lendingEnv.EMBER_LENDING_OWS_WALLET_NAME);
-  const lendingVaultPath =
-    readString(process.env.EMBER_LENDING_OWS_VAULT_PATH) ??
-    readString(lendingEnv.EMBER_LENDING_OWS_VAULT_PATH);
-
-  if (!lendingWalletName) {
-    return undefined;
-  }
-
+  const portfolioManagerAppRoot = path.join(
+    input.vibekitRoot,
+    'typescript/clients/web-ag-ui/apps/agent-portfolio-manager',
+  );
   const lendingAppRoot = path.join(
     input.vibekitRoot,
     'typescript/clients/web-ag-ui/apps/agent-ember-lending',
   );
-  const requireFromLending = createRequire(path.join(lendingAppRoot, 'package.json'));
-  const { getWallet } = requireFromLending('@open-wallet-standard/core') as {
+  const runtimeWalletConfig =
+    input.managedAgentId === HIDDEN_OCA_EXECUTOR_AGENT_ID
+      ? {
+          label: 'Hidden OCA executor',
+          appRoot: portfolioManagerAppRoot,
+          walletName:
+            readString(process.env.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME) ??
+            readString(portfolioManagerEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME),
+          vaultPath:
+            readString(process.env.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH) ??
+            readString(portfolioManagerEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH) ??
+            controllerVaultPath,
+        }
+      : {
+          label: 'Ember-lending',
+          appRoot: lendingAppRoot,
+          walletName:
+            readString(process.env.EMBER_LENDING_OWS_WALLET_NAME) ??
+            readString(lendingEnv.EMBER_LENDING_OWS_WALLET_NAME),
+          vaultPath:
+            readString(process.env.EMBER_LENDING_OWS_VAULT_PATH) ??
+            readString(lendingEnv.EMBER_LENDING_OWS_VAULT_PATH),
+        };
+
+  if (!runtimeWalletConfig.walletName) {
+    return undefined;
+  }
+
+  const requireFromRuntimeApp = createRequire(path.join(runtimeWalletConfig.appRoot, 'package.json'));
+  const { getWallet } = requireFromRuntimeApp('@open-wallet-standard/core') as {
     getWallet: (walletName: string, vaultPath?: string) => {
       accounts: Array<{ address?: string }>;
     };
   };
-  const wallet = getWallet(lendingWalletName, lendingVaultPath ?? undefined);
+  const wallet = getWallet(runtimeWalletConfig.walletName, runtimeWalletConfig.vaultPath ?? undefined);
   const agentWallet =
     wallet.accounts
       .map((account) => readHexAddress(account.address))
@@ -422,7 +479,7 @@ async function maybeCreateSubagentRuntimes(input: {
 
   if (!agentWallet) {
     throw new Error(
-      `Ember-lending OWS wallet "${lendingWalletName}" did not resolve an EVM address for runtime binding bootstrap.`,
+      `${runtimeWalletConfig.label} OWS wallet "${runtimeWalletConfig.walletName}" did not resolve an EVM address for runtime binding bootstrap.`,
     );
   }
 
@@ -434,10 +491,6 @@ async function maybeCreateSubagentRuntimes(input: {
     },
   };
   if (controllerWalletName) {
-    const portfolioManagerAppRoot = path.join(
-      input.vibekitRoot,
-      'typescript/clients/web-ag-ui/apps/agent-portfolio-manager',
-    );
     const requireFromPortfolioManager = createRequire(
       path.join(portfolioManagerAppRoot, 'package.json'),
     );
@@ -623,6 +676,7 @@ async function maybeCreateSubagentRuntimes(input: {
       settlementProjector: {
         projectConfirmedExecution(input: {
           request: unknown;
+          transactionPlan?: unknown;
           reservation?: unknown;
           sourceUnits?: unknown[];
           requestId: string;
@@ -651,6 +705,7 @@ async function maybeCreateSubagentRuntimes(input: {
   )) as {
     projectLendingExecutionSuccessorPlans: (input: {
       request: unknown;
+      transactionPlan?: unknown;
       sourceUnits: unknown[];
       executionId: string;
       transactionHash: string;
@@ -681,6 +736,10 @@ async function maybeCreateSubagentRuntimes(input: {
         executionId,
         transactionHash,
       }) {
+        if (input.managedAgentId === HIDDEN_OCA_EXECUTOR_AGENT_ID) {
+          return [];
+        }
+
         return accountingModule.projectLendingExecutionSuccessorPlans({
           request,
           transactionPlan,
@@ -721,10 +780,14 @@ export async function startManagedSharedEmberHarness(input: {
   specRoot: string;
   vibekitRoot: string;
   managedAgentId?: string;
+  managedAgentIds?: readonly string[];
   host?: string;
   port?: number;
 }, dependencies: StartManagedSharedEmberHarnessDependencies = {}): Promise<StartedServer> {
-  const managedAgentId = input.managedAgentId ?? DEFAULT_MANAGED_AGENT_ID;
+  const managedAgentIds = normalizeManagedAgentIds({
+    managedAgentId: input.managedAgentId,
+    managedAgentIds: input.managedAgentIds,
+  });
   const host = input.host ?? '127.0.0.1';
   const port = input.port ?? 0;
 
@@ -763,7 +826,7 @@ export async function startManagedSharedEmberHarness(input: {
     {
       specRoot: input.specRoot,
       vibekitRoot: input.vibekitRoot,
-      managedAgentId,
+      managedAgentIds,
     },
     {
       ...dependencies,
@@ -783,12 +846,16 @@ export async function resolveManagedSharedEmberBootstrap(
     specRoot: string;
     vibekitRoot: string;
     managedAgentId?: string;
+    managedAgentIds?: readonly string[];
   },
   dependencies: ResolveManagedSharedEmberBootstrapDependencies = {},
 ): Promise<SharedEmberReferenceBootstrap> {
-  const managedAgentId = input.managedAgentId ?? DEFAULT_MANAGED_AGENT_ID;
-  const managedPlannerEnv = withDefaultManagedPlannerAgentId({
-    managedAgentId,
+  const managedAgentIds = normalizeManagedAgentIds({
+    managedAgentId: input.managedAgentId,
+    managedAgentIds: input.managedAgentIds,
+  });
+  const managedPlannerEnv = withManagedPlannerAgentIds({
+    managedAgentIds,
   });
   const bootstrap = await (
     dependencies.resolveReferenceBootstrap ??
@@ -809,24 +876,33 @@ export async function resolveManagedSharedEmberBootstrap(
       return bootstrapModule.resolveSharedEmberReferenceBootstrapFromEnv(env);
     })
   )(managedPlannerEnv);
-  const managedOnboardingIssuers = await (
-    dependencies.createManagedOnboardingIssuers ?? maybeCreateManagedOnboardingIssuers
-  )({
-    specRoot: input.specRoot,
-    vibekitRoot: input.vibekitRoot,
-    managedAgentId,
-  });
-  const subagentRuntimes = await (
-    dependencies.createSubagentRuntimes ?? maybeCreateSubagentRuntimes
-  )({
-    specRoot: input.specRoot,
-    vibekitRoot: input.vibekitRoot,
-    managedAgentId,
-  });
+  const createManagedOnboardingIssuers =
+    dependencies.createManagedOnboardingIssuers ?? maybeCreateManagedOnboardingIssuers;
+  const createSubagentRuntimes = dependencies.createSubagentRuntimes ?? maybeCreateSubagentRuntimes;
+  const managedOnboardingIssuerEntries = await Promise.all(
+    managedAgentIds.map((managedAgentId) =>
+      createManagedOnboardingIssuers({
+        specRoot: input.specRoot,
+        vibekitRoot: input.vibekitRoot,
+        managedAgentId,
+      }),
+    ),
+  );
+  const subagentRuntimeEntries = await Promise.all(
+    managedAgentIds.map((managedAgentId) =>
+      createSubagentRuntimes({
+        specRoot: input.specRoot,
+        vibekitRoot: input.vibekitRoot,
+        managedAgentId,
+      }),
+    ),
+  );
+  const managedOnboardingIssuers = Object.assign({}, ...managedOnboardingIssuerEntries);
+  const subagentRuntimes = Object.assign({}, ...subagentRuntimeEntries);
 
   const mergedBootstrap = {
     ...bootstrap,
-    ...(managedOnboardingIssuers === undefined
+    ...(Object.keys(managedOnboardingIssuers).length === 0
       ? {}
       : {
           managedOnboardingIssuers: {
@@ -835,7 +911,7 @@ export async function resolveManagedSharedEmberBootstrap(
             ...managedOnboardingIssuers,
           },
         }),
-    ...(subagentRuntimes === undefined
+    ...(Object.keys(subagentRuntimes).length === 0
       ? {}
       : {
           subagentRuntimes: {
@@ -845,15 +921,15 @@ export async function resolveManagedSharedEmberBootstrap(
         }),
   };
 
-  if (
-    !hasManagedSubmissionBinding({
-      bootstrap: mergedBootstrap,
-      managedAgentId,
-    })
-  ) {
-    throw new Error(
-      `Managed Shared Ember bootstrap requires a seeded subagent runtime binding for ${managedAgentId}.`,
-    );
+  const missingManagedAgentIds = managedAgentIds.filter(
+    (managedAgentId) =>
+      !hasManagedSubmissionBinding({
+        bootstrap: mergedBootstrap,
+        managedAgentId,
+      }),
+  );
+  if (missingManagedAgentIds.length > 0) {
+    throw new Error(formatMissingManagedSubmissionBindingMessage(missingManagedAgentIds));
   }
 
   return mergedBootstrap;

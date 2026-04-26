@@ -231,6 +231,11 @@ describe('buildWalletQaEnvironmentOverrides', () => {
       PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH:
         '/tmp/runtime/ows/portfolio-manager',
     });
+    expect(overrides.sharedEmberEnv).toMatchObject({
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME: 'oca-executor-wallet-id',
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH:
+        '/tmp/runtime/ows/portfolio-manager',
+    });
   });
 });
 

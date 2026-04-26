@@ -81,4 +81,57 @@ describe('resolveManagedSharedEmberBootstrap', () => {
     );
     expect(bootstrap.plannerAgentIds).toBe('ember-lending');
   });
+
+  it('seeds submission bindings for multiple managed agents', async () => {
+    const resolveReferenceBootstrap = vi
+      .fn()
+      .mockImplementation(async (env?: NodeJS.ProcessEnv) => ({
+        plannerAgentIds: env?.SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS ?? null,
+      }));
+    const createManagedOnboardingIssuers = vi.fn(
+      async ({ managedAgentId }: { managedAgentId: string }) => ({
+        [managedAgentId]: { issueDelegation: vi.fn() },
+      }),
+    );
+    const createSubagentRuntimes = vi.fn(
+      async ({ managedAgentId }: { managedAgentId: string }) => ({
+        [managedAgentId]: {
+          submissionBackend: {
+            submitSignedTransaction: vi.fn(),
+          },
+        },
+      }),
+    );
+
+    const bootstrap = await resolveManagedSharedEmberBootstrap(
+      {
+        specRoot: '/tmp/spec-root',
+        vibekitRoot: '/tmp/vibekit-root',
+        managedAgentIds: ['ember-lending', 'agent-oca-executor'],
+      },
+      {
+        resolveReferenceBootstrap,
+        createManagedOnboardingIssuers,
+        createSubagentRuntimes,
+      },
+    );
+
+    expect(resolveReferenceBootstrap).toHaveBeenCalledWith(
+      expect.objectContaining({
+        SHARED_EMBER_ONCHAIN_ACTIONS_PLANNER_AGENT_IDS:
+          'ember-lending,agent-oca-executor',
+      }),
+    );
+    expect(createManagedOnboardingIssuers).toHaveBeenCalledTimes(2);
+    expect(createSubagentRuntimes).toHaveBeenCalledTimes(2);
+    expect(bootstrap.plannerAgentIds).toBe('ember-lending,agent-oca-executor');
+    expect(bootstrap.subagentRuntimes).toMatchObject({
+      'ember-lending': expect.objectContaining({
+        submissionBackend: expect.any(Object),
+      }),
+      'agent-oca-executor': expect.objectContaining({
+        submissionBackend: expect.any(Object),
+      }),
+    });
+  });
 });

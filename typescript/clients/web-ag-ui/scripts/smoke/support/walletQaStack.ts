@@ -254,6 +254,13 @@ export function buildWalletQaEnvironmentOverrides(input: {
     sharedEmberEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME =
       input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME;
   }
+  if (input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME) {
+    sharedEmberEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME =
+      input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME;
+    sharedEmberEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH =
+      input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH ??
+      input.portfolioManagerOwsVaultPath;
+  }
   if (input.emberLendingBaseEnv.EMBER_LENDING_OWS_WALLET_NAME) {
     sharedEmberEnv.EMBER_LENDING_OWS_WALLET_NAME =
       input.emberLendingBaseEnv.EMBER_LENDING_OWS_WALLET_NAME;
