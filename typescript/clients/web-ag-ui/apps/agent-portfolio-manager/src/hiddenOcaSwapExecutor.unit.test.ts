@@ -1396,6 +1396,116 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
     });
   });
 
+  it('reports failed terminal execution results as failed instead of completed', async () => {
+    const runtimeSigning = createRuntimeSigningStub(
+      vi.fn(async () => ({
+        confirmedAddress: '0x00000000000000000000000000000000000000e1' as const,
+        signedPayload: {
+          signature: TEST_TRANSACTION_SIGNATURE,
+          recoveryId: 1,
+        },
+      })),
+    );
+    const protocolHost = {
+      handleJsonRpc: vi
+        .fn()
+        .mockResolvedValueOnce(createCandidatePlanResponse())
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+          result: {
+            protocol_version: 'v1',
+            revision: 5,
+            committed_event_ids: ['evt-hidden-swap-execution-1'],
+            execution_result: {
+              phase: 'ready_for_execution_signing',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution_preparation: {
+                execution_preparation_id: 'execprep-hidden-swap-001',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                agent_id: 'agent-oca-executor',
+                agent_wallet: '0x00000000000000000000000000000000000000e1',
+                root_user_wallet: '0x00000000000000000000000000000000000000a1',
+                network: 'arbitrum',
+                reservation_id: 'res-hidden-swap-001',
+                required_control_path: 'spot.swap',
+                active_delegation_id: 'del-hidden-swap-001',
+                root_delegation_id: 'root-delegation-001',
+                prepared_at: '2026-04-10T12:00:00.000Z',
+              },
+              execution_signing_package: {
+                execution_preparation_id: 'execprep-hidden-swap-001',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                active_delegation_id: 'del-hidden-swap-001',
+                canonical_unsigned_payload_ref: TEST_CANONICAL_UNSIGNED_PAYLOAD_REF,
+              },
+            },
+          },
+        })
+        .mockResolvedValueOnce({
+          jsonrpc: '2.0',
+          id: 'shared-ember-thread-1-submit-hidden-oca-swap-transaction',
+          result: {
+            protocol_version: 'v1',
+            revision: 6,
+            committed_event_ids: ['evt-hidden-swap-failed-1'],
+            execution_result: {
+              phase: 'completed',
+              transaction_plan_id: 'txplan-hidden-swap-001',
+              request_id: 'req-hidden-swap-001',
+              execution: {
+                execution_id: 'exec-hidden-swap-001',
+                status: 'failed_before_submission',
+                message:
+                  'send_insufficient_funds: rpc_-32000: insufficient funds for gas * price + value',
+                transaction_hash: null,
+                successor_unit_ids: [],
+              },
+            },
+          },
+        }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient: {
+        listTokens: vi.fn(async () => createTokens()),
+        createSwap: vi.fn(async () => createSwapResponse()),
+      },
+      runtimeSigning,
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+      resolvePreparedUnsignedTransactionHex: vi.fn(async () => TEST_UNSIGNED_TRANSACTION_HEX),
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '1000000',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'USDC',
+          toToken: 'WETH',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      transactionPlanId: 'txplan-hidden-swap-001',
+      requestId: 'req-hidden-swap-001',
+      failureReason:
+        'send_insufficient_funds: rpc_-32000: insufficient funds for gas * price + value',
+    });
+  });
+
   it('fails signing when Shared Ember prepares the OCA payload for a different network', async () => {
     const runtimeSigning = createRuntimeSigningStub(
       vi.fn(async () => ({

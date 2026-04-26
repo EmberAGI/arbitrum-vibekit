@@ -812,8 +812,27 @@ function readCompletedExecutionStatus(executionResult: Record<string, unknown>):
   return readString(readRecordKey(executionResult, 'execution')?.['status']);
 }
 
+function readCompletedExecutionMessage(executionResult: Record<string, unknown>): string | null {
+  return readString(readRecordKey(executionResult, 'execution')?.['message']);
+}
+
 function readCompletedTransactionHash(executionResult: Record<string, unknown>): string | null {
   return readString(readRecordKey(executionResult, 'execution')?.['transaction_hash']);
+}
+
+function buildTerminalExecutionFailureReason(input: {
+  executionStatus: string | null;
+  executionMessage: string | null;
+}): string {
+  if (input.executionMessage) {
+    return input.executionMessage;
+  }
+
+  if (input.executionStatus) {
+    return `Shared Ember terminal hidden swap execution status was "${input.executionStatus}".`;
+  }
+
+  return 'Shared Ember returned terminal hidden swap execution without an execution status.';
 }
 
 function buildCompletedResult(input: {
@@ -824,9 +843,26 @@ function buildCompletedResult(input: {
   idempotencyKey?: string;
 }): HiddenOcaSpotSwapResult {
   const executionStatus = readCompletedExecutionStatus(input.executionResult);
+  const executionMessage = readCompletedExecutionMessage(input.executionResult);
+  const transactionHash = readCompletedTransactionHash(input.executionResult);
+
+  if (executionStatus === 'submitted' || executionStatus === 'confirmed') {
+    return {
+      status: executionStatus === 'submitted' ? 'submitted' : 'completed',
+      ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
+      swapSummary: buildSwapSummary({
+        request: input.request,
+        swapResponse: input.swapResponse,
+      }),
+      transactionPlanId: readExecutionTransactionPlanId(input.executionResult),
+      requestId: readExecutionRequestId(input.executionResult),
+      transactionHash,
+      committedEventIds: input.committedEventIds,
+    };
+  }
 
   return {
-    status: executionStatus === 'submitted' ? 'submitted' : 'completed',
+    status: 'failed',
     ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
     swapSummary: buildSwapSummary({
       request: input.request,
@@ -834,8 +870,12 @@ function buildCompletedResult(input: {
     }),
     transactionPlanId: readExecutionTransactionPlanId(input.executionResult),
     requestId: readExecutionRequestId(input.executionResult),
-    transactionHash: readCompletedTransactionHash(input.executionResult),
+    ...(transactionHash ? { transactionHash } : {}),
     committedEventIds: input.committedEventIds,
+    failureReason: buildTerminalExecutionFailureReason({
+      executionStatus,
+      executionMessage,
+    }),
   };
 }
 
