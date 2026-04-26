@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useCallback, useEffect, useRef, type ComponentProps } from 'react';
+import { use, useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Message } from '@ag-ui/core';
 import { useLogin } from '@privy-io/react-auth';
@@ -12,9 +12,14 @@ import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
 import { navigateToHref } from '@/utils/hardNavigation';
 import { isPrivyConfigured } from '@/utils/privyConfig';
+import type { EmberOnboardingSeed } from '@/types/agent';
+import {
+  isEmberOnboardingSeed,
+  parseWalletProfilerSeedParam,
+} from '@/utils/emberOnboardingSeed';
 
 type UiPreviewState = 'prehire' | 'onboarding' | 'active';
-type UiPreviewFixture = 'managed';
+type UiPreviewFixture = 'managed' | 'wallet-profiler-seed';
 type AgentRouteTab = 'blockers' | 'metrics' | 'transactions' | 'chat';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -26,6 +31,7 @@ function parseUiPreviewState(value: string | null): UiPreviewState | null {
 
 function parseUiPreviewFixture(value: string | null): UiPreviewFixture | null {
   if (value === 'managed') return value;
+  if (value === 'wallet-profiler-seed') return value;
   return null;
 }
 
@@ -115,6 +121,28 @@ function buildUiPreviewDomainProjection(args: {
   };
 }
 
+function buildUiPreviewActiveInterrupt(args: {
+  agentId: string;
+  fixture: UiPreviewFixture | null;
+  uiState: UiPreviewState | null;
+  walletProfilerSeed: EmberOnboardingSeed | null;
+}): ComponentProps<typeof AgentDetailPage>['activeInterrupt'] {
+  if (
+    args.agentId !== 'agent-portfolio-manager' ||
+    args.uiState !== 'onboarding' ||
+    args.fixture !== 'wallet-profiler-seed' ||
+    !args.walletProfilerSeed
+  ) {
+    return null;
+  }
+
+  return {
+    type: 'portfolio-manager-setup-request',
+    message: 'Review the wallet-profiler onboarding seed.',
+    emberOnboardingSeed: args.walletProfilerSeed,
+  };
+}
+
 export default function AgentDetailRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const searchParams = useSearchParams();
@@ -152,6 +180,8 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const selectedIsHired = agent.isHired;
   const isRestoringState = Boolean(agent.threadId && !agent.hasAuthoritativeState);
   const projectionHydrationKeyRef = useRef<string | null>(null);
+  const [seedIdWalletProfilerSeed, setSeedIdWalletProfilerSeed] =
+    useState<{ seed: EmberOnboardingSeed | null; seedId: string } | null>(null);
 
   const handleBack = () => {
     navigateToHref('/hire-agents');
@@ -187,6 +217,15 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   const requestedTab = parseAgentRouteTab(searchParams.get('tab'));
   const uiPreviewTab = uiPreviewEnabled ? parseAgentRouteTab(searchParams.get('__tab')) : null;
   const uiPreviewFixture = uiPreviewEnabled ? parseUiPreviewFixture(searchParams.get('__fixture')) : null;
+  const encodedWalletProfilerSeed = uiPreviewEnabled
+    ? parseWalletProfilerSeedParam(searchParams.get('__walletProfilerSeed'))
+    : null;
+  const walletProfilerSeedId = uiPreviewEnabled ? searchParams.get('seedId') : null;
+  const walletProfilerSeed =
+    encodedWalletProfilerSeed ??
+    (seedIdWalletProfilerSeed?.seedId === walletProfilerSeedId
+      ? seedIdWalletProfilerSeed.seed
+      : null);
   const selectedTab = requestedTab ?? uiPreviewTab;
   const selectedLifecyclePhase = selectedLifecycleState?.phase;
   const portfolioManagerThreadId =
@@ -197,6 +236,58 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
     selectedAgentId === 'agent-ember-lending' && agent.threadId
       ? agent.threadId
       : getAgentThreadId('agent-ember-lending', privyWallet?.address);
+
+  useEffect(() => {
+    if (
+      !uiPreviewEnabled ||
+      uiPreviewState !== 'onboarding' ||
+      uiPreviewFixture !== 'wallet-profiler-seed' ||
+      !walletProfilerSeedId ||
+      encodedWalletProfilerSeed
+    ) {
+      return;
+    }
+
+    let active = true;
+
+    void fetch(`/api/dev/wallet-profiler-seed/${encodeURIComponent(walletProfilerSeedId)}`)
+      .then(async (response) => {
+        if (!response.ok) {
+          return null;
+        }
+
+        const body = (await response.json()) as { emberOnboardingSeed?: unknown };
+        return isEmberOnboardingSeed(body.emberOnboardingSeed)
+          ? body.emberOnboardingSeed
+          : null;
+      })
+      .then((seed) => {
+        if (active) {
+          setSeedIdWalletProfilerSeed({
+            seed,
+            seedId: walletProfilerSeedId,
+          });
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSeedIdWalletProfilerSeed({
+            seed: null,
+            seedId: walletProfilerSeedId,
+          });
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    encodedWalletProfilerSeed,
+    uiPreviewEnabled,
+    uiPreviewFixture,
+    uiPreviewState,
+    walletProfilerSeedId,
+  ]);
 
   useEffect(() => {
     if (!routeHasRegisteredAgent) {
@@ -348,6 +439,12 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       fixture: uiPreviewFixture,
       uiState: uiPreviewState,
     });
+    const previewActiveInterrupt = buildUiPreviewActiveInterrupt({
+      agentId: previewAgentId,
+      fixture: uiPreviewFixture,
+      uiState: uiPreviewState,
+      walletProfilerSeed,
+    });
     const previewTaskStatus =
       uiPreviewState === 'active' && uiPreviewFixture === 'managed' ? 'working' : undefined;
 
@@ -399,7 +496,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
         }
         onSync={() => undefined}
         onBack={handleBack}
-        activeInterrupt={null}
+        activeInterrupt={previewActiveInterrupt}
         allowedPools={[]}
         onInterruptSubmit={() => undefined}
         taskId={undefined}

@@ -2518,6 +2518,16 @@ function AgentBlockersTab({
   });
   const isPortfolioManagerSetupInterrupt =
     activeInterrupt?.type === 'portfolio-manager-setup-request';
+  const portfolioManagerSetupSeed = isPortfolioManagerSetupInterrupt
+    ? activeInterrupt.emberOnboardingSeed
+    : undefined;
+  const portfolioManagerSetupFirstManagedMandateTargetKey =
+    portfolioManagerSetupSeed?.first_managed_mandate.target_agent_key ??
+    'ember-lending-primary';
+  const portfolioManagerSetupSeedCollateralSummary =
+    portfolioManagerSetupSeed?.first_managed_mandate.managed_mandate.lending_policy.collateral_policy.assets
+      .map((asset) => `${asset.asset} ${asset.max_allocation_pct}%`)
+      .join(', ');
 
   useEffect(() => {
     if (!isPortfolioManagerSetupInterrupt) {
@@ -2650,19 +2660,20 @@ function AgentBlockersTab({
   };
 
   const portfolioManagerSetupManagedMandate = useMemo<ManagedMandateInput>(
-    () => ({
-      lending_policy: buildManagedLendingPolicy({
-        existingManagedMandate: null,
-        collateralPolicies: [
-          {
-            asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
-            max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
-          },
-        ],
-        allowedBorrowAssets: [],
-      }),
-    }),
-    [],
+    () =>
+      portfolioManagerSetupSeed?.first_managed_mandate.managed_mandate ?? {
+        lending_policy: buildManagedLendingPolicy({
+          existingManagedMandate: null,
+          collateralPolicies: [
+            {
+              asset: DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
+              max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
+            },
+          ],
+          allowedBorrowAssets: [],
+        }),
+      },
+    [portfolioManagerSetupSeed],
   );
 
   const submitPortfolioManagerSetupMandate = async (
@@ -2697,7 +2708,7 @@ function AgentBlockersTab({
       },
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
-        targetAgentKey: 'ember-lending-primary',
+        targetAgentKey: portfolioManagerSetupFirstManagedMandateTargetKey,
         managedMandate,
       },
     });
@@ -3099,6 +3110,37 @@ function AgentBlockersTab({
                 )}
 
                 <div className="space-y-4 mb-6">
+                  {portfolioManagerSetupSeed && (
+                    <div className={`${DETAIL_INSET_CLASS} border-[#d8a85f]/45 bg-[#fff7ea] p-4`}>
+                      <div className="mb-2 text-sm font-medium text-[#503826]">
+                        Wallet profiler seed
+                      </div>
+                      <p className="text-xs leading-5 text-[#624d3f]">
+                        {portfolioManagerSetupSeed.pm_setup.diagnosis_summary}
+                      </p>
+                      <p className="mt-2 text-xs leading-5 text-[#7c6757]">
+                        {portfolioManagerSetupSeed.pm_setup.portfolio_intent_summary}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#624d3f]">
+                        <span className="rounded-full border border-[#e7c88f] bg-white px-2.5 py-1">
+                          Risk level: {portfolioManagerSetupSeed.pm_setup.risk_level}
+                        </span>
+                        {portfolioManagerSetupSeedCollateralSummary && (
+                          <span className="rounded-full border border-[#e7c88f] bg-white px-2.5 py-1">
+                            First lending lane: {portfolioManagerSetupSeedCollateralSummary}
+                          </span>
+                        )}
+                      </div>
+                      {portfolioManagerSetupSeed.pm_setup.operator_caveats.length > 0 && (
+                        <ul className="mt-3 space-y-1 text-[11px] leading-4 text-[#8b725f]">
+                          {portfolioManagerSetupSeed.pm_setup.operator_caveats.map((caveat) => (
+                            <li key={caveat}>{caveat}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
                   <div className={`${DETAIL_INSET_CLASS} p-4`}>
                     <div className="mb-2 text-sm font-medium text-[#503826]">Root delegation setup</div>
                     <p className="text-xs text-[#7c6757]">
