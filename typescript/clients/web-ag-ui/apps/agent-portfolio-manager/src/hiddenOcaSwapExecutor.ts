@@ -11,6 +11,8 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedEvmTransaction } from 'agent-runtime/internal';
 import {
   createPublicClient,
+  encodeFunctionData,
+  erc20Abi,
   http,
   isAddress,
   isAddressEqual,
@@ -34,6 +36,24 @@ const OWS_SIGNING_CHAIN = 'evm';
 const MAX_EXECUTION_REQUEST_ATTEMPTS = 4;
 const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8_000;
+const PERMIT2_ADDRESS = '0x000000000022d473030f116ddee9f6b43ac78ba3' as const;
+const PERMIT2_MAX_EXPIRATION = 281_474_976_710_655;
+const PERMIT2_MAX_UINT160_AMOUNT = (1n << 160n) - 1n;
+const OCA_FUND_AND_RUN_MULTICALL_SELECTOR = '0x58181a80';
+const PERMIT2_APPROVE_ABI = [
+  {
+    type: 'function',
+    name: 'approve',
+    stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'spender', type: 'address' },
+      { name: 'amount', type: 'uint160' },
+      { name: 'expiration', type: 'uint48' },
+    ],
+    outputs: [],
+  },
+] as const;
 
 type TokenIdentifier = {
   chainId: string;
@@ -600,12 +620,101 @@ function normalizeOcaSwapTransaction(
   };
 }
 
+function readPositiveBaseUnitAmount(value: string): bigint {
+  if (!/^[0-9]+$/u.test(value)) {
+    throw new Error(
+      `OCA funded multicall approval requires an integer exact-from amount, received "${value}".`,
+    );
+  }
+
+  const amount = BigInt(value);
+  if (amount <= 0n) {
+    throw new Error('OCA funded multicall approval requires a positive exact-from amount.');
+  }
+
+  if (amount > PERMIT2_MAX_UINT160_AMOUNT) {
+    throw new Error('OCA funded multicall approval amount exceeds the Permit2 uint160 limit.');
+  }
+
+  return amount;
+}
+
+function isOcaFundAndRunMulticallTransaction(
+  transaction: OnchainActionsTransactionRequest,
+): boolean {
+  return transaction.data.toLowerCase().startsWith(OCA_FUND_AND_RUN_MULTICALL_SELECTOR);
+}
+
+function buildPermit2ApprovalTransactions(input: {
+  fromToken: OnchainActionsToken;
+  exactFromAmount: string;
+  spender: `0x${string}`;
+  chainId: string;
+}): OnchainActionsTransactionRequest[] {
+  const fromTokenAddress = readHexAddress(input.fromToken.tokenUid.address);
+  if (!fromTokenAddress) {
+    throw new Error('OCA funded multicall approval requires an EVM ERC20 source token address.');
+  }
+
+  const amount = readPositiveBaseUnitAmount(input.exactFromAmount);
+
+  return [
+    {
+      type: 'EVM_TX',
+      to: fromTokenAddress,
+      value: '0',
+      data: encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [PERMIT2_ADDRESS, amount],
+      }),
+      chainId: input.chainId,
+    },
+    {
+      type: 'EVM_TX',
+      to: PERMIT2_ADDRESS,
+      value: '0',
+      data: encodeFunctionData({
+        abi: PERMIT2_APPROVE_ABI,
+        functionName: 'approve',
+        args: [fromTokenAddress, input.spender, amount, PERMIT2_MAX_EXPIRATION],
+      }),
+      chainId: input.chainId,
+    },
+  ];
+}
+
+function buildExecutableOcaSwapTransactions(input: {
+  requestChainId: string;
+  swapResponse: OnchainActionsSwapResponse;
+}): OnchainActionsTransactionRequest[] {
+  const normalizedTransactions = input.swapResponse.transactions.map(normalizeOcaSwapTransaction);
+  const fundedMulticallTransaction = normalizedTransactions.find(isOcaFundAndRunMulticallTransaction);
+
+  if (!fundedMulticallTransaction || input.swapResponse.fromToken.isNative === true) {
+    return normalizedTransactions;
+  }
+
+  return [
+    ...buildPermit2ApprovalTransactions({
+      fromToken: input.swapResponse.fromToken,
+      exactFromAmount: input.swapResponse.exactFromAmount,
+      spender: fundedMulticallTransaction.to,
+      chainId: input.requestChainId,
+    }),
+    ...normalizedTransactions,
+  ];
+}
+
 function buildPreparedOcaSwapPayload(input: {
   requestChainId: string;
   network: string;
   swapResponse: OnchainActionsSwapResponse;
 }): PreparedOcaSwapPayload {
-  const normalizedTransactions = input.swapResponse.transactions.map(normalizeOcaSwapTransaction);
+  const normalizedTransactions = buildExecutableOcaSwapTransactions({
+    requestChainId: input.requestChainId,
+    swapResponse: input.swapResponse,
+  });
   if (normalizedTransactions.length === 0) {
     throw new Error('Hidden swap execution signing requires at least one OCA transaction request.');
   }
