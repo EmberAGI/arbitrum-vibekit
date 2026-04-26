@@ -1628,7 +1628,7 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
     });
   });
 
-  it('keeps viem estimate failures concise in user-facing results', async () => {
+  it('explains viem estimate reverts as pre-submission route failures', async () => {
     const runtimeSigning = createRuntimeSigningStub(
       vi.fn(async () => ({
         confirmedAddress: '0x00000000000000000000000000000000000000e1' as const,
@@ -1715,7 +1715,8 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
       }),
     ).resolves.toMatchObject({
       status: 'failed',
-      failureReason: 'Execution reverted for an unknown reason.',
+      failureReason:
+        'Hidden swap execution reverted during gas estimation before submission. No transaction was sent; try a larger amount or a different route.',
     });
   });
 

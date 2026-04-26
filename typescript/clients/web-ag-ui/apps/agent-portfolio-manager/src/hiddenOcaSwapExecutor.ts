@@ -226,11 +226,20 @@ function readString(value: unknown): string | null {
 
 function readUserFacingFailureReason(error: unknown, fallback: string): string {
   const shortMessage = isRecord(error) ? readString(error['shortMessage']) : null;
+  if (shortMessage === 'Execution reverted for an unknown reason.') {
+    return 'Hidden swap execution reverted during gas estimation before submission. No transaction was sent; try a larger amount or a different route.';
+  }
   if (shortMessage) {
     return shortMessage;
   }
 
-  return error instanceof Error ? error.message : fallback;
+  if (error instanceof Error) {
+    return error.message.includes('Estimate Gas Arguments')
+      ? 'Hidden swap execution reverted during gas estimation before submission. No transaction was sent; try a larger amount or a different route.'
+      : error.message;
+  }
+
+  return fallback;
 }
 
 function readHexAddress(value: unknown): `0x${string}` | null {
