@@ -640,6 +640,9 @@ async function main() {
   const explicitPortfolioManagerWalletId = readString(
     process.env.WALLET_QA_PORTFOLIO_MANAGER_OWS_WALLET_ID,
   );
+  const explicitPortfolioManagerOcaExecutorWalletId = readString(
+    process.env.WALLET_QA_PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_ID,
+  );
   const explicitEmberLendingWalletId = readString(
     process.env.WALLET_QA_EMBER_LENDING_OWS_WALLET_ID,
   );
@@ -660,6 +663,10 @@ async function main() {
     portfolioManagerWalletName:
       explicitPortfolioManagerWalletId ??
       readString(portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME),
+    portfolioManagerOcaExecutorWalletName:
+      explicitPortfolioManagerOcaExecutorWalletId ??
+      readString(portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME) ??
+      undefined,
     emberLendingWalletName:
       explicitEmberLendingWalletId ??
       readString(emberLendingBaseEnv.EMBER_LENDING_OWS_WALLET_NAME),
@@ -765,6 +772,17 @@ async function main() {
         : resolvedWalletIds.portfolioManagerWalletId
         ? {
             PORTFOLIO_MANAGER_OWS_WALLET_NAME: resolvedWalletIds.portfolioManagerWalletId,
+          }
+        : {}),
+      ...(explicitPortfolioManagerOcaExecutorWalletId
+        ? {
+            PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME:
+              explicitPortfolioManagerOcaExecutorWalletId,
+          }
+        : resolvedWalletIds.portfolioManagerOcaExecutorWalletId
+        ? {
+            PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME:
+              resolvedWalletIds.portfolioManagerOcaExecutorWalletId,
           }
         : {}),
     },
