@@ -898,6 +898,9 @@ describe('agent-runtime integration', () => {
     ).toBe(true);
     expect(observedDomainCommandToolDescription).toContain('Available commands: hire (Start onboarding.)');
     expect(observedDomainCommandToolDescription).toContain('complete_onboarding (Finish onboarding.)');
+    expect(observedDomainCommandToolDescription).toContain(
+      'Put any structured command payload in inputJson as a JSON object string',
+    );
     expect(observedDomainCommandNames).toEqual([
       'hire',
       'continue_onboarding',

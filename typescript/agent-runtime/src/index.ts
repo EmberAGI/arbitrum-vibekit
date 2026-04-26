@@ -340,6 +340,8 @@ function buildDomainCommandToolDescription(lifecycle: AgentRuntimeDomainLifecycl
 
   return [
     'Execute one of the declared domain lifecycle commands through the runtime-owned normalized operation pipeline.',
+    'Put any structured command payload in inputJson as a JSON object string.',
+    'Do not rely on the default empty object when the selected command description names required fields.',
     `Available commands: ${commandList}.`,
   ].join(' ');
 }
@@ -2643,7 +2645,11 @@ export async function createAgentRuntime<TState = unknown>(
           description: buildDomainCommandToolDescription(domain.lifecycle),
           parameters: Type.Object({
             name: buildDomainCommandNameSchema(domain.lifecycle),
-            inputJson: Type.String({ default: '{}' }),
+            inputJson: Type.String({
+              description:
+                'JSON object string for the selected command payload. Include all fields required by the command description.',
+              default: '{}',
+            }),
           }) as AgentRuntimeTool['parameters'],
           execute: async (_toolCallId, args) => {
             const toolArgs = parseDomainCommandToolArgs(args);
