@@ -152,6 +152,26 @@ function createSwapResponse() {
   };
 }
 
+function createWethToUsdcSwapResponse() {
+  return {
+    fromToken: createTokens()[1]!,
+    toToken: createTokens()[0]!,
+    exactFromAmount: '894102247158860',
+    displayFromAmount: '0.00089410224715886',
+    exactToAmount: '3100000',
+    displayToAmount: '3.10',
+    transactions: [
+      {
+        type: 'EVM_TX',
+        to: '0x00000000000000000000000000000000000000d1',
+        value: '0',
+        data: '0xabcdef',
+        chainId: '42161',
+      },
+    ],
+  };
+}
+
 function createCandidatePlanResponse() {
   return {
     jsonrpc: '2.0',
@@ -327,6 +347,111 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
         transaction_plan_id: 'txplan-hidden-swap-001',
       },
     });
+  });
+
+  it('normalizes decimal exact-in token amounts to OCA base-unit amounts', async () => {
+    const onchainActionsClient = {
+      listTokens: vi.fn(async () => createTokens()),
+      createSwap: vi.fn(async () => createWethToUsdcSwapResponse()),
+    };
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async (request: unknown) => {
+        const jsonRpcRequest =
+          typeof request === 'object' && request !== null
+            ? (request as { method?: string })
+            : {};
+
+        if (jsonRpcRequest.method === 'subagent.createTransaction.v1') {
+          return createCandidatePlanResponse();
+        }
+
+        if (jsonRpcRequest.method === 'subagent.requestExecution.v1') {
+          return {
+            jsonrpc: '2.0',
+            id: 'shared-ember-thread-1-request-hidden-oca-swap-execution',
+            result: {
+              protocol_version: 'v1',
+              revision: 5,
+              committed_event_ids: ['evt-hidden-swap-execution-1'],
+              execution_result: {
+                phase: 'completed',
+                transaction_plan_id: 'txplan-hidden-swap-001',
+                request_id: 'req-hidden-swap-001',
+                execution: {
+                  execution_id: 'exec-hidden-swap-001',
+                  status: 'confirmed',
+                  transaction_hash: '0xswapconfirmed',
+                  successor_unit_ids: [],
+                },
+              },
+            },
+          };
+        }
+
+        throw new Error(`unexpected method: ${String(jsonRpcRequest.method)}`);
+      }),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient,
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+    });
+
+    await expect(
+      executor.executeSpotSwap({
+        threadId: 'thread-1',
+        currentRevision: 3,
+        input: {
+          idempotencyKey: 'idem-hidden-swap-001',
+          rootedWalletContextId: 'rwc-user-spot-001',
+          walletAddress: '0x00000000000000000000000000000000000000a1',
+          amount: '0.00089410224715886',
+          amountType: 'exactIn',
+          fromChain: 'arbitrum',
+          toChain: 'arbitrum',
+          fromToken: 'WETH',
+          toToken: 'USDC',
+        },
+      }),
+    ).resolves.toMatchObject({
+      status: 'completed',
+      swapSummary: {
+        amount: '894102247158860',
+        fromToken: 'WETH',
+        toToken: 'USDC',
+      },
+    });
+
+    expect(onchainActionsClient.createSwap).toHaveBeenCalledWith({
+      walletAddress: '0x00000000000000000000000000000000000000a1',
+      amount: '894102247158860',
+      amountType: 'exactIn',
+      fromTokenUid: {
+        chainId: '42161',
+        address: '0x82af49447d8a07e3bd95bd0d56f35241523fbab1',
+      },
+      toTokenUid: {
+        chainId: '42161',
+        address: '0xaf88d065e77c8cc2239327c5edb3a432268e5831',
+      },
+    });
+    expect(protocolHost.handleJsonRpc).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: 'subagent.createTransaction.v1',
+        params: expect.objectContaining({
+          request: expect.objectContaining({
+            asset: 'WETH',
+            quantity: {
+              kind: 'exact',
+              value: '894102247158860',
+            },
+          }),
+        }),
+      }),
+    );
   });
 
   it('retries a stale Shared Ember expected revision once with the current hidden executor revision', async () => {

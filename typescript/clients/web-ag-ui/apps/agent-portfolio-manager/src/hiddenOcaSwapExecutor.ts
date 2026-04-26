@@ -9,7 +9,15 @@ import {
 import { DelegationManager } from '@metamask/delegation-toolkit/contracts';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedEvmTransaction } from 'agent-runtime/internal';
-import { createPublicClient, http, isAddress, isAddressEqual, isHex, serializeTransaction } from 'viem';
+import {
+  createPublicClient,
+  http,
+  isAddress,
+  isAddressEqual,
+  isHex,
+  parseUnits,
+  serializeTransaction,
+} from 'viem';
 import { arbitrum, mainnet } from 'viem/chains';
 
 import {
@@ -472,6 +480,31 @@ function buildInputOnlySwapSummary(
     displayFromAmount: '',
     displayToAmount: '',
   };
+}
+
+function normalizeSpotSwapAmount(input: {
+  request: HiddenOcaSpotSwapInput;
+  fromToken: OnchainActionsToken;
+  toToken: OnchainActionsToken;
+}): string {
+  const amount = input.request.amount.trim();
+  if (/^[0-9]+$/u.test(amount)) {
+    return amount;
+  }
+
+  if (!/^[0-9]+(?:\.[0-9]+)?$/u.test(amount)) {
+    throw new Error('Hidden OCA spot swap amount must be a positive decimal or base-unit integer string.');
+  }
+
+  const token = input.request.amountType === 'exactIn' ? input.fromToken : input.toToken;
+  const decimals = token.decimals;
+  if (typeof decimals !== 'number' || !Number.isInteger(decimals) || decimals < 0) {
+    throw new Error(
+      `Hidden OCA spot swap decimal amount requires token decimals for ${token.symbol}.`,
+    );
+  }
+
+  return parseUnits(amount, decimals).toString();
 }
 
 function normalizeChainIdForComparison(chainId: string): string {
@@ -1408,6 +1441,7 @@ export function createHiddenOcaSpotSwapExecutor(
       }
 
       let fromToken: OnchainActionsToken;
+      let normalizedRequest: HiddenOcaSpotSwapInput;
       let swapResponse: OnchainActionsSwapResponse;
       let preparedPayload: PreparedOcaSwapPayload;
       try {
@@ -1426,14 +1460,24 @@ export function createHiddenOcaSpotSwapExecutor(
           chainId: toChainId,
           token: request.toToken,
         });
+        normalizedRequest = {
+          ...request,
+          amount: normalizeSpotSwapAmount({
+            request,
+            fromToken,
+            toToken,
+          }),
+        };
         swapResponse = await onchainActionsClient.createSwap({
-          walletAddress: request.walletAddress,
-          amount: request.amount,
-          amountType: request.amountType,
+          walletAddress: normalizedRequest.walletAddress,
+          amount: normalizedRequest.amount,
+          amountType: normalizedRequest.amountType,
           fromTokenUid: fromToken.tokenUid,
           toTokenUid: toToken.tokenUid,
-          ...(request.slippageTolerance ? { slippageTolerance: request.slippageTolerance } : {}),
-          ...(request.expiration ? { expiration: request.expiration } : {}),
+          ...(normalizedRequest.slippageTolerance
+            ? { slippageTolerance: normalizedRequest.slippageTolerance }
+            : {}),
+          ...(normalizedRequest.expiration ? { expiration: normalizedRequest.expiration } : {}),
         });
         preparedPayload = buildPreparedOcaSwapPayload({
           requestChainId: fromChainId,
@@ -1459,8 +1503,8 @@ export function createHiddenOcaSpotSwapExecutor(
             threadId,
             idempotencyKey,
             expectedRevision,
-            rootedWalletContextId: request.rootedWalletContextId,
-            request,
+            rootedWalletContextId: normalizedRequest.rootedWalletContextId,
+            request: normalizedRequest,
             swapResponse,
             preparedPayload,
             fromToken,
@@ -1487,7 +1531,7 @@ export function createHiddenOcaSpotSwapExecutor(
         resultIdempotencyKey: idempotencyKey,
         currentRevision: readResultRevision(createResponse),
         transactionPlanId,
-        request,
+        request: normalizedRequest,
         swapResponse,
         preparedPayload,
       });

@@ -94,6 +94,15 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(config.agentOptions?.initialState).toMatchObject({
       thinkingLevel: 'low',
     });
+    const spotSwapCommand = config.domain?.lifecycle.commands.find(
+      (command) => command.name === 'dispatch_spot_swap',
+    );
+    expect(spotSwapCommand?.description).toContain('inputJson');
+    expect(spotSwapCommand?.description).toContain('walletAddress');
+    expect(spotSwapCommand?.description).toContain('amountType');
+    expect(spotSwapCommand?.description).toContain('fromChain');
+    expect(spotSwapCommand?.description).toContain('toToken');
+    expect(spotSwapCommand?.description).toContain('base-unit');
     expect(config.agentOptions?.getApiKey?.(undefined as never)).toBe('test-openrouter-key');
     expect(
       await config.domain?.systemContext?.({

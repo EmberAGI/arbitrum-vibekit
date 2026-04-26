@@ -818,6 +818,14 @@ const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-s
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
 const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND = 'dispatch_spot_swap';
+const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
+  'Dispatch a structured spot swap through the portfolio-manager owned hidden Onchain Actions executor.',
+  'When using this command, put a JSON object string in inputJson with required fields walletAddress, amount, amountType, fromChain, toChain, fromToken, and toToken.',
+  'Optional fields are slippageTolerance, expiration, idempotencyKey, and rootedWalletContextId.',
+  'amount should be a base-unit integer string; decimal token-unit strings are accepted only when token decimals are known.',
+  'amountType must be "exactIn" or "exactOut"; for requests like "half my WETH" or "$3 of WETH", infer the token amount from current portfolio state when possible before dispatching.',
+  'Example inputJson: {"walletAddress":"0x...","amount":"894102247158860","amountType":"exactIn","fromChain":"arbitrum","toChain":"arbitrum","fromToken":"WETH","toToken":"USDC"}.',
+].join(' ');
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
   'portfolio-manager-swap-reservation-conflict-request';
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE =
@@ -2748,8 +2756,7 @@ export function createPortfolioManagerDomain(
         },
         {
           name: PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND,
-          description:
-            'Dispatch a structured spot swap through the portfolio-manager owned hidden Onchain Actions executor.',
+          description: PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION,
         },
         {
           name: 'complete_rooted_bootstrap_from_user_signing',
