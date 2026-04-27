@@ -15,9 +15,7 @@ describe('pre-app prototype pages', () => {
   it('renders a calm home instead of redirecting directly to agents', () => {
     const html = renderToStaticMarkup(React.createElement(HomePage));
 
-    expect(html).toContain('Make the wallet work before you sell.');
-    expect(html).toContain('Make');
-    expect(html).toContain('Save');
+    expect(html).toContain('A quiet place before the agents start.');
     expect(html).toContain('href="/sign-up"');
     expect(html).toContain('Skip to agents');
   });
@@ -25,9 +23,8 @@ describe('pre-app prototype pages', () => {
   it('renders sign up wallet analysis before onboarding', () => {
     const html = renderToStaticMarkup(React.createElement(SignUpPage));
 
-    expect(html).toContain('Money in, money protected');
+    expect(html).toContain('Wallet sign up prototype');
     expect(html).toContain('Wallet read');
-    expect(html).toContain('First savings angle');
     expect(html).toContain('Continue');
   });
 
@@ -40,12 +37,9 @@ describe('pre-app prototype pages', () => {
       }),
     );
 
-    expect(shapes.map((shape) => shape.title)).toEqual([
-      'Yield and preserve',
-      'Borrow and compound',
-    ]);
-    expect(html).toContain('Choose how your wallet starts making money.');
-    expect(html).toContain('Use this money plan');
+    expect(shapes.map((shape) => shape.title)).toEqual(['Steady carry', 'Barbell growth']);
+    expect(html).toContain('Pick the default posture.');
+    expect(html).toContain('Use this default');
     expect(html).toContain('/hire-agents/agent-portfolio-manager');
   });
 

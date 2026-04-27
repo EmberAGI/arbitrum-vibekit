@@ -43,11 +43,11 @@ export function analyzeMockWallet(walletAddress: string): WalletAnalysis {
     activityLevel,
     detectedProtocols,
     notes: [
-      `${stableShare}% of the visible balance can be screened for lending yield.`,
-      `${volatileShare}% can stay exposed while lending helps reduce forced selling.`,
+      `${stableShare}% of the visible balance reads as stable or cash-like.`,
+      `${volatileShare}% is exposed to directional assets or protocol positions.`,
       activityLevel === 'quiet'
-        ? 'Quiet history suggests a conservative yield-first default can still improve cash drag.'
-        : 'Active history suggests Ember can save execution cost by staging actions instead of reacting trade by trade.',
+        ? 'Recent history looks measured, with fewer rotation events.'
+        : 'Recent history shows enough movement to justify an active default.',
     ],
   };
 }
@@ -64,8 +64,8 @@ export function recommendMockPortfolioShapes(
   return [
     {
       id: 'steady-carry',
-      title: 'Yield and preserve',
-      posture: 'Put idle capital to work and keep long-term winners off the sell list.',
+      title: 'Steady carry',
+      posture: 'Keeps the account calm while putting idle stablecoins to work.',
       allocation: [
         { label: 'Reserve', percent: reserve },
         { label: 'Aave lending', percent: lending },
@@ -73,12 +73,12 @@ export function recommendMockPortfolioShapes(
         { label: 'Opportunistic lanes', percent: opportunistic },
       ],
       defaultMandate:
-        'Default to lending-first automation: earn on stables, borrow cautiously, and avoid selling unless the plan says to.',
+        'Default to lending-first automation with conservative health-factor limits.',
     },
     {
       id: 'barbell-growth',
-      title: 'Borrow and compound',
-      posture: 'Keep conviction exposure while using lending liquidity to fund the next move.',
+      title: 'Barbell growth',
+      posture: 'Pairs a visible reserve with higher conviction directional lanes.',
       allocation: [
         { label: 'Reserve', percent: Math.max(10, reserve - 6) },
         { label: 'Aave lending', percent: Math.max(20, lending - 4) },
@@ -86,7 +86,7 @@ export function recommendMockPortfolioShapes(
         { label: 'Tactical swaps', percent: Math.max(4, opportunistic) },
       ],
       defaultMandate:
-        'Default to Portfolio Agent supervision: use lending to unlock liquidity, then stage swaps only when they improve the net outcome.',
+        'Default to Portfolio Agent supervision with swap and lending lanes staged for approval.',
     },
   ];
 }
