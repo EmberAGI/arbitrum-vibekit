@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Activity, ArrowRight, WalletCards } from 'lucide-react';
+import { Activity, ArrowRight, BadgeDollarSign, ShieldCheck, WalletCards } from 'lucide-react';
 import { analyzeMockWallet, normalizePrototypeWallet } from '@/prototypes/preAppMockBackend';
 
 export function PreAppSignupPrototype() {
@@ -22,15 +23,27 @@ export function PreAppSignupPrototype() {
           </Link>
           <div className="space-y-5">
             <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#9c6b4c]">
-              Wallet sign up prototype
+              Money in, money protected
             </p>
             <h1 className="max-w-[11ch] text-4xl font-semibold leading-none tracking-normal text-[#241813] md:text-6xl">
-              Start with what is already in the wallet.
+              Find the yield hiding in plain sight.
             </h1>
             <p className="max-w-[58ch] text-base leading-7 text-[#6d5948]">
-              Connect or paste a wallet, let Ember read the visible balances and recent
-              history, then choose how assertive the first portfolio default should be.
+              Ember looks at balances and behavior, then shows where the wallet can earn
+              more and where lending can protect upside by reducing the need to sell.
             </p>
+            <div className="grid max-w-xl gap-3 sm:grid-cols-2">
+              <SalesPoint
+                icon={<BadgeDollarSign className="h-4 w-4" aria-hidden="true" />}
+                title="Make more"
+                copy="Move idle stable exposure toward lending yield instead of letting it sit."
+              />
+              <SalesPoint
+                icon={<ShieldCheck className="h-4 w-4" aria-hidden="true" />}
+                title="Save more"
+                copy="Avoid selling assets just to free liquidity when borrowing is a better first move."
+              />
+            </div>
           </div>
           <label className="block max-w-xl space-y-2">
             <span className="text-sm font-medium text-[#3f2a20]">Wallet address</span>
@@ -50,6 +63,9 @@ export function PreAppSignupPrototype() {
           <div className="mb-7 flex items-center justify-between gap-4">
             <div>
               <p className="text-sm font-medium text-[#7a6655]">Wallet read</p>
+              <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#9c6b4c]">
+                Mock profit scan
+              </p>
               <p className="mt-1 font-mono text-sm text-[#241813]">{analysis.walletAddress}</p>
             </div>
             <WalletCards className="h-6 w-6 text-[#fd6731]" aria-hidden="true" />
@@ -58,6 +74,13 @@ export function PreAppSignupPrototype() {
             <Metric label="Stable" value={`${analysis.stableShare}%`} />
             <Metric label="Volatile" value={`${analysis.volatileShare}%`} />
             <Metric label="Activity" value={analysis.activityLevel} />
+          </div>
+          <div className="mt-4 rounded-lg border border-[#f2c7a9] bg-[#fff2e9] p-3">
+            <p className="text-sm font-semibold text-[#241813]">First savings angle</p>
+            <p className="mt-1 text-sm leading-6 text-[#5c4334]">
+              If you need spendable liquidity, borrowing alongside productive assets can
+              avoid a forced sale. Tax treatment depends on the asset and jurisdiction.
+            </p>
           </div>
           <div className="mt-7 space-y-3">
             {analysis.notes.map((note) => (
@@ -87,6 +110,18 @@ export function PreAppSignupPrototype() {
         </div>
       </div>
     </section>
+  );
+}
+
+function SalesPoint(props: { icon: ReactNode; title: string; copy: string }) {
+  return (
+    <div className="rounded-lg border border-[#ead8c5] bg-[#fffaf4] p-3">
+      <div className="flex items-center gap-2 text-[#fd6731]">
+        {props.icon}
+        <p className="text-sm font-semibold text-[#241813]">{props.title}</p>
+      </div>
+      <p className="mt-2 text-sm leading-5 text-[#6d5948]">{props.copy}</p>
+    </div>
   );
 }
 

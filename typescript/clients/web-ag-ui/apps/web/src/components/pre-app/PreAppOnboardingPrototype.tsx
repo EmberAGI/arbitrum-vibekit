@@ -11,9 +11,9 @@ import {
 } from '@/prototypes/preAppMockBackend';
 
 const RISK_OPTIONS: Array<{ id: RiskAppetite; label: string; copy: string }> = [
-  { id: 'resting', label: 'Resting', copy: 'Protect cash and avoid noisy rotation.' },
-  { id: 'balanced', label: 'Balanced', copy: 'Earn yield while keeping room for conviction.' },
-  { id: 'bullish', label: 'Bullish', copy: 'Lean into upside with tighter supervision.' },
+  { id: 'resting', label: 'Resting', copy: 'Earn on idle assets and keep liquidity close.' },
+  { id: 'balanced', label: 'Balanced', copy: 'Push yield while preserving winners with lending.' },
+  { id: 'bullish', label: 'Bullish', copy: 'Keep upside, borrow for flexibility, and chase carry.' },
 ];
 
 export function PreAppOnboardingPrototype(props: { walletAddress: string }) {
@@ -31,11 +31,15 @@ export function PreAppOnboardingPrototype(props: { walletAddress: string }) {
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-[#9c6b4c]">
-            Onboarding prototype
+            Profit setup
           </p>
           <h1 className="mt-3 max-w-[13ch] text-4xl font-semibold leading-none tracking-normal text-[#241813] md:text-6xl">
-            Pick the default posture.
+            Choose how your wallet starts making money.
           </h1>
+          <p className="mt-4 max-w-[64ch] text-base leading-7 text-[#6d5948]">
+            Ember pairs yield with lending so you can fund moves without immediately
+            dumping assets you still want to own.
+          </p>
         </div>
         <Link
           href="/sign-up"
@@ -51,7 +55,7 @@ export function PreAppOnboardingPrototype(props: { walletAddress: string }) {
             <SlidersHorizontal className="h-5 w-5 text-[#fd6731]" aria-hidden="true" />
             <div>
               <p className="text-sm font-semibold text-[#241813]">Risk appetite</p>
-              <p className="text-xs text-[#7a6655]">This combines with the wallet read.</p>
+              <p className="text-xs text-[#7a6655]">This drives yield, borrow room, and reserve size.</p>
             </div>
           </div>
           <div className="space-y-2">
@@ -78,6 +82,15 @@ export function PreAppOnboardingPrototype(props: { walletAddress: string }) {
             <p className="mt-2 text-sm leading-6 text-[#4d392d]">
               {analysis.stableShare}% stable, {analysis.volatileShare}% volatile,{' '}
               {analysis.activityLevel} activity.
+            </p>
+          </div>
+          <div className="rounded-lg border border-[#f2c7a9] bg-[#fff2e9] p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#9c6b4c]">
+              Why lending matters
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[#4d392d]">
+              Selling can create a taxable disposition. A borrow-first plan may preserve
+              exposure while unlocking liquidity, subject to personal tax rules.
             </p>
           </div>
         </aside>
@@ -125,8 +138,12 @@ export function PreAppOnboardingPrototype(props: { walletAddress: string }) {
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[1.25rem] border border-[#dfc9b4] bg-[#241813] p-5 text-white">
         <div>
-          <p className="text-sm text-white/70">Selected default</p>
+          <p className="text-sm text-white/70">Selected money plan</p>
           <p className="mt-1 text-lg font-semibold">{selectedShape?.title}</p>
+          <p className="mt-1 max-w-[62ch] text-sm leading-6 text-white/75">
+            Start here to earn on idle capital and avoid unnecessary asset sales when
+            lending can do the job.
+          </p>
           <p className="mt-1 max-w-[68ch] text-xs leading-5 text-white/55">
             {PRE_APP_PROTOTYPE_BACKEND_RULE}
           </p>
@@ -135,7 +152,7 @@ export function PreAppOnboardingPrototype(props: { walletAddress: string }) {
           href="/hire-agents/agent-portfolio-manager?__uiState=onboarding&__fixture=managed&tab=chat"
           className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#fd6731] px-4 text-sm font-semibold text-white transition hover:bg-[#ee5d28] active:translate-y-px"
         >
-          Use this default
+          Use this money plan
           <ArrowRight className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
