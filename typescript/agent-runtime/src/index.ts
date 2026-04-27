@@ -35,6 +35,8 @@ import {
   buildPersistInterruptCheckpointStatements,
   buildPersistThreadStateStatements,
   buildPiRuntimeStableUuid,
+  buildStartAutomationExecutionStatements,
+  buildTimeoutAutomationExecutionStatements,
   ensurePiRuntimePostgresReady as ensurePiRuntimePostgresReadyInternal,
   executePostgresStatements,
   recoverDueAutomations,
@@ -291,7 +293,13 @@ type AgentRuntimeSessionStore = {
   ) => PiRuntimeGatewaySession;
 };
 
-type AgentRuntimeAutomationStatus = 'scheduled' | 'running' | 'completed' | 'failed' | 'canceled';
+type AgentRuntimeAutomationStatus =
+  | 'scheduled'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'timed_out'
+  | 'canceled';
 
 type AgentRuntimeAutomationRecord = {
   automationId: string;
@@ -727,6 +735,7 @@ function mapAutomationStatusToExecutionStatus(
     case 'canceled':
       return 'completed';
     case 'failed':
+    case 'timed_out':
       return 'failed';
   }
 }
@@ -819,6 +828,10 @@ function inferAutomationCommand(params: {
 
 function coerceSchedule(schedule: unknown, fallback: Record<string, unknown>): Record<string, unknown> {
   return typeof schedule === 'object' && schedule !== null ? (schedule as Record<string, unknown>) : fallback;
+}
+
+function readPositiveFiniteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function getScheduleMinutes(schedule: Record<string, unknown>): number {
@@ -2517,26 +2530,58 @@ export async function createAgentRuntime<TState = unknown>(
         };
         const threadId = readCurrentThreadId();
         const limit = Math.max(1, Math.min(toolArgs.limit ?? 20, 50));
-        const persistedAutomations = (await loadInspectionState()).automations
+        const inspectionState = await loadInspectionState();
+        const latestRunByAutomation = new Map<
+          string,
+          {
+            status: string;
+            completedAt: Date | null;
+            scheduledAt: Date;
+            startedAt: Date | null;
+          }
+        >();
+        for (const run of inspectionState.automationRuns) {
+          if (run.status === 'scheduled') {
+            continue;
+          }
+
+          const existing = latestRunByAutomation.get(run.automationId);
+          const runTime = run.completedAt ?? run.startedAt ?? run.scheduledAt;
+          const existingTime = existing
+            ? existing.completedAt ?? existing.startedAt ?? existing.scheduledAt
+            : null;
+          if (!existing || runTime.getTime() > existingTime!.getTime()) {
+            latestRunByAutomation.set(run.automationId, {
+              status: run.status,
+              completedAt: run.completedAt,
+              scheduledAt: run.scheduledAt,
+              startedAt: run.startedAt,
+            });
+          }
+        }
+        const persistedAutomations = inspectionState.automations
           .filter(
             (automation) =>
               automation.threadId === buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId,
           )
-          .map((automation) => ({
-            id: automation.automationId,
-            title:
-              typeof automation.schedulePayload.title === 'string'
-                ? automation.schedulePayload.title
-                : automation.commandName,
-            status: automation.nextRunAt === null ? 'completed' : automation.suspended ? 'canceled' : 'active',
-            schedule: coerceSchedule(automation.schedulePayload.schedule, {
-              kind: 'every',
-              intervalMinutes: automation.schedulePayload.minutes ?? 5,
-            }),
-            nextRunAt: automation.nextRunAt?.toISOString() ?? null,
-            lastRunAt: null,
-            lastRunStatus: null,
-          }));
+          .map((automation) => {
+            const latestRun = latestRunByAutomation.get(automation.automationId);
+            return {
+              id: automation.automationId,
+              title:
+                typeof automation.schedulePayload.title === 'string'
+                  ? automation.schedulePayload.title
+                  : automation.commandName,
+              status: automation.nextRunAt === null ? 'completed' : automation.suspended ? 'canceled' : 'active',
+              schedule: coerceSchedule(automation.schedulePayload.schedule, {
+                kind: 'every',
+                intervalMinutes: automation.schedulePayload.minutes ?? 5,
+              }),
+              nextRunAt: automation.nextRunAt?.toISOString() ?? null,
+              lastRunAt: (latestRun?.completedAt ?? latestRun?.startedAt ?? latestRun?.scheduledAt)?.toISOString() ?? null,
+              lastRunStatus: latestRun?.status ?? null,
+            };
+          });
         const automations = (persistedAutomations.length > 0
           ? persistedAutomations
           : automationRegistry.getByThread(threadId).map((record) => ({
@@ -2963,32 +3008,125 @@ export async function createAgentRuntime<TState = unknown>(
 
       for (const automationId of dueAutomationIds) {
         const automation = inspectionState.automations.find((candidate) => candidate.automationId === automationId);
-        const scheduledRun = [...inspectionState.automationRuns]
-          .filter(
-            (run) =>
-              run.automationId === automationId && run.status === 'scheduled' && run.executionId !== null,
-          )
-          .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
-        if (!automation || !scheduledRun?.executionId) {
+        if (!automation) {
           continue;
         }
 
         const thread = threadById.get(automation.threadId);
-        const minutes =
-          typeof automation.schedulePayload.minutes === 'number' &&
-          Number.isFinite(automation.schedulePayload.minutes) &&
-          automation.schedulePayload.minutes > 0
-            ? automation.schedulePayload.minutes
-            : null;
+        const minutes = readPositiveFiniteNumber(automation.schedulePayload.minutes);
         if (!thread || minutes === null) {
           continue;
         }
 
         const currentNow = new Date(now());
         const nextRunAt = new Date(currentNow.getTime() + minutes * 60 * 1000);
+        const activeRun = [...inspectionState.automationRuns]
+          .filter(
+            (run) =>
+              run.automationId === automationId &&
+              run.executionId !== null &&
+              (run.status === 'running' || run.status === 'started'),
+          )
+          .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
+        if (activeRun?.executionId) {
+          const timeoutMinutes = readPositiveFiniteNumber(automation.schedulePayload.timeoutMinutes) ?? 15;
+          const activeStartedAt = activeRun.startedAt ?? activeRun.scheduledAt;
+          const timedOut = currentNow.getTime() - activeStartedAt.getTime() >= timeoutMinutes * 60 * 1000;
+          if (!timedOut) {
+            continue;
+          }
+
+          const timeoutDetail = `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`;
+          const previousSession = await hydrateThreadSession(thread.threadKey);
+          await postgres.executeStatements(
+            resolvedDatabaseUrl,
+            buildTimeoutAutomationExecutionStatements({
+              automationId,
+              currentRunId: activeRun.runId,
+              currentExecutionId: activeRun.executionId,
+              nextRunId: buildPiRuntimeStableUuid(
+                'automation-run',
+                `agent-runtime:${automationId}:run:${currentNow.toISOString()}`,
+              ),
+              nextExecutionId: buildPiRuntimeStableUuid(
+                'execution',
+                `agent-runtime:${automationId}:execution:${currentNow.toISOString()}`,
+              ),
+              threadId: automation.threadId,
+              commandName: automation.commandName,
+              schedulePayload: automation.schedulePayload,
+              eventId: buildPiRuntimeStableUuid(
+                'execution-event',
+                `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+              ),
+              activityId: buildPiRuntimeStableUuid(
+                'activity',
+                `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+              ),
+              now: currentNow,
+              nextRunAt: currentNow,
+              leaseExpiresAt: currentNow,
+              timeoutDetail,
+            }),
+          );
+
+          const timeoutSession = applyAutomationStatusUpdate({
+            sessionStore,
+            threadId: thread.threadKey,
+            artifactId: buildPiRuntimeStableUuid(
+              'artifact',
+              `agent-runtime:${thread.threadKey}:automation-artifact`,
+            ),
+            automationId,
+            executionId: activeRun.executionId,
+            activityRunId: activeRun.runId,
+            status: 'timed_out',
+            command: automation.commandName,
+            minutes,
+            detail: timeoutDetail,
+          });
+          await persistSessionSnapshot(thread.threadKey, timeoutSession);
+          await publishSessionUpdate({
+            threadId: thread.threadKey,
+            previousSession,
+            nextSession: timeoutSession,
+            runId: activeRun.runId,
+          });
+          continue;
+        }
+
+        const scheduledRun = [...inspectionState.automationRuns]
+          .filter(
+            (run) =>
+              run.automationId === automationId && run.status === 'scheduled' && run.executionId !== null,
+          )
+          .sort((left, right) => left.scheduledAt.getTime() - right.scheduledAt.getTime())[0];
+        if (!scheduledRun?.executionId) {
+          continue;
+        }
+
         const artifactId = buildPiRuntimeStableUuid(
           'artifact',
           `agent-runtime:${thread.threadKey}:automation-artifact`,
+        );
+
+        await postgres.executeStatements(
+          resolvedDatabaseUrl,
+          buildStartAutomationExecutionStatements({
+            currentRunId: scheduledRun.runId,
+            currentExecutionId: scheduledRun.executionId,
+            threadId: automation.threadId,
+            automationId,
+            eventId: buildPiRuntimeStableUuid(
+              'execution-event',
+              `agent-runtime:${automationId}:running:${currentNow.toISOString()}`,
+            ),
+            activityId: buildPiRuntimeStableUuid(
+              'activity',
+              `agent-runtime:${automationId}:running:${currentNow.toISOString()}`,
+            ),
+            now: currentNow,
+          }),
         );
 
         const session = await hydrateThreadSession(thread.threadKey);

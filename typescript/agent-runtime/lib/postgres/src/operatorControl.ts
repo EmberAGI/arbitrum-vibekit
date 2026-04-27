@@ -49,7 +49,7 @@ export type PiAutomationRunRecord = {
   automationId: string;
   threadId: string;
   executionId: string | null;
-  status: 'scheduled' | 'started' | 'completed' | 'failed' | 'canceled';
+  status: 'scheduled' | 'started' | 'running' | 'completed' | 'failed' | 'timed_out' | 'canceled';
   scheduledAt: Date;
   startedAt: Date | null;
   completedAt: Date | null;

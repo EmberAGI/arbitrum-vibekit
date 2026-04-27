@@ -34,6 +34,8 @@ export {
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
   buildPersistThreadStateStatements,
+  buildStartAutomationExecutionStatements,
+  buildTimeoutAutomationExecutionStatements,
   type PiExecutionCheckpointStatus,
   type PostgresStatement,
 } from './transactions.js';

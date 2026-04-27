@@ -88,6 +88,13 @@ The domain owns:
 - projection assembly
 - structural contract enforcement
 
+Scheduled automation runs use the saved automation instruction as scheduled
+user input in an ephemeral runtime execution context. That context is linked to
+the root thread for projection, but it is not persisted as a normal
+user-visible `PiThread`. Durable scheduled-run truth belongs to
+`AutomationRun`, `PiExecution`, execution/activity history, summaries,
+artifacts, failures, timeout state, and outbox/dedupe references.
+
 If a domain integration needs to call an external service, the domain/config
 layer may delegate to an app-local adapter that returns semantic state,
 artifacts, interrupts, and status outputs. `agent-runtime` still owns runtime

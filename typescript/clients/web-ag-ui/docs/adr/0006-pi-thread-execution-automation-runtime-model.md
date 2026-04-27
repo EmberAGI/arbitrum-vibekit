@@ -47,6 +47,9 @@ The foundational runtime model is intentionally lower-level than any specific ag
 
 Additional rules:
 - Background/autonomous executions run in separate operational contexts linked back to the root thread.
+- Scheduled automation executions use ephemeral in-memory agent execution context for the saved instruction.
+- That scheduled-run context must not be persisted as a durable `PiThread` or exposed as a primary user-visible chat thread by default.
+- The durable scheduled-run contract is `AutomationRun` + `PiExecution` + execution/activity events, summaries, artifacts, failure/timeout detail, outbox/dedupe references, and root-thread projections.
 - The root thread receives projected summaries, visible status updates, and artifacts by default.
 - Raw internal execution/automation history is available only through explicit tools.
 - The root thread must expose one stable current-state artifact, one append-only activity artifact/log, and optional execution-specific artifacts.
@@ -74,6 +77,7 @@ Additional rules:
 
 - Separating thread, execution, automation definition, and automation firing responsibilities creates testable boundaries for persistence and retries.
 - Operational context separation keeps autonomous reasoning from polluting the user-visible chat thread.
+- Keeping scheduled-run prompts ephemeral avoids user-visible thread clutter while preserving durable auditability through run and execution records.
 - A stable root thread plus projected artifacts supports the chat-first UI while preserving rich background behavior.
 - A formal projection subsystem reduces drift across AG-UI, A2A, and future channel adapters.
 - Anchoring the model on `@mariozechner/pi-agent-core` + `@mariozechner/pi-ai` prevents the architecture from drifting into an imaginary Pi platform detached from the real `pi-mono` package seams.
@@ -87,6 +91,8 @@ Additional rules:
   - Rejected because it conflates durable user context with retryable execution state and creates transcript pollution.
 - Use one shared execution lane for chat turns and background autonomy:
   - Rejected because it creates unnecessary contention and weakens replay/inspection boundaries.
+- Persist every scheduled-run context as a normal durable `PiThread`:
+  - Rejected because scheduled-run prompts are operational execution context, not user-facing conversation containers.
 - Create a separate durable `Task` entity alongside `PiExecution` for the same execution:
   - Rejected because it would duplicate execution identity and create drift between domain state and A2A/UI projections.
 - Require exact LangGraph-style in-flight checkpoint resume:

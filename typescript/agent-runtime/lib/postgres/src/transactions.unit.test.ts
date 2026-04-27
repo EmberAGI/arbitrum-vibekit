@@ -8,6 +8,8 @@ import {
   buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
+  buildStartAutomationExecutionStatements,
+  buildTimeoutAutomationExecutionStatements,
 } from './index.js';
 
 describe('transactions', () => {
@@ -205,6 +207,37 @@ describe('transactions', () => {
     expect(statements[7]?.text).toContain('insert into pi_thread_activity');
   });
 
+  it('builds a durable automation running transition before invocation starts', () => {
+    const statements = buildStartAutomationExecutionStatements({
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      threadId: 'thread-1',
+      automationId: 'auto-1',
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:04:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_execution_events',
+      'pi_thread_activity',
+    ]);
+    expect(statements[0]?.values).toEqual([
+      'running',
+      new Date('2026-03-18T20:04:00.000Z'),
+      'run-1',
+    ]);
+    expect(statements[1]?.values).toEqual([
+      'working',
+      new Date('2026-03-18T20:04:00.000Z'),
+      'exec-1',
+    ]);
+    expect(statements[2]?.values[3]).toBe('automation-running');
+    expect(statements[3]?.values[3]).toBe('automation-running');
+  });
+
   it('builds failed automation execution boundaries while still scheduling the next run', () => {
     const statements = buildCompleteAutomationExecutionStatements({
       automationId: 'auto-1',
@@ -228,6 +261,41 @@ describe('transactions', () => {
     expect(statements[3]?.values[4]).toBe('scheduled');
     expect(statements[6]?.values[3]).toBe('automation-failed');
     expect(statements[7]?.values[3]).toBe('automation-failed');
+  });
+
+  it('builds timed-out automation execution boundaries while still scheduling the next run', () => {
+    const statements = buildTimeoutAutomationExecutionStatements({
+      automationId: 'auto-1',
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      nextRunId: 'run-2',
+      nextExecutionId: 'exec-2',
+      threadId: 'thread-1',
+      commandName: 'sync',
+      schedulePayload: { command: 'sync', minutes: 5 },
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:20:00.000Z'),
+      nextRunAt: new Date('2026-03-18T20:20:00.000Z'),
+      leaseExpiresAt: new Date('2026-03-18T20:20:00.000Z'),
+      timeoutDetail: 'Exceeded the 15 minute scheduled automation timeout.',
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_automations',
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_scheduler_leases',
+      'pi_execution_events',
+      'pi_thread_activity',
+    ]);
+    expect(statements[0]?.values[0]).toBe('timed_out');
+    expect(statements[1]?.values[0]).toBe('failed');
+    expect(statements[3]?.values[4]).toBe('scheduled');
+    expect(statements[6]?.values[3]).toBe('automation-timed-out');
+    expect(statements[7]?.values[3]).toBe('automation-timed-out');
   });
 
   it('builds the automation cancellation boundary across automation, run, execution, lease, event, and activity tables', () => {

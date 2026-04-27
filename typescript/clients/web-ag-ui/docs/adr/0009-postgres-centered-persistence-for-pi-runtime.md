@@ -47,7 +47,7 @@ Adopt a Postgres-centered hybrid persistence architecture for the Pi-backed runt
 
 Rules:
 - Postgres is the canonical system of record for:
-  - `PiThread`
+  - root user-visible `PiThread` records
   - `PiExecution`
   - `PiAutomation`
   - `AutomationRun`
@@ -59,6 +59,8 @@ Rules:
   - relational current-state records for canonical runtime entities
   - append-only execution/activity history where auditability or replay matters
 - Scheduling uses a DB-backed queue/lease model initially.
+- Scheduled automation run prompts execute in ephemeral runtime context and are not persisted as normal `PiThread` rows.
+- Scheduled-run durability is captured by `AutomationRun`, `PiExecution`, execution events, root-thread activity/projection, artifacts, failures, timeout state, and outbox/dedupe records.
 - Exactly-once-ish risky side effects use a durable outbox plus unique wallet/account + action-fingerprint constraints in Postgres.
 - Redis is not part of the initial persistence architecture.
 - SQLite is not the default backend, including for `npx` startup flows.
@@ -78,6 +80,7 @@ Expected implementation shape:
 - normalized tables for root entities and queue/outbox state
 - append-only execution/activity/event tables where history matters
 - transactional boundaries around automation firing, execution checkpoints, and side-effect intent persistence
+- explicit running, terminal, timeout, and reschedule transactions for automation-triggered executions
 
 ## Rationale
 
