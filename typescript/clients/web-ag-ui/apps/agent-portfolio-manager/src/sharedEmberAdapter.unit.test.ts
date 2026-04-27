@@ -107,10 +107,19 @@ type PortfolioManagerSetupInputFixture = {
       };
     };
   };
+  portfolioManagerMandate?: Record<string, unknown>;
 };
 
 type ManagedMandateFixture =
   PortfolioManagerSetupInputFixture['firstManagedMandate']['managedMandate'];
+
+function createPortfolioManagerMandatePayload() {
+  return {
+    betaExposureCapPct: 65,
+    minimumCashUsd: 5000,
+    riskBudgetBps: 1800,
+  } as const;
+}
 
 function createManagedLendingPolicy(
   overrides: Partial<ManagedMandateFixture['lending_policy']> = {},
@@ -3437,6 +3446,143 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('refreshes the persisted PM mandate projection from local lifecycle state', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-read-portfolio-state',
+        result: {
+          protocol_version: 'v1',
+          revision: 3,
+          portfolio_state: {
+            agent_id: 'portfolio-manager',
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+    const portfolioManagerMandate = createPortfolioManagerMandatePayload();
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'prehire',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          portfolioManagerMandate,
+        },
+        operation: {
+          source: 'tool',
+          name: 'refresh_portfolio_state',
+        },
+      }),
+    ).resolves.toMatchObject({
+      domainProjectionUpdate: {
+        portfolioManagerMandateEditor: {
+          ownerAgentId: 'agent-portfolio-manager',
+          targetAgentId: 'agent-portfolio-manager',
+          targetAgentRouteId: 'agent-portfolio-manager',
+          targetAgentKey: 'portfolio-manager-primary',
+          targetAgentTitle: 'Portfolio Manager Mandate',
+          mandateRef: 'mandate-portfolio-manager',
+          managedMandate: portfolioManagerMandate,
+          agentWallet: '0x00000000000000000000000000000000000000a1',
+          rootUserWallet: '0x00000000000000000000000000000000000000a1',
+          rootedWalletContextId: 'rwc-user-protocol-001',
+          reservation: null,
+        },
+      },
+    });
+  });
+
+  it('saves portfolio-manager mandate updates to local lifecycle state without Shared Ember', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+    const updatedPortfolioManagerMandate = {
+      ...createPortfolioManagerMandatePayload(),
+      minimumCashUsd: 6100,
+    };
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 12,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          portfolioManagerMandate: {
+            betaExposureCapPct: 50,
+            minimumCashUsd: 2500,
+            riskBudgetBps: 1400,
+          },
+        },
+        operation: {
+          source: 'command',
+          name: 'update_managed_mandate',
+          input: {
+            targetAgentId: 'agent-portfolio-manager',
+            managedMandate: updatedPortfolioManagerMandate,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 12,
+        portfolioManagerMandate: updatedPortfolioManagerMandate,
+      },
+      domainProjectionUpdate: {
+        portfolioManagerMandateEditor: {
+          ownerAgentId: 'agent-portfolio-manager',
+          targetAgentId: 'agent-portfolio-manager',
+          targetAgentRouteId: 'agent-portfolio-manager',
+          targetAgentKey: 'portfolio-manager-primary',
+          targetAgentTitle: 'Portfolio Manager Mandate',
+          mandateRef: 'mandate-portfolio-manager',
+          managedMandate: updatedPortfolioManagerMandate,
+          agentWallet: '0x00000000000000000000000000000000000000a1',
+          rootUserWallet: '0x00000000000000000000000000000000000000a1',
+          rootedWalletContextId: 'rwc-user-protocol-001',
+          reservation: null,
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage:
+            'Portfolio manager mandate updated for local execution and persisted in session state.',
+        },
+      },
+    });
+  });
+
   it('routes post-activation managed-mandate edits through the PM-owned protocol command and rehydrates live state', async () => {
     let managedAgentReadCount = 0;
     const protocolHost = {
@@ -4380,6 +4526,43 @@ describe('createPortfolioManagerDomain', () => {
         '            <min_health_factor>1.4</min_health_factor>',
         '          </risk_policy>',
         '        </lending_policy>',
+        '      </managed_mandate>',
+        '    </managed_agent>',
+        '  </managed_agent_mandates>',
+      ]),
+    );
+  });
+
+  it('uses portfolio-manager mandate state directly in system context hydration', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: {
+            root_delegation_id: 'root-a1',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          portfolioManagerMandate: createPortfolioManagerMandatePayload(),
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '  <managed_agent_mandates>',
+        '    <managed_agent agent_key="portfolio-manager-primary" agent_type="agent-portfolio-manager" approved="true" mandate_ref="mandate-portfolio-manager">',
+        '      <managed_mandate>',
+        '        <betaExposureCapPct>65</betaExposureCapPct>',
+        '        <minimumCashUsd>5000</minimumCashUsd>',
+        '        <riskBudgetBps>1800</riskBudgetBps>',
         '      </managed_mandate>',
         '    </managed_agent>',
         '  </managed_agent_mandates>',

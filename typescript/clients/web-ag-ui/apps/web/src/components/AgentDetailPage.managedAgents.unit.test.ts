@@ -64,6 +64,25 @@ function createManagedMandateEditorProjection(overrides: Record<string, unknown>
   };
 }
 
+function createPortfolioManagerMandateEditorProjection(overrides: Record<string, unknown> = {}) {
+  return {
+    portfolioManagerMandateEditor: {
+      ownerAgentId: 'agent-portfolio-manager',
+      targetAgentId: 'agent-portfolio-manager',
+      targetAgentRouteId: 'agent-portfolio-manager',
+      targetAgentKey: 'portfolio-manager-primary',
+      targetAgentTitle: 'Portfolio Manager Mandate',
+      mandateRef: 'mandate-portfolio-manager',
+      managedMandate: {
+        betaExposureCapPct: 60,
+        riskBudgetBps: 1500,
+        minimumCashUsd: 2500,
+      },
+      ...overrides,
+    },
+  };
+}
+
 function renderManagedAgentDetail(
   overrides: Partial<React.ComponentProps<typeof AgentDetailPage>>,
 ) {
@@ -319,7 +338,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Artifact: shared-ember-portfolio-state');
   });
 
-  it('renders only the shared managed-mandate workbench on the portfolio-manager detail page', () => {
+  it('renders only the portfolio manager mandate workbench on the portfolio-manager detail page', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-portfolio-manager',
@@ -344,25 +363,29 @@ describe('AgentDetailPage managed-agent affordances', () => {
         lifecycleState: {
           phase: 'active',
         } as never,
-        domainProjection: createManagedMandateEditorProjection(),
+        domainProjection: createPortfolioManagerMandateEditorProjection(),
       }),
     );
 
-    expect(html).toContain('Edit collateral policy');
-    expect(html).toContain('Edit allowed borrow assets');
+    expect(html).toContain('Portfolio manager mandate');
+    expect(html).toContain('Beta exposure cap (%)');
+    expect(html).toContain('Risk budget (bps)');
+    expect(html).toContain('Minimum cash reserve (USD)');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Settings and policies');
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).toContain('Save managed mandate');
+    expect(html).toContain('Save portfolio mandate');
     expect(html).not.toContain('Managed lending lane');
     expect(html).not.toContain('View lending agent');
     expect(html).not.toContain('lending.supply');
     expect(html.indexOf('Ember Portfolio Agent')).toBeLessThan(html.indexOf('Ember AI Team'));
     expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
-    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save managed mandate'));
-    expect(html.indexOf('Save managed mandate')).toBeLessThan(html.indexOf('Send message'));
+    expect(html).not.toContain('Edit collateral policy');
+    expect(html).not.toContain('Edit allowed borrow assets');
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save portfolio mandate'));
+    expect(html.indexOf('Save portfolio mandate')).toBeLessThan(html.indexOf('Send message'));
   });
 
   it('keeps managed lending lane details hidden while portfolio-manager onboarding is in progress', () => {
