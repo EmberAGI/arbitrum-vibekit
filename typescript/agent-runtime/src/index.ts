@@ -11,6 +11,7 @@ import {
   buildPiRuntimeDirectExecutionRecordIds as buildPiRuntimeDirectExecutionRecordIdsInternal,
   buildPiRuntimeGatewayConnectEvents as buildPiRuntimeGatewayConnectEventsInternal,
   buildPiRuntimeGatewayStateDeltaEvent as buildPiRuntimeGatewayStateDeltaEventInternal,
+  buildPiRuntimeGatewayStateRebaselineEvent as buildPiRuntimeGatewayStateRebaselineEventInternal,
   createCanonicalPiRuntimeGatewayControlPlane as createCanonicalPiRuntimeGatewayControlPlaneInternal,
   createPiRuntimeGatewayAgUiHandler as createPiRuntimeGatewayAgUiHandlerInternal,
   createPiRuntimeGatewayFoundation as createPiRuntimeGatewayFoundationInternal,
@@ -2735,7 +2736,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
 
       const nextSession = await runDomainOperation(request.threadId, operation);
-      const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+      const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEventInternal({
         previousSession: session,
         session: nextSession,
       });
@@ -2746,7 +2747,7 @@ export async function createAgentRuntime<TState = unknown>(
           threadId: request.threadId,
           runId: request.runId,
         },
-        ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+        ...(stateRebaselineEvent ? [stateRebaselineEvent] : []),
         {
           type: EventType.RUN_FINISHED,
           threadId: request.threadId,
@@ -2794,12 +2795,12 @@ export async function createAgentRuntime<TState = unknown>(
       );
       if (hasResume) {
         const resumedSession = await resumeInterruptedSession(request.threadId);
-        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+        const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEventInternal({
           previousSession: session,
           session: resumedSession,
         });
-        if (stateDeltaEvent) {
-          leadingEvents = [stateDeltaEvent];
+        if (stateRebaselineEvent) {
+          leadingEvents = [stateRebaselineEvent];
         }
       }
 
@@ -2808,7 +2809,7 @@ export async function createAgentRuntime<TState = unknown>(
       if (resumeOperation && domain?.handleOperation) {
         const previousSession = getSession(request.threadId);
         const nextSession = await runDomainOperation(request.threadId, resumeOperation);
-        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+        const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEventInternal({
           previousSession,
           session: nextSession,
         });
@@ -2821,7 +2822,7 @@ export async function createAgentRuntime<TState = unknown>(
                 threadId: request.threadId,
                 runId: request.runId,
               },
-              ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+              ...(stateRebaselineEvent ? [stateRebaselineEvent] : []),
               {
                 type: EventType.RUN_FINISHED,
                 threadId: request.threadId,

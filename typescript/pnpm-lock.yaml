@@ -329,6 +329,10 @@ importers:
     dependenciesMeta:
       agent-runtime-postgres:
         injected: false
+    devDependencies:
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
 
   agent-runtime/lib/postgres:
     dependencies:

@@ -521,6 +521,13 @@ function isStateDeltaEvent(event: GatewayEvent): event is StateDeltaEvent {
   );
 }
 
+function findStateSnapshotEvent(
+  events: readonly GatewayEvent[],
+  predicate: (event: StateSnapshotEvent) => boolean,
+): StateSnapshotEvent | undefined {
+  return events.filter(isStateSnapshotEvent).find(predicate);
+}
+
 function isMessagesSnapshotEvent(event: GatewayEvent): event is MessagesSnapshotEvent {
   return typeof event === 'object' && event !== null && 'messages' in event;
 }
@@ -888,7 +895,7 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const hireDelta = hireEvents.find(isStateDeltaEvent);
+    const hireSnapshot = hireEvents.find(isStateSnapshotEvent);
     expect(latestUserText).toBe('Please hire the agent.');
     expect(
       hasSystemPromptFragments(observedSystemPrompts, [
@@ -919,34 +926,20 @@ describe('agent-runtime integration', () => {
         content: 'Ready for a live runtime conversation.',
       },
     });
-    expect(hireDelta).toBeDefined();
-    expect(hireDelta!.delta).toEqual(
-      expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/phase',
-          value: 'onboarding',
-        },
-        {
-          op: 'add',
-          path: '/thread/lifecycle/onboardingStep',
-          value: 'operator-profile',
-        },
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/state',
-          value: 'input-required',
-        },
-        {
-          op: 'add',
-          path: '/projected/managedLifecycle',
-          value: {
-            phase: 'onboarding',
-            onboardingStep: 'operator-profile',
-          },
-        },
-      ]),
-    );
+    expect(hireSnapshot).toBeDefined();
+    expect(hireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'onboarding',
+      onboardingStep: 'operator-profile',
+    });
+    expect(hireSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'input-required',
+    });
+    expect(hireSnapshot!.snapshot.projected).toMatchObject({
+      managedLifecycle: {
+        phase: 'onboarding',
+        onboardingStep: 'operator-profile',
+      },
+    });
 
     expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('a2ui');
     expect(persistedThreads.get('thread-1')?.threadState).toHaveProperty('projectedState');
@@ -965,50 +958,29 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
-    const resolvedInterruptDelta = resumeDeltas.find((event) =>
-      event.delta.some(
-        (operation) =>
-          operation.op === 'replace' &&
-          operation.path === '/thread/artifacts/current/data/status' &&
-          operation.value === 'resolved',
-      ),
+    const resolvedInterruptSnapshot = findStateSnapshotEvent(
+      resumeEvents,
+      (event) => event.snapshot.thread.artifacts.current?.data?.status === 'resolved',
     );
-    const domainResumeDelta = resumeDeltas.find((event) =>
-      event.delta.some(
-        (operation) =>
-          operation.op === 'replace' &&
-          operation.path === '/thread/lifecycle/onboardingStep' &&
-          operation.value === 'delegation-note',
-      ),
+    const domainResumeSnapshot = findStateSnapshotEvent(
+      resumeEvents,
+      (event) => event.snapshot.thread.lifecycle?.onboardingStep === 'delegation-note',
     );
 
-    expect(resolvedInterruptDelta).toBeDefined();
-    expect(resolvedInterruptDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/task/taskStatus/state',
-      value: 'working',
+    expect(resolvedInterruptSnapshot).toBeDefined();
+    expect(resolvedInterruptSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'working',
     });
-    expect(domainResumeDelta).toBeDefined();
-    expect(domainResumeDelta!.delta).toEqual(
-      expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/onboardingStep',
-          value: 'delegation-note',
-        },
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/operatorNote',
-          value: 'safe window approved',
-        },
-        {
-          op: 'add',
-          path: '/projected/managedLifecycle/operatorNote',
-          value: 'safe window approved',
-        },
-      ]),
-    );
+    expect(domainResumeSnapshot).toBeDefined();
+    expect(domainResumeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      onboardingStep: 'delegation-note',
+      operatorNote: 'safe window approved',
+    });
+    expect(domainResumeSnapshot!.snapshot.projected).toMatchObject({
+      managedLifecycle: {
+        operatorNote: 'safe window approved',
+      },
+    });
 
     expect(persistedThreads.get('thread-1')?.threadState).not.toHaveProperty('a2ui');
 
@@ -1024,33 +996,21 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const completeDelta = completeEvents.find(isStateDeltaEvent);
+    const completeSnapshot = completeEvents.find(isStateSnapshotEvent);
 
-    expect(completeDelta).toBeDefined();
-    expect(completeDelta!.delta).toEqual(
-      expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/phase',
-          value: 'hired',
-        },
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/onboardingStep',
-          value: null,
-        },
-        {
-          op: 'replace',
-          path: '/projected/managedLifecycle/phase',
-          value: 'hired',
-        },
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/state',
-          value: 'completed',
-        },
-      ]),
-    );
+    expect(completeSnapshot).toBeDefined();
+    expect(completeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'hired',
+      onboardingStep: null,
+    });
+    expect(completeSnapshot!.snapshot.projected).toMatchObject({
+      managedLifecycle: {
+        phase: 'hired',
+      },
+    });
+    expect(completeSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'completed',
+    });
 
     const fireEvents = await collectEventSource(
       await runtime.service.run({
@@ -1064,23 +1024,17 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const fireDelta = fireEvents.find(isStateDeltaEvent);
+    const fireSnapshot = fireEvents.find(isStateSnapshotEvent);
 
-    expect(fireDelta).toBeDefined();
-    expect(fireDelta!.delta).toEqual(
-      expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/phase',
-          value: 'fired',
-        },
-        {
-          op: 'replace',
-          path: '/projected/managedLifecycle/phase',
-          value: 'fired',
-        },
-      ]),
-    );
+    expect(fireSnapshot).toBeDefined();
+    expect(fireSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'fired',
+    });
+    expect(fireSnapshot!.snapshot.projected).toMatchObject({
+      managedLifecycle: {
+        phase: 'fired',
+      },
+    });
   });
 
   it('keeps non-thread-surfaced interrupts canonical without mirroring them into transcript activity', async () => {
@@ -1231,40 +1185,23 @@ describe('agent-runtime integration', () => {
         },
       }),
     );
-    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
-    const domainResumeDelta = resumeDeltas.find((event) =>
-      event.delta.some(
-        (operation) =>
-          operation.op === 'replace' &&
-          operation.path === '/thread/lifecycle/onboardingStep' &&
-          operation.value === 'delegation-note',
-      ),
+    const domainResumeSnapshot = findStateSnapshotEvent(
+      resumeEvents,
+      (event) => event.snapshot.thread.lifecycle?.onboardingStep === 'delegation-note',
     );
 
-    expect(domainResumeDelta).toBeDefined();
-    expect(domainResumeDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/lifecycle/operatorNote',
-      value: 'safe window approved',
+    expect(domainResumeSnapshot).toBeDefined();
+    expect(domainResumeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      operatorNote: 'safe window approved',
     });
     expect(
-      resumeDeltas.some((event) =>
-        event.delta.some(
-          (operation) =>
-            operation.path.startsWith('/thread/activity/events/') &&
-            typeof operation.value === 'object' &&
-            operation.value !== null &&
-            'type' in operation.value &&
-            operation.value.type === 'artifact' &&
-            'artifact' in operation.value &&
-            typeof operation.value.artifact === 'object' &&
-            operation.value.artifact !== null &&
-            'data' in operation.value.artifact &&
-            typeof operation.value.artifact.data === 'object' &&
-            operation.value.artifact.data !== null &&
-            'type' in operation.value.artifact.data &&
-            operation.value.artifact.data.type === 'interrupt-status',
-        ),
+      (domainResumeSnapshot!.snapshot.thread.activity?.events ?? []).some(
+        (event) =>
+          event.type === 'artifact' &&
+          typeof event.artifact?.data === 'object' &&
+          event.artifact.data !== null &&
+          'type' in event.artifact.data &&
+          event.artifact.data.type === 'interrupt-status',
       ),
     ).toBe(false);
     expect(persistedThreads.get(threadId)?.threadState).not.toHaveProperty('a2ui');
@@ -1320,24 +1257,24 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const delta = events.find(isStateDeltaEvent);
+    const snapshot = events.find(isStateSnapshotEvent);
 
     expect(inferenceCalls).toBe(0);
-    expect(delta).toBeDefined();
-    expect(delta!.delta).toEqual(
-      expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/lifecycle/phase',
-          value: 'onboarding',
-        },
-        {
-          op: 'add',
-          path: '/thread/lifecycle/onboardingStep',
-          value: 'operator-profile',
-        },
-      ]),
-    );
+    expect(events.some(isStateDeltaEvent)).toBe(false);
+    expect(snapshot).toBeDefined();
+    expect(snapshot!.snapshot.thread.lifecycle).toMatchObject({
+      phase: 'onboarding',
+      onboardingStep: 'operator-profile',
+    });
+    expect(snapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'input-required',
+    });
+    expect(snapshot!.snapshot.projected).toMatchObject({
+      managedLifecycle: {
+        phase: 'onboarding',
+        onboardingStep: 'operator-profile',
+      },
+    });
   });
 
   it('emits one authoritative state delta when a shared-state update also recomputes projected state', async () => {
@@ -2123,68 +2060,40 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
-    const resolvedInterruptDelta = resumeDeltas.find((event) =>
-      event.delta.some(
-        (operation) =>
-          operation.op === 'add' &&
-          operation.path === '/thread/artifacts/current/data/status' &&
-          operation.value === 'resolved',
-      ),
+    const resolvedInterruptSnapshot = findStateSnapshotEvent(
+      resumeEvents,
+      (event) => event.snapshot.thread.artifacts.current?.data?.status === 'resolved',
     );
-    const domainResumeDelta = resumeDeltas.find((event) =>
-      event.delta.some(
-        (operation) =>
-          operation.op === 'replace' &&
-          operation.path === '/thread/lifecycle/onboardingStep' &&
-          operation.value === 'delegation-note',
-      ),
+    const domainResumeSnapshot = findStateSnapshotEvent(
+      resumeEvents,
+      (event) => event.snapshot.thread.lifecycle?.onboardingStep === 'delegation-note',
     );
 
-    expect(resolvedInterruptDelta).toBeDefined();
-    expect(domainResumeDelta).toBeDefined();
-    expect(domainResumeDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/lifecycle/onboardingStep',
-      value: 'delegation-note',
+    expect(resolvedInterruptSnapshot).toBeDefined();
+    expect(domainResumeSnapshot).toBeDefined();
+    expect(domainResumeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      onboardingStep: 'delegation-note',
+      operatorNote: 'safe window approved',
     });
-    expect(domainResumeDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/lifecycle/operatorNote',
-      value: 'safe window approved',
-    });
-    expect(resolvedInterruptDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/task/taskStatus/state',
-      value: 'working',
+    expect(resolvedInterruptSnapshot!.snapshot.thread.task?.taskStatus).toMatchObject({
+      state: 'working',
     });
     expect(
-      resolvedInterruptDelta!.delta.some(
-        (operation) =>
-          operation.op === 'add' &&
-          operation.path.startsWith('/thread/activity/events/') &&
-          operation.value &&
-          typeof operation.value === 'object' &&
-          'type' in operation.value &&
-          operation.value.type === 'artifact' &&
-          'artifact' in operation.value &&
-          typeof operation.value.artifact === 'object' &&
-          operation.value.artifact !== null &&
-          'data' in operation.value.artifact &&
-          typeof operation.value.artifact.data === 'object' &&
-          operation.value.artifact.data !== null &&
-          'type' in operation.value.artifact.data &&
-          operation.value.artifact.data.type === 'interrupt-status' &&
-          'status' in operation.value.artifact.data &&
-          operation.value.artifact.data.status === 'resolved' &&
-          'interruptType' in operation.value.artifact.data &&
-          operation.value.artifact.data.interruptType === 'operator-config',
+      (resolvedInterruptSnapshot!.snapshot.thread.activity?.events ?? []).some(
+        (event) =>
+          event.type === 'artifact' &&
+          typeof event.artifact?.data === 'object' &&
+          event.artifact.data !== null &&
+          'type' in event.artifact.data &&
+          event.artifact.data.type === 'interrupt-status' &&
+          'status' in event.artifact.data &&
+          event.artifact.data.status === 'resolved' &&
+          'interruptType' in event.artifact.data &&
+          event.artifact.data.interruptType === 'operator-config',
       ),
     ).toBe(true);
-    expect(domainResumeDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/task/taskStatus/message/content',
-      value: 'Operator note captured. Ready to complete onboarding.',
+    expect(domainResumeSnapshot!.snapshot.thread.task?.taskStatus.message).toMatchObject({
+      content: 'Operator note captured. Ready to complete onboarding.',
     });
 
     expect(
@@ -2247,26 +2156,17 @@ describe('agent-runtime integration', () => {
       }),
     );
 
-    const resumeDeltas = resumeEvents.filter(isStateDeltaEvent);
-    const domainResumeDelta = resumeDeltas.find((event) =>
-      event.delta.some(
-        (operation) =>
-          operation.op === 'replace' &&
-          operation.path === '/thread/lifecycle/onboardingStep' &&
-          operation.value === 'delegation-note',
-      ),
+    const domainResumeSnapshot = findStateSnapshotEvent(
+      resumeEvents,
+      (event) => event.snapshot.thread.lifecycle?.onboardingStep === 'delegation-note',
     );
 
-    expect(domainResumeDelta).toBeDefined();
-    expect(domainResumeDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/lifecycle/operatorNote',
-      value: 'safe window approved',
+    expect(domainResumeSnapshot).toBeDefined();
+    expect(domainResumeSnapshot!.snapshot.thread.lifecycle).toMatchObject({
+      operatorNote: 'safe window approved',
     });
-    expect(domainResumeDelta!.delta).toContainEqual({
-      op: 'replace',
-      path: '/thread/task/taskStatus/message/content',
-      value: 'Operator note captured. Ready to complete onboarding.',
+    expect(domainResumeSnapshot!.snapshot.thread.task?.taskStatus.message).toMatchObject({
+      content: 'Operator note captured. Ready to complete onboarding.',
     });
     expect(
       persistedThreads.get('thread-resume-with-client-scaffolding')?.threadState,

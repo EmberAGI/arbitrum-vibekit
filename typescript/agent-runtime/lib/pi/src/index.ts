@@ -1529,6 +1529,30 @@ export const buildPiRuntimeGatewayStateDeltaEvent = (params: {
   } satisfies StateDeltaEvent;
 };
 
+export const buildPiRuntimeGatewayStateRebaselineEvent = (params: {
+  previousSession: PiRuntimeGatewaySession;
+  session: PiRuntimeGatewaySession;
+}): StateSnapshotEvent | null => {
+  const previousSnapshot = buildPiThreadStateSnapshot(params.previousSession);
+  const nextSnapshot = buildPiThreadStateSnapshot(params.session);
+  if (!jsonPatchCompare) {
+    throw new TypeError('fast-json-patch compare export unavailable');
+  }
+  const delta = jsonPatchCompare(previousSnapshot, nextSnapshot, true);
+
+  if (delta.length === 0) {
+    return null;
+  }
+
+  // Run completion can fold in state changes that were already published on
+  // another stream. A snapshot re-establishes the AG-UI baseline for future
+  // deltas instead of assuming the client still matches previousSession.
+  return {
+    type: EventType.STATE_SNAPSHOT,
+    snapshot: nextSnapshot,
+  } satisfies StateSnapshotEvent;
+};
+
 export const buildPiA2UiActivityEvent = (params: {
   threadId: string;
   executionId: string;
@@ -2253,12 +2277,12 @@ export const createPiRuntimeGatewayRuntime = (params: {
             failureMessage,
           );
           logPiGatewayDebug('run session after transcript persist', session);
-          const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
+          const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEvent({
             previousSession: requestSession,
             session,
           });
-          if (stateDeltaEvent) {
-            controller.push(stateDeltaEvent);
+          if (stateRebaselineEvent) {
+            controller.push(stateRebaselineEvent);
           }
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
           if (messagesSnapshotEvent) {
