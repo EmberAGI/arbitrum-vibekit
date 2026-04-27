@@ -323,6 +323,43 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     },
   );
 
+  it('renders automation run details in the generic activity stream', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-clmm',
+      agentName: 'Camelot CLMM',
+      isHired: true,
+      initialTab: 'transactions',
+      events: [
+        {
+          type: 'status',
+          message: 'Manual rebalance finished.',
+          task: { id: 'task-1', taskStatus: { state: 'completed' } },
+        },
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'automation-artifact-1',
+            data: {
+              type: 'automation-status',
+              automationId: 'automation-1',
+              runId: 'run-automation-1',
+              status: 'completed',
+              command: 'rebalance',
+              detail: 'Automation rebalance executed successfully.',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Manual rebalance finished.');
+    expect(html).toContain('Automation completed');
+    expect(html).toContain('rebalance: Automation rebalance executed successfully.');
+    expect(html).toContain('Run run-automation-1');
+    expect(html).toContain('Artifact automation-artifact-1');
+  });
+
   it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,

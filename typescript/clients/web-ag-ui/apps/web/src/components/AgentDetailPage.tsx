@@ -420,6 +420,36 @@ function readArtifactEventType(event: ClmmEvent): string {
   );
 }
 
+function describeActivityEvent(event: ClmmEvent): { body: string; details: string[] } {
+  if (event.type === 'status') {
+    return { body: event.message, details: [] };
+  }
+
+  if (event.type === 'dispatch-response') {
+    return { body: `Response with ${event.parts?.length ?? 0} parts`, details: [] };
+  }
+
+  const artifactData = asRecord(event.artifact?.data);
+  if (artifactData?.type !== 'automation-status') {
+    return { body: `Artifact: ${readArtifactEventType(event)}`, details: [] };
+  }
+
+  const status = readString(artifactData.status) ?? 'unknown';
+  const command = readString(artifactData.command) ?? 'automation';
+  const detail = readString(artifactData.detail) ?? 'Automation status updated.';
+  const runId = readString(artifactData.runId);
+  const artifactId = readString(event.artifact?.artifactId) ?? readString(event.artifact?.id);
+  const details = [
+    runId ? `Run ${runId}` : null,
+    artifactId ? `Artifact ${artifactId}` : null,
+  ].filter((value): value is string => value !== null);
+
+  return {
+    body: `Automation ${status}\n${command}: ${detail}`,
+    details,
+  };
+}
+
 type ManagedMandateEditorView = {
   ownerAgentId: string;
   targetAgentId: string;
@@ -2403,27 +2433,40 @@ function TransactionHistoryTab({
         <div className={`${DETAIL_PANEL_CLASS} p-6`}>
           <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
-                  <div className="mt-1 text-sm text-[#261a12]">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${readArtifactEventType(event)}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+            {events.slice(-10).reverse().map((event, i) => {
+              const activityDescription = describeActivityEvent(event);
+              return (
+                <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
+                  <div
+                    className={`w-2 h-2 rounded-full mt-2 ${
+                      event.type === 'status'
+                        ? 'bg-blue-400'
+                        : event.type === 'artifact'
+                          ? 'bg-purple-400'
+                          : 'bg-gray-400'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
+                    <div className="mt-1 whitespace-pre-line text-sm text-[#261a12]">
+                      {activityDescription.body}
+                    </div>
+                    {activityDescription.details.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {activityDescription.details.map((detail) => (
+                          <span
+                            key={detail}
+                            className="rounded-md border border-[#eadac7] bg-white/70 px-2 py-1 text-[11px] text-[#6f5a4c]"
+                          >
+                            {detail}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

@@ -60,7 +60,9 @@ Rules:
   - append-only execution/activity history where auditability or replay matters
 - Scheduling uses a DB-backed queue/lease model initially.
 - Scheduled automation run prompts execute in ephemeral runtime context and are not persisted as normal `PiThread` rows.
+- Scheduled-run session snapshots must persist only execution/interrupt checkpoints for the root thread record; they must not insert or update a `pi_threads` row for the internal `automation:<automationId>:run:<runId>` prompt context.
 - Scheduled-run durability is captured by `AutomationRun`, `PiExecution`, execution events, root-thread activity/projection, artifacts, failures, timeout state, and outbox/dedupe records.
+- Web-facing run inspection is a projection of that runtime-owned activity/artifact state. The web may render run ids, statuses, summaries, and artifact references, but it must not infer automation truth from chat transcript messages.
 - Exactly-once-ish risky side effects use a durable outbox plus unique wallet/account + action-fingerprint constraints in Postgres.
 - Redis is not part of the initial persistence architecture.
 - SQLite is not the default backend, including for `npx` startup flows.

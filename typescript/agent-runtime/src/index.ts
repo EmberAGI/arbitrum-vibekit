@@ -278,6 +278,10 @@ type AgentRuntimeScheduledAutomationContext = {
     executionId: string | null;
     status: string;
     completedAt: Date | null;
+    summary?: string;
+    runDetailRef: string;
+    artifactRefs: readonly string[];
+    activityRefs: readonly string[];
   };
 };
 
@@ -427,6 +431,14 @@ function buildScheduledAutomationSystemContextLines(
       `<previous_run_execution_id>${escapeSystemContextXml(context.previousRun.executionId ?? '')}</previous_run_execution_id>`,
       `<previous_run_status>${escapeSystemContextXml(context.previousRun.status)}</previous_run_status>`,
       `<previous_run_completed_at>${context.previousRun.completedAt?.toISOString() ?? ''}</previous_run_completed_at>`,
+      `<previous_run_summary>${escapeSystemContextXml(context.previousRun.summary ?? 'No prior result summary recorded.')}</previous_run_summary>`,
+      `<previous_run_detail_ref>${escapeSystemContextXml(context.previousRun.runDetailRef)}</previous_run_detail_ref>`,
+      ...context.previousRun.artifactRefs.map(
+        (ref) => `<previous_run_artifact_ref>${escapeSystemContextXml(ref)}</previous_run_artifact_ref>`,
+      ),
+      ...context.previousRun.activityRefs.map(
+        (ref) => `<previous_run_activity_ref>${escapeSystemContextXml(ref)}</previous_run_activity_ref>`,
+      ),
       '</previous_run>',
     );
   }
@@ -1110,6 +1122,44 @@ function buildInterruptArtifact(params: {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readPreviousAutomationRunArtifactContext(
+  threadState: Record<string, unknown>,
+  runId: string,
+): { summary?: string; artifactRefs: string[] } {
+  const events = threadState.activityEvents;
+  if (!Array.isArray(events)) {
+    return { artifactRefs: [] };
+  }
+
+  const activityEvents: unknown[] = events;
+  for (let index = activityEvents.length - 1; index >= 0; index -= 1) {
+    const event = activityEvents[index];
+    if (!isRecord(event) || event.type !== 'artifact' || !isRecord(event.artifact)) {
+      continue;
+    }
+
+    const artifactId =
+      typeof event.artifact.artifactId === 'string'
+        ? event.artifact.artifactId
+        : typeof event.artifact.id === 'string'
+          ? event.artifact.id
+          : null;
+    const data = event.artifact.data;
+    if (!isRecord(data) || data.runId !== runId) {
+      continue;
+    }
+
+    const detail = typeof data.detail === 'string' ? data.detail.trim() : '';
+    const summary = typeof data.summary === 'string' ? data.summary.trim() : detail;
+    return {
+      ...(summary.length > 0 ? { summary } : {}),
+      artifactRefs: artifactId ? [`artifact:${artifactId}`] : [],
+    };
+  }
+
+  return { artifactRefs: [] };
 }
 
 function buildLifecycleThreadPatch(params: {
@@ -2098,7 +2148,10 @@ export async function createAgentRuntime<TState = unknown>(
     threadId: string,
     session: PiRuntimeGatewaySession = getSession(threadId),
   ): Promise<void> => {
-    const ids = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    const scheduledAutomationContext = scheduledAutomationContexts.get(threadId);
+    const ids = scheduledAutomationContext
+      ? { threadId: scheduledAutomationContext.rootThreadRecordId }
+      : buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
     const persistedExecutionId = resolvePersistedExecutionId(threadId, session);
     const currentInterrupt = readCurrentInterruptState(session);
     const currentInterruptId = currentInterrupt
@@ -2106,6 +2159,25 @@ export async function createAgentRuntime<TState = unknown>(
       : null;
     const executionSource = session.automation?.runId ? 'automation' : 'user';
     const currentNow = new Date(now());
+    if (scheduledAutomationContext) {
+      await postgres.executeStatements(
+        resolvedDatabaseUrl,
+        buildPersistExecutionCheckpointStatements({
+          executionId: persistedExecutionId,
+          threadId: ids.threadId,
+          automationRunId: session.automation?.runId ?? null,
+          status: mapSessionExecutionStatusToPersistedStatus(session.execution.status),
+          source: 'automation',
+          currentInterruptId,
+          interruptType: currentInterrupt?.type,
+          interruptPayload: currentInterrupt?.payload,
+          mirroredToActivity: currentInterrupt?.mirroredToActivity,
+          now: currentNow,
+        }),
+      );
+      return;
+    }
+
     const threadState = buildPersistedThreadStateSnapshot({
       session,
       state: domainStateStore.get(threadId),
@@ -3168,6 +3240,16 @@ export async function createAgentRuntime<TState = unknown>(
             const rightTime = right.completedAt?.getTime() ?? right.scheduledAt.getTime();
             return rightTime - leftTime;
           })[0];
+        const previousRunArtifactContext = previousRun
+          ? readPreviousAutomationRunArtifactContext(thread.threadState, previousRun.runId)
+          : undefined;
+        const previousRunActivityRefs = previousRun?.executionId
+          ? inspectionState.threadActivities
+              .filter((activity) => activity.executionId === previousRun.executionId)
+              .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+              .slice(0, 3)
+              .map((activity) => `thread-activity:${activity.activityId}`)
+          : [];
         const automationTitle =
           typeof automation.schedulePayload.title === 'string' &&
           automation.schedulePayload.title.trim().length > 0
@@ -3186,6 +3268,10 @@ export async function createAgentRuntime<TState = unknown>(
                   executionId: previousRun.executionId,
                   status: previousRun.status,
                   completedAt: previousRun.completedAt,
+                  summary: previousRunArtifactContext?.summary,
+                  runDetailRef: `automation-run:${previousRun.runId}`,
+                  artifactRefs: previousRunArtifactContext?.artifactRefs ?? [],
+                  activityRefs: previousRunActivityRefs,
                 },
               }
             : {}),

@@ -49,8 +49,10 @@ Additional rules:
 - Background/autonomous executions run in separate operational contexts linked back to the root thread.
 - Scheduled automation executions use ephemeral in-memory agent execution context for the saved instruction.
 - That scheduled-run context must not be persisted as a durable `PiThread` or exposed as a primary user-visible chat thread by default.
+- Generic session persistence must detect the scheduled-run context and skip `pi_threads` writes for `automation:<automationId>:run:<runId>` prompt contexts; it may still checkpoint the `PiExecution` against the root `PiThread` record.
 - The durable scheduled-run contract is `AutomationRun` + `PiExecution` + execution/activity events, summaries, artifacts, failure/timeout detail, outbox/dedupe references, and root-thread projections.
 - The root thread receives projected summaries, visible status updates, and artifacts by default.
+- Previous-run context included in the next scheduled prompt must be concise: prior run id/status/timestamp plus result summary and run-detail/activity/artifact references, not a replay of the old transcript.
 - Raw internal execution/automation history is available only through explicit tools.
 - The root thread must expose one stable current-state artifact, one append-only activity artifact/log, and optional execution-specific artifacts.
 - The runtime must treat projection as a first-class subsystem rather than ad hoc adapter glue:
