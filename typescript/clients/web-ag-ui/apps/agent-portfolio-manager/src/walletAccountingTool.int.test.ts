@@ -147,7 +147,7 @@ describeSharedEmberIntegration('wallet accounting tool Shared Ember integration'
       content: [
         {
           type: 'text',
-          text: expect.stringContaining('10 USDC'),
+          text: expect.stringContaining('0.00001 USDC (10 base units)'),
         },
       ],
       details: {

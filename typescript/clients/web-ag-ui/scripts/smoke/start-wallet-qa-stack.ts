@@ -50,6 +50,7 @@ const DEFAULT_PI_DATABASE_URL = 'postgresql://postgres:postgres@127.0.0.1:55432/
 const DEFAULT_ONCHAIN_ACTIONS_PORT = 50051;
 const DEFAULT_SHARED_EMBER_PORT = 4010;
 const DEFAULT_WEB_PORT = 3000;
+const WALLET_QA_MANAGED_AGENT_IDS = ['ember-lending', 'agent-oca-executor'] as const;
 const HOST = '127.0.0.1';
 const HEALTH_TIMEOUT_MS = 90_000;
 
@@ -640,6 +641,9 @@ async function main() {
   const explicitPortfolioManagerWalletId = readString(
     process.env.WALLET_QA_PORTFOLIO_MANAGER_OWS_WALLET_ID,
   );
+  const explicitPortfolioManagerOcaExecutorWalletId = readString(
+    process.env.WALLET_QA_PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_ID,
+  );
   const explicitEmberLendingWalletId = readString(
     process.env.WALLET_QA_EMBER_LENDING_OWS_WALLET_ID,
   );
@@ -660,6 +664,10 @@ async function main() {
     portfolioManagerWalletName:
       explicitPortfolioManagerWalletId ??
       readString(portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME),
+    portfolioManagerOcaExecutorWalletName:
+      explicitPortfolioManagerOcaExecutorWalletId ??
+      readString(portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME) ??
+      undefined,
     emberLendingWalletName:
       explicitEmberLendingWalletId ??
       readString(emberLendingBaseEnv.EMBER_LENDING_OWS_WALLET_NAME),
@@ -767,6 +775,17 @@ async function main() {
             PORTFOLIO_MANAGER_OWS_WALLET_NAME: resolvedWalletIds.portfolioManagerWalletId,
           }
         : {}),
+      ...(explicitPortfolioManagerOcaExecutorWalletId
+        ? {
+            PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME:
+              explicitPortfolioManagerOcaExecutorWalletId,
+          }
+        : resolvedWalletIds.portfolioManagerOcaExecutorWalletId
+        ? {
+            PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME:
+              resolvedWalletIds.portfolioManagerOcaExecutorWalletId,
+          }
+        : {}),
     },
     emberLendingBaseEnv: {
       ...emberLendingBaseEnv,
@@ -859,7 +878,7 @@ async function main() {
     sharedEmberServer = await startManagedSharedEmberHarness({
       specRoot: workspace.specRoot,
       vibekitRoot: workspace.vibekitRoot,
-      managedAgentId: 'ember-lending',
+      managedAgentIds: WALLET_QA_MANAGED_AGENT_IDS,
       host: HOST,
       port: sharedEmberPort.port,
     });

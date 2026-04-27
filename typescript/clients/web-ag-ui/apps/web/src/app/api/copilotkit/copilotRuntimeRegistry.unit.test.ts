@@ -122,6 +122,7 @@ describe('buildCopilotRuntimeAgents', () => {
     });
 
     expect(Object.keys(agents)).toEqual(['agent-portfolio-manager', 'agent-ember-lending']);
+    expect(Object.keys(agents)).not.toContain('agent-oca-executor');
     expect(langGraphInterruptSnapshotAgentConfigs).toEqual([]);
     expect(agentRuntimeHttpAgentConfigs).toEqual([
       {
@@ -141,5 +142,8 @@ describe('buildCopilotRuntimeAgents', () => {
     expect(() =>
       resolveAgentRuntimeUrl({ LANGSMITH_API_KEY: 'test-langsmith-key' }, 'agent-pi-example'),
     ).toThrow('Unsupported AG-UI runtime agent "agent-pi-example".');
+    expect(() =>
+      resolveAgentRuntimeUrl({ LANGSMITH_API_KEY: 'test-langsmith-key' }, 'agent-oca-executor'),
+    ).toThrow('Unsupported AG-UI runtime agent "agent-oca-executor".');
   });
 });

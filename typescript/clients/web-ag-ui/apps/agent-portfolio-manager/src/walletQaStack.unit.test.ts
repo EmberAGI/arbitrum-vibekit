@@ -207,6 +207,36 @@ describe('buildWalletQaEnvironmentOverrides', () => {
         },
       });
   });
+
+  it('wires the hidden OCA executor wallet and vault into PM env when present', () => {
+    const overrides = buildWalletQaEnvironmentOverrides({
+      specRoot: '/tmp/ember-orchestration-v1-spec',
+      sharedEmberDatabaseUrl: 'postgresql://ember:ember@127.0.0.1:55433/ember',
+      portfolioManagerOwsVaultPath: '/tmp/runtime/ows/portfolio-manager',
+      emberLendingOwsVaultPath: '/tmp/runtime/ows/ember-lending',
+      sharedEmberBaseUrl: 'http://127.0.0.1:4011',
+      portfolioManagerBaseUrl: 'http://127.0.0.1:3421/ag-ui',
+      emberLendingBaseUrl: 'http://127.0.0.1:3431/ag-ui',
+      onchainActionsApiUrl: 'http://127.0.0.1:50051',
+      webBaseEnv: {},
+      portfolioManagerBaseEnv: {
+        PORTFOLIO_MANAGER_OWS_WALLET_NAME: 'portfolio-manager-controller-wallet',
+        PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME: 'oca-executor-wallet-id',
+      },
+      emberLendingBaseEnv: {},
+    });
+
+    expect(overrides.portfolioManagerEnv).toMatchObject({
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME: 'oca-executor-wallet-id',
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH:
+        '/tmp/runtime/ows/portfolio-manager',
+    });
+    expect(overrides.sharedEmberEnv).toMatchObject({
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME: 'oca-executor-wallet-id',
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH:
+        '/tmp/runtime/ows/portfolio-manager',
+    });
+  });
 });
 
 describe('resolveManagedWalletIds', () => {
@@ -247,7 +277,65 @@ describe('resolveManagedWalletIds', () => {
 
     expect(resolved).toEqual({
       portfolioManagerWalletId: 'older-controller',
+      portfolioManagerOcaExecutorWalletId: 'older-controller',
       emberLendingWalletId: 'older-lending',
+    });
+  });
+
+  it('falls back to the selected portfolio-manager wallet for hidden OCA executor QA funding', () => {
+    const resolved = resolveManagedWalletIds({
+      portfolioManagerWalletName: 'portfolio-manager-controller-wallet',
+      emberLendingWalletName: null,
+      controllerSignerAddress: '0x1111111111111111111111111111111111111111',
+      portfolioManagerWallets: [
+        {
+          id: 'controller-wallet-id',
+          name: 'portfolio-manager-controller-wallet',
+          address: '0x1111111111111111111111111111111111111111',
+          createdAt: '2026-04-25T00:00:00.000Z',
+        },
+        {
+          id: 'oca-executor-wallet-id',
+          name: 'portfolio-manager-controller-wallet',
+          address: '0x2222222222222222222222222222222222222222',
+          createdAt: '2026-04-25T00:00:01.000Z',
+        },
+      ],
+      emberLendingWallets: [],
+    });
+
+    expect(resolved).toMatchObject({
+      portfolioManagerWalletId: 'controller-wallet-id',
+      portfolioManagerOcaExecutorWalletId: 'controller-wallet-id',
+    });
+  });
+
+  it('uses an explicit hidden OCA executor wallet when configured', () => {
+    const resolved = resolveManagedWalletIds({
+      portfolioManagerWalletName: 'portfolio-manager-controller-wallet',
+      portfolioManagerOcaExecutorWalletName: 'oca-executor-wallet-id',
+      emberLendingWalletName: null,
+      controllerSignerAddress: '0x1111111111111111111111111111111111111111',
+      portfolioManagerWallets: [
+        {
+          id: 'controller-wallet-id',
+          name: 'portfolio-manager-controller-wallet',
+          address: '0x1111111111111111111111111111111111111111',
+          createdAt: '2026-04-25T00:00:00.000Z',
+        },
+        {
+          id: 'oca-executor-wallet-id',
+          name: 'portfolio-manager-controller-wallet',
+          address: '0x2222222222222222222222222222222222222222',
+          createdAt: '2026-04-25T00:00:01.000Z',
+        },
+      ],
+      emberLendingWallets: [],
+    });
+
+    expect(resolved).toMatchObject({
+      portfolioManagerWalletId: 'controller-wallet-id',
+      portfolioManagerOcaExecutorWalletId: 'oca-executor-wallet-id',
     });
   });
 });

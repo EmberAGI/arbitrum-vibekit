@@ -24,7 +24,126 @@ function createStubService(): AgentRuntimeService {
 }
 
 describe('createPortfolioManagerGatewayService', () => {
-  it('runs controller-wallet identity preflight before runtime creation when the live Shared Ember path is configured', async () => {
+  it('runs controller-wallet and hidden executor identity preflight before runtime creation when the live Shared Ember path is configured', async () => {
+    const service = createStubService();
+    const deriveControllerSmartAccountAddress = vi.fn(
+      async () => '0x00000000000000000000000000000000000000c2' as const,
+    );
+    const ensureControllerSmartAccountDeployed = vi.fn(
+      async () => '0x00000000000000000000000000000000000000c2' as const,
+    );
+    const ensureServiceIdentity = vi.fn(async (input: {
+      readControllerWalletAddress: () => Promise<`0x${string}`>;
+      readExecutorWalletAddress?: () => Promise<`0x${string}`>;
+    }) => {
+      await expect(input.readControllerWalletAddress()).resolves.toBe(
+        '0x00000000000000000000000000000000000000c2',
+      );
+      await expect(input.readExecutorWalletAddress?.()).resolves.toBe(
+        '0x00000000000000000000000000000000000000e1',
+      );
+
+      return {
+        orchestrator: {
+          revision: 2,
+          wroteIdentity: false,
+          identity: {
+            wallet_address: '0x00000000000000000000000000000000000000c2',
+          },
+        },
+        hiddenOcaExecutor: {
+          revision: 3,
+          wroteIdentity: false,
+          identity: {
+            wallet_address: '0x00000000000000000000000000000000000000e1',
+          },
+        },
+      };
+    });
+    const runtimeCreated = vi.fn();
+    const createAgentRuntimeKernel = vi.fn(async ({ createRuntimeOptions }) => {
+      const signing = {
+        readAddress: vi.fn(async ({ signerRef }: { signerRef: string }) => {
+          if (signerRef === 'controller-wallet') {
+            return '0x00000000000000000000000000000000000000c1' as const;
+          }
+
+          if (signerRef === 'oca-executor-wallet') {
+            return '0x00000000000000000000000000000000000000e1' as const;
+          }
+
+          throw new Error(`unexpected signer ref: ${signerRef}`);
+        }),
+        signPayload: vi.fn(),
+      };
+      await createRuntimeOptions({
+        signing,
+      });
+      runtimeCreated();
+      return {
+        service,
+        signing,
+      };
+    });
+
+    await expect(
+      createPortfolioManagerGatewayService({
+        env: {
+          OPENROUTER_API_KEY: 'test-openrouter-key',
+          SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
+          PORTFOLIO_MANAGER_OWS_WALLET_NAME: 'portfolio-manager-controller-wallet',
+          PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME: 'portfolio-manager-oca-executor-wallet',
+          PORTFOLIO_MANAGER_OWS_VAULT_PATH: '/tmp/portfolio-manager-ows-vault',
+        },
+        __internalEnsureServiceIdentity: ensureServiceIdentity,
+        __internalDeriveControllerSmartAccountAddress: deriveControllerSmartAccountAddress,
+        __internalEnsureControllerSmartAccountDeployed: ensureControllerSmartAccountDeployed,
+        __internalCreateAgentRuntimeKernel: createAgentRuntimeKernel,
+      } as never),
+    ).resolves.toBe(service);
+
+    expect(deriveControllerSmartAccountAddress).toHaveBeenCalledWith({
+      signerAddress: '0x00000000000000000000000000000000000000c1',
+    });
+    expect(ensureControllerSmartAccountDeployed).toHaveBeenCalledWith({
+      signing: expect.objectContaining({
+        readAddress: expect.any(Function),
+        signPayload: expect.any(Function),
+      }),
+      signerRef: 'controller-wallet',
+      signerAddress: '0x00000000000000000000000000000000000000c1',
+    });
+    expect(ensureServiceIdentity).toHaveBeenCalledOnce();
+    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
+    expect(createAgentRuntimeKernel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owsSigners: [
+          {
+            signerRef: 'controller-wallet',
+            walletNameOrIdEnvVar: 'PORTFOLIO_MANAGER_OWS_WALLET_NAME',
+            passphraseEnvVar: 'PORTFOLIO_MANAGER_OWS_PASSPHRASE',
+            vaultPathEnvVar: 'PORTFOLIO_MANAGER_OWS_VAULT_PATH',
+          },
+          {
+            signerRef: 'oca-executor-wallet',
+            walletNameOrIdEnvVar: 'PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME',
+            passphraseEnvVar: 'PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE',
+            vaultPathEnvVar: 'PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH',
+          },
+        ],
+      }),
+    );
+    const deployCallOrder = ensureControllerSmartAccountDeployed.mock.invocationCallOrder.at(0);
+    const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);
+    const runtimeCallOrder = runtimeCreated.mock.invocationCallOrder.at(0);
+    expect(deployCallOrder).toBeDefined();
+    expect(ensureCallOrder).toBeDefined();
+    expect(runtimeCallOrder).toBeDefined();
+    expect(deployCallOrder!).toBeLessThan(ensureCallOrder!);
+    expect(ensureCallOrder!).toBeLessThan(runtimeCallOrder!);
+  });
+
+  it('continues runtime creation when hidden executor identity readiness is deferred', async () => {
     const service = createStubService();
     const deriveControllerSmartAccountAddress = vi.fn(
       async () => '0x00000000000000000000000000000000000000c2' as const,
@@ -33,10 +152,16 @@ describe('createPortfolioManagerGatewayService', () => {
       async () => '0x00000000000000000000000000000000000000c2' as const,
     );
     const ensureServiceIdentity = vi.fn(async () => ({
-      revision: 2,
-      wroteIdentity: false,
-      identity: {
-        wallet_address: '0x00000000000000000000000000000000000000c2',
+      orchestrator: {
+        revision: 2,
+        wroteIdentity: false,
+        identity: {
+          wallet_address: '0x00000000000000000000000000000000000000c2',
+        },
+      },
+      hiddenOcaExecutor: {
+        status: 'deferred',
+        reason: 'hidden executor wallet is not configured',
       },
     }));
     const runtimeCreated = vi.fn();
@@ -70,27 +195,8 @@ describe('createPortfolioManagerGatewayService', () => {
       } as never),
     ).resolves.toBe(service);
 
-    expect(deriveControllerSmartAccountAddress).toHaveBeenCalledWith({
-      signerAddress: '0x00000000000000000000000000000000000000c1',
-    });
-    expect(ensureControllerSmartAccountDeployed).toHaveBeenCalledWith({
-      signing: expect.objectContaining({
-        readAddress: expect.any(Function),
-        signPayload: expect.any(Function),
-      }),
-      signerRef: 'controller-wallet',
-      signerAddress: '0x00000000000000000000000000000000000000c1',
-    });
     expect(ensureServiceIdentity).toHaveBeenCalledOnce();
-    expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
-    const deployCallOrder = ensureControllerSmartAccountDeployed.mock.invocationCallOrder.at(0);
-    const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);
-    const runtimeCallOrder = runtimeCreated.mock.invocationCallOrder.at(0);
-    expect(deployCallOrder).toBeDefined();
-    expect(ensureCallOrder).toBeDefined();
-    expect(runtimeCallOrder).toBeDefined();
-    expect(deployCallOrder!).toBeLessThan(ensureCallOrder!);
-    expect(ensureCallOrder!).toBeLessThan(runtimeCallOrder!);
+    expect(runtimeCreated).toHaveBeenCalledOnce();
   });
 
   it('fails closed before runtime creation when the controller wallet identity cannot be established', async () => {
