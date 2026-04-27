@@ -291,7 +291,7 @@ type AgentRuntimeSessionStore = {
   ) => PiRuntimeGatewaySession;
 };
 
-type AgentRuntimeAutomationStatus = 'scheduled' | 'running' | 'completed' | 'canceled';
+type AgentRuntimeAutomationStatus = 'scheduled' | 'running' | 'completed' | 'failed' | 'canceled';
 
 type AgentRuntimeAutomationRecord = {
   automationId: string;
@@ -726,6 +726,8 @@ function mapAutomationStatusToExecutionStatus(
     case 'completed':
     case 'canceled':
       return 'completed';
+    case 'failed':
+      return 'failed';
   }
 }
 
@@ -3065,23 +3067,36 @@ export async function createAgentRuntime<TState = unknown>(
             runId: scheduledRun.runId,
           },
         });
-        await drainAttachedEventSource(
-          await runtimeWithDomain.run({
-            threadId: runThreadId,
-            runId: scheduledRun.runId,
-            messages: [
-              {
-                id: buildPiRuntimeStableUuid(
-                  'message',
-                  `agent-runtime:${automationId}:run:${scheduledRun.runId}:instruction`,
-                ),
-                role: 'user',
-                content: instruction,
-              },
-            ],
-          }),
-        );
-        scheduledAutomationContexts.delete(runThreadId);
+        let runOutcome: 'completed' | 'failed' = 'completed';
+        let runFailureDetail: string | null = null;
+        try {
+          await drainAttachedEventSource(
+            await runtimeWithDomain.run({
+              threadId: runThreadId,
+              runId: scheduledRun.runId,
+              messages: [
+                {
+                  id: buildPiRuntimeStableUuid(
+                    'message',
+                    `agent-runtime:${automationId}:run:${scheduledRun.runId}:instruction`,
+                  ),
+                  role: 'user',
+                  content: instruction,
+                },
+              ],
+            }),
+          );
+          const runSession = getSession(runThreadId);
+          if (runSession.execution.status === 'failed') {
+            runOutcome = 'failed';
+            runFailureDetail = runSession.execution.statusMessage ?? null;
+          }
+        } catch (error) {
+          runOutcome = 'failed';
+          runFailureDetail = error instanceof Error ? error.message : String(error);
+        } finally {
+          scheduledAutomationContexts.delete(runThreadId);
+        }
 
         await postgres.executeStatements(
           resolvedDatabaseUrl,
@@ -3111,9 +3126,16 @@ export async function createAgentRuntime<TState = unknown>(
             now: currentNow,
             nextRunAt,
             leaseExpiresAt: currentNow,
+            status: runOutcome,
           }),
         );
 
+        const finalAutomationStatus: AgentRuntimeAutomationStatus =
+          runOutcome === 'completed' ? 'completed' : 'failed';
+        const finalAutomationDetail =
+          runOutcome === 'completed'
+            ? `Automation ${automation.commandName} executed successfully.`
+            : `Automation ${automation.commandName} failed: ${runFailureDetail ?? 'Unknown error'}.`;
         const completedSession = applyAutomationStatusUpdate({
           sessionStore,
           threadId: thread.threadKey,
@@ -3121,10 +3143,10 @@ export async function createAgentRuntime<TState = unknown>(
           automationId,
           executionId: scheduledRun.executionId,
           activityRunId: scheduledRun.runId,
-          status: 'completed',
+          status: finalAutomationStatus,
           command: automation.commandName,
           minutes,
-          detail: `Automation ${automation.commandName} executed successfully.`,
+          detail: finalAutomationDetail,
         });
         await persistSessionSnapshot(thread.threadKey, completedSession);
         await publishSessionUpdate({

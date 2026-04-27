@@ -205,6 +205,31 @@ describe('transactions', () => {
     expect(statements[7]?.text).toContain('insert into pi_thread_activity');
   });
 
+  it('builds failed automation execution boundaries while still scheduling the next run', () => {
+    const statements = buildCompleteAutomationExecutionStatements({
+      automationId: 'auto-1',
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      nextRunId: 'run-2',
+      nextExecutionId: 'exec-2',
+      threadId: 'thread-1',
+      commandName: 'sync',
+      schedulePayload: { command: 'sync', minutes: 5 },
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:05:00.000Z'),
+      nextRunAt: new Date('2026-03-18T20:10:00.000Z'),
+      leaseExpiresAt: new Date('2026-03-18T20:05:00.000Z'),
+      status: 'failed',
+    });
+
+    expect(statements[0]?.values[0]).toBe('failed');
+    expect(statements[1]?.values[0]).toBe('failed');
+    expect(statements[3]?.values[4]).toBe('scheduled');
+    expect(statements[6]?.values[3]).toBe('automation-failed');
+    expect(statements[7]?.values[3]).toBe('automation-failed');
+  });
+
   it('builds the automation cancellation boundary across automation, run, execution, lease, event, and activity tables', () => {
     const statements = buildCancelAutomationStatements({
       automationId: 'auto-1',

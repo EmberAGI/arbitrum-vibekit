@@ -210,17 +210,20 @@ export function buildCompleteAutomationExecutionStatements(params: {
   now: Date;
   nextRunAt: Date;
   leaseExpiresAt: Date;
+  status?: 'completed' | 'failed';
 }): PostgresStatement[] {
+  const status = params.status ?? 'completed';
+  const eventKind = status === 'completed' ? 'automation-executed' : 'automation-failed';
   return [
     buildStatement(
       'pi_automation_runs',
       'update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4',
-      ['completed', params.now, params.now, params.currentRunId],
+      [status, params.now, params.now, params.currentRunId],
     ),
     buildStatement(
       'pi_executions',
       'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
-      ['completed', params.now, params.now, params.currentExecutionId],
+      [status, params.now, params.now, params.currentExecutionId],
     ),
     buildStatement(
       'pi_automations',
@@ -249,7 +252,7 @@ export function buildCompleteAutomationExecutionStatements(params: {
         params.eventId,
         params.currentExecutionId,
         params.threadId,
-        'automation-executed',
+        eventKind,
         JSON.stringify({
           automationId: params.automationId,
           nextRunId: params.nextRunId,
@@ -266,7 +269,7 @@ export function buildCompleteAutomationExecutionStatements(params: {
         params.activityId,
         params.threadId,
         params.currentExecutionId,
-        'automation-executed',
+        eventKind,
         JSON.stringify({
           automationId: params.automationId,
           nextRunAt: params.nextRunAt,
