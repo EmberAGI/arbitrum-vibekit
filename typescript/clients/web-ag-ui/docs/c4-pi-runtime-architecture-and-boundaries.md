@@ -48,7 +48,7 @@ Related docs:
 5. A2A `Task` and `web-ag-ui` `thread.task` are projections of `PiExecution`.
 6. AG-UI `run` is a transport/control-plane action, not a durable business record.
 7. `PiAutomation` is a saved recurring definition, and `AutomationRun` is an automation firing/audit record, not the execution loop itself.
-8. Scheduled-run prompts execute in ephemeral runtime context; the durable contract is `AutomationRun` + `PiExecution` + root activity/projection, not a persisted user-visible `PiThread` and not a `pi_threads` row for `automation:<automationId>:run:<runId>`.
+8. Scheduled-run prompts execute in ephemeral runtime context; the durable contract is `AutomationRun` + `PiExecution` + root activity/projection + bounded `automation-run-snapshot` artifacts/events, not a persisted user-visible `PiThread` and not a `pi_threads` row for `automation:<automationId>:run:<runId>`.
 9. Agent-family lifecycle flows live in pluggable Pi-owned domain modules above the core runtime model, not in the AG-UI adapter and not in the foundational execution model itself.
 10. Pi must expose a formal projection subsystem from canonical runtime records to AG-UI, A2A, and future channel views.
 11. Model-facing automation tools and operator/runtime control surfaces are separate architectural planes.
@@ -346,14 +346,15 @@ sequenceDiagram
   participant Web as web-ag-ui
 
   SCH->>RT: trigger PiAutomation
-  RT->>RT: mark AutomationRun running
+  RT->>RT: row-count-checked claim: scheduled -> running
   RT->>RT: create or continue PiExecution
   RT->>CTX: run saved instruction as scheduled user input
-  RT->>RT: checkpoint PiExecution against root PiThread without persisting CTX as PiThread
+  RT->>RT: checkpoint PiExecution + bounded run snapshot against root PiThread without persisting CTX as PiThread
   CTX->>DM: apply normalized domain operation handling
   DM-->>RT: outputs, artifacts, summary/failure/interrupts
+  RT->>RT: persist runtime-owned tool checkpoints on scheduled PiExecution/root PiThread
   RT->>RT: complete, fail, or time out AutomationRun
-  RT->>RT: schedule next AutomationRun
+  RT->>RT: schedule next AutomationRun at future cadence time
   RT-->>AG: root activity projection, summary, artifact refs, and run details available
   AG-->>Web: projected AG-UI state/activity from runtime-owned records
   Web->>Web: show general activity history and automation run details without transcript pollution

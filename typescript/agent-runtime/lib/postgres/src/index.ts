@@ -33,6 +33,7 @@ export {
   buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
+  buildPersistScheduledAutomationRunSnapshotStatements,
   buildPersistThreadStateStatements,
   buildStartAutomationExecutionStatements,
   buildTimeoutAutomationExecutionStatements,
@@ -64,6 +65,7 @@ export {
 } from './operatorControl.js';
 export {
   executePostgresStatements,
+  isPostgresAffectedRowsError,
   loadPiRuntimeInspectionState,
   persistPiRuntimeDirectExecution,
   type ExecutePostgresStatements,

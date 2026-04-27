@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+  AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
   type AgentRuntimeService,
   createAgentRuntime,
 } from './index.js';
@@ -26,6 +27,7 @@ type InternalPostgresStatement = {
   tableName: string;
   text: string;
   values: readonly unknown[];
+  requiredAffectedRows?: number;
 };
 type InternalPersistDirectExecutionOptions = {
   threadId: string;
@@ -2215,6 +2217,344 @@ describe('agent-runtime integration', () => {
       );
       expect(runningCallIndex).toBeGreaterThanOrEqual(0);
       expect(terminalCallIndex).toBeGreaterThan(runningCallIndex);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips agent invocation when another scheduler process already claimed the run', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const executeStatements = vi.fn(async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+        if (statements.some((statement) => statement.requiredAffectedRows === 1)) {
+          const error = new Error('Expected pi_automation_runs statement to affect 1 row, but it affected 0.');
+          error.name = 'PostgresAffectedRowsError';
+          throw error;
+        }
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            return createTextStream('Should not run.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toEqual([]);
+      expect(executeStatements).toHaveBeenCalled();
+      expect(executeStatements.mock.calls.flatMap((call) => call[1])).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            tableName: 'pi_automation_runs',
+            requiredAffectedRows: 1,
+          }),
+        ]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('persists scheduled-run transcript artifacts under the automation execution without a run pi_thread', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              return createTextStream('Scheduled run summarized 42 balances.');
+            }
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_artifacts',
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'automation-run-snapshot',
+            false,
+            expect.stringContaining('Scheduled run summarized 42 balances.'),
+            expect.any(Date),
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_execution_events',
+          values: [
+            expect.any(String),
+            'execution-automation-1',
+            'thread-record-1',
+            'automation-run-snapshot',
+            expect.stringContaining('"automationRunId":"run-automation-1"'),
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).not.toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_threads',
+          values: expect.arrayContaining(['automation:automation-1:run:run-automation-1']),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps scheduled runtime-owned tool checkpoints on the automation execution and root thread', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestToolResult = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'toolResult');
+            if (latestToolResult) {
+              return createTextStream('Operator input requested.');
+            }
+
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              return createToolStream({
+                toolName: AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
+                toolCallId: 'tool-operator-input',
+                args: {
+                  message: 'Approve scheduled balance sync.',
+                },
+              });
+            }
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_interrupts',
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'input-required',
+            'pending',
+            true,
+            '{}',
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).not.toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_interrupts',
+          values: expect.arrayContaining([
+            expect.stringContaining('automation:automation-1:run:run-automation-1'),
+          ]),
+        }),
+      );
     } finally {
       vi.useRealTimers();
     }

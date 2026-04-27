@@ -49,8 +49,10 @@ Additional rules:
 - Background/autonomous executions run in separate operational contexts linked back to the root thread.
 - Scheduled automation executions use ephemeral in-memory agent execution context for the saved instruction.
 - That scheduled-run context must not be persisted as a durable `PiThread` or exposed as a primary user-visible chat thread by default.
-- Generic session persistence must detect the scheduled-run context and skip `pi_threads` writes for `automation:<automationId>:run:<runId>` prompt contexts; it may still checkpoint the `PiExecution` against the root `PiThread` record.
-- The durable scheduled-run contract is `AutomationRun` + `PiExecution` + execution/activity events, summaries, artifacts, failure/timeout detail, outbox/dedupe references, and root-thread projections.
+- Generic session persistence must detect the scheduled-run context and skip `pi_threads` writes for `automation:<automationId>:run:<runId>` prompt contexts; it checkpoints the `PiExecution` against the root `PiThread` record and persists a bounded run snapshot as an execution-scoped `automation-run-snapshot` artifact/event.
+- The durable scheduled-run contract is `AutomationRun` + `PiExecution` + execution/activity events, bounded transcript snapshots, summaries, artifacts, failure/timeout detail, outbox/dedupe references, and root-thread projections.
+- Starting a scheduled run is a conditional `scheduled -> running` claim. If another runtime process has already claimed the row, the scheduler must skip invocation rather than invoking the agent twice.
+- Runtime-owned tools raised inside a scheduled run, including interrupt/outbox/signing-style boundaries, must persist against the scheduled automation `PiExecution` and root `PiThread`, not a synthetic run-thread record.
 - The root thread receives projected summaries, visible status updates, and artifacts by default.
 - Previous-run context included in the next scheduled prompt must be concise: prior run id/status/timestamp plus result summary and run-detail/activity/artifact references, not a replay of the old transcript.
 - Raw internal execution/automation history is available only through explicit tools.

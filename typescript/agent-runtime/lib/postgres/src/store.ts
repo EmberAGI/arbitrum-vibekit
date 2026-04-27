@@ -25,6 +25,26 @@ export type ExecutePostgresStatements = (
   statements: readonly PostgresStatement[],
 ) => Promise<void>;
 
+export class PostgresAffectedRowsError extends Error {
+  constructor(params: {
+    tableName: string;
+    expectedRows: number;
+    affectedRows: number;
+  }) {
+    super(
+      `Expected ${params.tableName} statement to affect ${params.expectedRows} row${
+        params.expectedRows === 1 ? '' : 's'
+      }, but it affected ${params.affectedRows}.`,
+    );
+    this.name = 'PostgresAffectedRowsError';
+  }
+}
+
+export function isPostgresAffectedRowsError(error: unknown): boolean {
+  return error instanceof PostgresAffectedRowsError ||
+    (error instanceof Error && error.name === 'PostgresAffectedRowsError');
+}
+
 export type LoadedPiRuntimeInspectionState = {
   threads: readonly PiThreadRecord[];
   executions: readonly PiExecutionRecord[];
@@ -134,7 +154,17 @@ export const executePostgresStatements: ExecutePostgresStatements = async (datab
   try {
     await client.connect();
     for (const statement of statements) {
-      await client.query(statement.text, [...statement.values]);
+      const result = await client.query(statement.text, [...statement.values]);
+      if (
+        statement.requiredAffectedRows !== undefined &&
+        result.rowCount !== statement.requiredAffectedRows
+      ) {
+        throw new PostgresAffectedRowsError({
+          tableName: statement.tableName,
+          expectedRows: statement.requiredAffectedRows,
+          affectedRows: result.rowCount ?? 0,
+        });
+      }
     }
   } finally {
     await client.end().catch(() => undefined);

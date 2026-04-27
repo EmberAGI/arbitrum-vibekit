@@ -8,6 +8,7 @@ import {
   buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
+  buildPersistScheduledAutomationRunSnapshotStatements,
   buildStartAutomationExecutionStatements,
   buildTimeoutAutomationExecutionStatements,
 } from './index.js';
@@ -236,6 +237,57 @@ describe('transactions', () => {
     ]);
     expect(statements[2]?.values[3]).toBe('automation-running');
     expect(statements[3]?.values[3]).toBe('automation-running');
+    expect(statements[0]?.requiredAffectedRows).toBe(1);
+  });
+
+  it('builds scheduled-run snapshot persistence under the root thread and automation execution', () => {
+    const statements = buildPersistScheduledAutomationRunSnapshotStatements({
+      artifactId: 'artifact-run-snapshot',
+      eventId: 'event-run-snapshot',
+      threadId: 'thread-record-1',
+      executionId: 'exec-automation-1',
+      automationRunId: 'run-automation-1',
+      runThreadKey: 'automation:auto-1:run:run-automation-1',
+      sessionSnapshot: {
+        messages: [{ role: 'assistant', content: 'Finished scheduled work.' }],
+        artifacts: {
+          current: {
+            artifactId: 'artifact-output',
+            data: {
+              type: 'scheduled-output',
+            },
+          },
+        },
+        execution: {
+          status: 'completed',
+          statusMessage: 'Finished scheduled work.',
+        },
+      },
+      now: new Date('2026-03-18T20:04:30.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_artifacts',
+      'pi_execution_events',
+    ]);
+    expect(statements[0]?.values).toEqual([
+      'artifact-run-snapshot',
+      'thread-record-1',
+      'exec-automation-1',
+      'automation-run-snapshot',
+      false,
+      expect.stringContaining('"automationRunId":"run-automation-1"'),
+      new Date('2026-03-18T20:04:30.000Z'),
+      new Date('2026-03-18T20:04:30.000Z'),
+    ]);
+    expect(statements[1]?.values).toEqual([
+      'event-run-snapshot',
+      'exec-automation-1',
+      'thread-record-1',
+      'automation-run-snapshot',
+      expect.stringContaining('"runThreadKey":"automation:auto-1:run:run-automation-1"'),
+      new Date('2026-03-18T20:04:30.000Z'),
+    ]);
   });
 
   it('builds failed automation execution boundaries while still scheduling the next run', () => {
@@ -259,6 +311,7 @@ describe('transactions', () => {
     expect(statements[0]?.values[0]).toBe('failed');
     expect(statements[1]?.values[0]).toBe('failed');
     expect(statements[3]?.values[4]).toBe('scheduled');
+    expect(statements[3]?.values[5]).toEqual(new Date('2026-03-18T20:10:00.000Z'));
     expect(statements[6]?.values[3]).toBe('automation-failed');
     expect(statements[7]?.values[3]).toBe('automation-failed');
   });
@@ -362,5 +415,57 @@ describe('transactions', () => {
       'pi_execution_events',
     ]);
     expect(outboxStatements[1]?.text).toContain('on conflict (wallet_address, action_fingerprint) do update');
+  });
+
+  it('builds scheduled execution outbox and dedupe boundaries on the scheduled execution identity', () => {
+    const statements = buildPersistOutboxIntentStatements({
+      outboxId: 'outbox-scheduled-1',
+      executionId: 'exec-scheduled-1',
+      threadId: 'thread-root-1',
+      walletAddress: '0x00000000000000000000000000000000000000aa',
+      actionKind: 'evm-transaction',
+      actionFingerprint: 'scheduled-fingerprint-1',
+      eventId: 'event-scheduled-outbox-1',
+      now: new Date('2026-03-18T20:06:00.000Z'),
+      availableAt: new Date('2026-03-18T20:06:30.000Z'),
+      intentPayload: {
+        automationRunId: 'run-scheduled-1',
+        signerRef: 'managed-agent',
+      },
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_outbox',
+      'pi_action_fingerprints',
+      'pi_execution_events',
+    ]);
+    expect(statements[0]?.values).toEqual([
+      'outbox-scheduled-1',
+      'exec-scheduled-1',
+      'thread-root-1',
+      '0x00000000000000000000000000000000000000aa',
+      'evm-transaction',
+      'scheduled-fingerprint-1',
+      'pending',
+      expect.stringContaining('"automationRunId":"run-scheduled-1"'),
+      new Date('2026-03-18T20:06:30.000Z'),
+      new Date('2026-03-18T20:06:00.000Z'),
+    ]);
+    expect(statements[1]?.values).toEqual([
+      '0x00000000000000000000000000000000000000aa',
+      'evm-transaction',
+      'scheduled-fingerprint-1',
+      'exec-scheduled-1',
+      new Date('2026-03-18T20:06:00.000Z'),
+      new Date('2026-03-18T20:06:00.000Z'),
+    ]);
+    expect(statements[2]?.values).toEqual([
+      'event-scheduled-outbox-1',
+      'exec-scheduled-1',
+      'thread-root-1',
+      'outbox-intent',
+      expect.stringContaining('"signerRef":"managed-agent"'),
+      new Date('2026-03-18T20:06:00.000Z'),
+    ]);
   });
 });

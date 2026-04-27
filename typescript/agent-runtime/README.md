@@ -95,10 +95,21 @@ user-visible `PiThread`. Durable scheduled-run truth belongs to
 `AutomationRun`, `PiExecution`, execution/activity history, summaries,
 artifacts, failures, timeout state, and outbox/dedupe references.
 When the Pi loop snapshots the scheduled context, `agent-runtime` checkpoints
-the `PiExecution` against the root thread record and deliberately skips a
-`pi_threads` write for the internal `automation:<automationId>:run:<runId>`
-context. Previous scheduled-run prompt context includes only concise prior
-result summary plus run-detail/activity/artifact references.
+the `PiExecution` against the root thread record, writes a bounded
+`automation-run-snapshot` artifact/event for run-detail inspection, and
+deliberately skips a `pi_threads` write for the internal
+`automation:<automationId>:run:<runId>` context. Scheduler claiming is
+row-count checked: if another runtime process has already moved a run out of
+`scheduled`, this process skips invocation. Newly inserted next-run records use
+the future cadence timestamp for `scheduled_at`, matching `next_run_at`.
+Previous scheduled-run prompt context includes only concise prior result
+summary plus run-detail/activity/artifact references.
+
+Runtime-owned tools invoked during scheduled execution persist their
+checkpoints against the scheduled automation `PiExecution` and the root
+`PiThread`. That keeps operator interrupts, signing-oriented checkpoints, and
+future outbox/dedupe records on the same fail-closed runtime boundary used by
+direct user executions.
 
 The web app consumes those runtime-owned activity artifacts as a general
 activity stream. It may render automation run ids, statuses, summaries, and

@@ -33,12 +33,14 @@ import {
   buildPersistAutomationDispatchStatements,
   buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
+  buildPersistScheduledAutomationRunSnapshotStatements,
   buildPersistThreadStateStatements,
   buildPiRuntimeStableUuid,
   buildStartAutomationExecutionStatements,
   buildTimeoutAutomationExecutionStatements,
   ensurePiRuntimePostgresReady as ensurePiRuntimePostgresReadyInternal,
   executePostgresStatements,
+  isPostgresAffectedRowsError,
   recoverDueAutomations,
 } from '../lib/postgres/dist/index.js';
 
@@ -564,6 +566,67 @@ function readPersistedSession(
   return normalizeLegacyPersistedInterruptMetadata(
     threadState as unknown as PiRuntimeGatewaySession,
   );
+}
+
+function buildScheduledAutomationRunSnapshot(
+  session: PiRuntimeGatewaySession,
+): Record<string, unknown> {
+  const messages = (session.messages ?? []).map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: typeof message.content === 'string' ? message.content : '[non-text content]',
+  }));
+  const summarizeArtifactData = (data: unknown): unknown => {
+    if (!isRecord(data)) {
+      return data;
+    }
+
+    return {
+      ...(typeof data.type === 'string' ? { type: data.type } : {}),
+      ...(typeof data.status === 'string' ? { status: data.status } : {}),
+      ...(typeof data.detail === 'string' ? { detail: data.detail } : {}),
+      ...(typeof data.summary === 'string' ? { summary: data.summary } : {}),
+      ...(typeof data.runId === 'string' ? { runId: data.runId } : {}),
+      ...(typeof data.command === 'string' ? { command: data.command } : {}),
+    };
+  };
+  const artifacts: Record<string, unknown> = {};
+  if (session.artifacts?.current) {
+    artifacts.current = {
+      artifactId: session.artifacts.current.artifactId,
+      data: summarizeArtifactData(session.artifacts.current.data),
+    };
+  }
+  if (session.artifacts?.activity) {
+    artifacts.activity = {
+      artifactId: session.artifacts.activity.artifactId,
+      data: summarizeArtifactData(session.artifacts.activity.data),
+    };
+  }
+  const activityEvents = (session.activityEvents ?? []).map((event) => {
+    if (event.type !== 'artifact') {
+      return event;
+    }
+
+    return {
+      type: event.type,
+      append: event.append,
+      artifact: {
+        artifactId: event.artifact.artifactId,
+        data: summarizeArtifactData(event.artifact.data),
+      },
+    };
+  });
+
+  return {
+    thread: session.thread,
+    execution: session.execution,
+    automation: session.automation,
+    messages,
+    artifacts,
+    activityEvents,
+    ...(session.a2ui ? { a2ui: session.a2ui } : {}),
+  };
 }
 
 function normalizeLegacyInterruptArtifactData(
@@ -2162,18 +2225,33 @@ export async function createAgentRuntime<TState = unknown>(
     if (scheduledAutomationContext) {
       await postgres.executeStatements(
         resolvedDatabaseUrl,
-        buildPersistExecutionCheckpointStatements({
-          executionId: persistedExecutionId,
-          threadId: ids.threadId,
-          automationRunId: session.automation?.runId ?? null,
-          status: mapSessionExecutionStatusToPersistedStatus(session.execution.status),
-          source: 'automation',
-          currentInterruptId,
-          interruptType: currentInterrupt?.type,
-          interruptPayload: currentInterrupt?.payload,
-          mirroredToActivity: currentInterrupt?.mirroredToActivity,
-          now: currentNow,
-        }),
+        [
+          ...buildPersistExecutionCheckpointStatements({
+            executionId: persistedExecutionId,
+            threadId: ids.threadId,
+            automationRunId: session.automation?.runId ?? null,
+            status: mapSessionExecutionStatusToPersistedStatus(session.execution.status),
+            source: 'automation',
+            currentInterruptId,
+            interruptType: currentInterrupt?.type,
+            interruptPayload: currentInterrupt?.payload,
+            mirroredToActivity: currentInterrupt?.mirroredToActivity,
+            now: currentNow,
+          }),
+          ...buildPersistScheduledAutomationRunSnapshotStatements({
+            artifactId: buildPiRuntimeStableUuid(
+              'artifact',
+              `agent-runtime:${scheduledAutomationContext.automationId}:run:${session.automation?.runId ?? threadId}:snapshot`,
+            ),
+            eventId: randomUUID(),
+            threadId: ids.threadId,
+            executionId: persistedExecutionId,
+            automationRunId: session.automation?.runId ?? threadId,
+            runThreadKey: threadId,
+            sessionSnapshot: buildScheduledAutomationRunSnapshot(session),
+            now: currentNow,
+          }),
+        ],
       );
       return;
     }
@@ -2478,6 +2556,29 @@ export async function createAgentRuntime<TState = unknown>(
     return threadId;
   };
 
+  const resolveCurrentPersistenceContext = (threadId: string): {
+    threadRecordId: string;
+    executionId: string;
+    automationRunId: string | null;
+  } => {
+    const scheduledAutomationContext = scheduledAutomationContexts.get(threadId);
+    if (scheduledAutomationContext) {
+      const session = getSession(threadId);
+      return {
+        threadRecordId: scheduledAutomationContext.rootThreadRecordId,
+        executionId: session.execution.id,
+        automationRunId: session.automation?.runId ?? null,
+      };
+    }
+
+    const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+    return {
+      threadRecordId: directExecutionIds.threadId,
+      executionId: directExecutionIds.executionId,
+      automationRunId: null,
+    };
+  };
+
   const runtimeTools: AgentRuntimeTool[] = [
     {
       name: AGENT_RUNTIME_AUTOMATION_SCHEDULE_TOOL,
@@ -2511,7 +2612,7 @@ export async function createAgentRuntime<TState = unknown>(
         const executionId = randomUUID();
         const artifactId = buildPiRuntimeStableUuid('artifact', `agent-runtime:${threadId}:automation-artifact`);
 
-        const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+        const persistenceContext = resolveCurrentPersistenceContext(threadId);
         const currentNow = new Date(now());
         await postgres.executeStatements(
           resolvedDatabaseUrl,
@@ -2519,7 +2620,7 @@ export async function createAgentRuntime<TState = unknown>(
             automationId,
             runId,
             executionId,
-            threadId: directExecutionIds.threadId,
+            threadId: persistenceContext.threadRecordId,
             commandName: toolArgs.title,
             schedulePayload: {
               title: toolArgs.title,
@@ -2631,11 +2732,9 @@ export async function createAgentRuntime<TState = unknown>(
             });
           }
         }
+        const threadRecordId = resolveCurrentPersistenceContext(threadId).threadRecordId;
         const persistedAutomations = inspectionState.automations
-          .filter(
-            (automation) =>
-              automation.threadId === buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId,
-          )
+          .filter((automation) => automation.threadId === threadRecordId)
           .map((automation) => {
             const latestRun = latestRunByAutomation.get(automation.automationId);
             return {
@@ -2700,7 +2799,7 @@ export async function createAgentRuntime<TState = unknown>(
         const currentRecord = automationRegistry.getById(toolArgs.automationId);
 
         const inspectionState = await loadInspectionState();
-        const threadRecordId = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId).threadId;
+        const threadRecordId = resolveCurrentPersistenceContext(threadId).threadRecordId;
         const scheduledRun = [...inspectionState.automationRuns]
           .filter((run) => run.automationId === toolArgs.automationId && run.status === 'scheduled')
           .sort((left, right) => right.scheduledAt.getTime() - left.scheduledAt.getTime())[0];
@@ -2792,18 +2891,18 @@ export async function createAgentRuntime<TState = unknown>(
         const artifactId =
           buildPiRuntimeStableUuid('artifact', `agent-runtime:${threadId}:interrupt-artifact`);
 
-        const directExecutionIds = buildPiRuntimeDirectExecutionRecordIdsInternal(threadId);
+        const persistenceContext = resolveCurrentPersistenceContext(threadId);
         await postgres.executeStatements(
           resolvedDatabaseUrl,
           buildPersistInterruptCheckpointStatements({
-            executionId: directExecutionIds.executionId,
+            executionId: persistenceContext.executionId,
             interruptId: buildPiRuntimeStableUuid(
               'interrupt',
-              `agent-runtime:execution:${directExecutionIds.executionId}:interrupt`,
+              `agent-runtime:execution:${persistenceContext.executionId}:interrupt`,
             ),
             artifactId,
             activityId: buildPiRuntimeStableUuid('activity', `agent-runtime:${threadId}:interrupt-activity`),
-            threadId: directExecutionIds.threadId,
+            threadId: persistenceContext.threadRecordId,
             now: new Date(now()),
           }),
         );
@@ -3182,24 +3281,31 @@ export async function createAgentRuntime<TState = unknown>(
           `agent-runtime:${thread.threadKey}:automation-artifact`,
         );
 
-        await postgres.executeStatements(
-          resolvedDatabaseUrl,
-          buildStartAutomationExecutionStatements({
-            currentRunId: scheduledRun.runId,
-            currentExecutionId: scheduledRun.executionId,
-            threadId: automation.threadId,
-            automationId,
-            eventId: buildPiRuntimeStableUuid(
-              'execution-event',
-              `agent-runtime:${automationId}:running:${currentNow.toISOString()}`,
-            ),
-            activityId: buildPiRuntimeStableUuid(
-              'activity',
-              `agent-runtime:${automationId}:running:${currentNow.toISOString()}`,
-            ),
-            now: currentNow,
-          }),
-        );
+        try {
+          await postgres.executeStatements(
+            resolvedDatabaseUrl,
+            buildStartAutomationExecutionStatements({
+              currentRunId: scheduledRun.runId,
+              currentExecutionId: scheduledRun.executionId,
+              threadId: automation.threadId,
+              automationId,
+              eventId: buildPiRuntimeStableUuid(
+                'execution-event',
+                `agent-runtime:${automationId}:running:${currentNow.toISOString()}`,
+              ),
+              activityId: buildPiRuntimeStableUuid(
+                'activity',
+                `agent-runtime:${automationId}:running:${currentNow.toISOString()}`,
+              ),
+              now: currentNow,
+            }),
+          );
+        } catch (error) {
+          if (isPostgresAffectedRowsError(error)) {
+            continue;
+          }
+          throw error;
+        }
 
         const session = await hydrateThreadSession(thread.threadKey);
         const runningSession = applyAutomationStatusUpdate({
