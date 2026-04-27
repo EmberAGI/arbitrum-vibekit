@@ -1231,6 +1231,58 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
     );
   });
 
+  it('derives generated idempotency keys from the AG-UI thread id', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-hidden-oca-swap-create-transaction',
+        result: {
+          protocol_version: 'v1',
+          revision: 4,
+          committed_event_ids: [],
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+    const executor = createHiddenOcaSpotSwapExecutor({
+      protocolHost,
+      onchainActionsClient: {
+        listTokens: vi.fn(async () => createTokens()),
+        createSwap: vi.fn(async () => createSwapResponse()),
+      },
+      executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+    });
+    const input = {
+      rootedWalletContextId: 'rwc-user-spot-001',
+      walletAddress: '0x00000000000000000000000000000000000000a1' as const,
+      amount: '1000000',
+      amountType: 'exactIn' as const,
+      fromChain: 'arbitrum',
+      toChain: 'arbitrum',
+      fromToken: 'USDC',
+      toToken: 'WETH',
+      capitalPool: 'all' as const,
+    };
+
+    await executor.executeSpotSwap({
+      threadId: 'thread-1',
+      currentRevision: 3,
+      input,
+    });
+    await executor.executeSpotSwap({
+      threadId: 'thread-2',
+      currentRevision: 3,
+      input,
+    });
+
+    const firstCreateParams = protocolHost.handleJsonRpc.mock.calls[0]?.[0].params;
+    const secondCreateParams = protocolHost.handleJsonRpc.mock.calls[1]?.[0].params;
+    expect(firstCreateParams.idempotency_key).toMatch(/^idem-hidden-oca-swap-/);
+    expect(secondCreateParams.idempotency_key).toMatch(/^idem-hidden-oca-swap-/);
+    expect(firstCreateParams.idempotency_key).not.toEqual(secondCreateParams.idempotency_key);
+  });
+
   it('continues through redelegation refresh before signing and submitting the hidden swap', async () => {
     const runtimeSigning = createRuntimeSigningStub(
       vi.fn(async () => ({

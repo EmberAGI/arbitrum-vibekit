@@ -380,8 +380,19 @@ function createDefaultExecutionPublicClientResolver(
   };
 }
 
-function buildPayloadDerivedIdempotencyKey(input: HiddenOcaSpotSwapInput): string {
-  const fingerprint = createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, 16);
+function buildPayloadDerivedIdempotencyKey(input: {
+  request: HiddenOcaSpotSwapInput;
+  threadId: string;
+}): string {
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify({
+        threadId: input.threadId,
+        request: input.request,
+      }),
+    )
+    .digest('hex')
+    .slice(0, 16);
   return `idem-hidden-oca-swap-${fingerprint}`;
 }
 
@@ -1633,7 +1644,12 @@ export function createHiddenOcaSpotSwapExecutor(
 
   return {
     async executeSpotSwap({ threadId, currentRevision = null, input }) {
-      const inputIdempotencyKey = input.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(input);
+      const inputIdempotencyKey =
+        input.idempotencyKey ??
+        buildPayloadDerivedIdempotencyKey({
+          threadId,
+          request: input,
+        });
       const walletAddress = readHexAddress(input.walletAddress);
       if (walletAddress === null) {
         return createInputFailedResult({
@@ -1647,7 +1663,12 @@ export function createHiddenOcaSpotSwapExecutor(
         ...input,
         walletAddress,
       });
-      const idempotencyKey = request.idempotencyKey ?? buildPayloadDerivedIdempotencyKey(request);
+      const idempotencyKey =
+        request.idempotencyKey ??
+        buildPayloadDerivedIdempotencyKey({
+          threadId,
+          request,
+        });
       let fromChainId: string;
       let toChainId: string;
       let network: string;

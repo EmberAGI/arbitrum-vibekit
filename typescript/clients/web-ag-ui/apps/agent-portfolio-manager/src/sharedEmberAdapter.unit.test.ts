@@ -4059,7 +4059,7 @@ describe('createPortfolioManagerDomain', () => {
         toChain: 'arbitrum',
         fromToken: 'USDC',
         toToken: 'WETH',
-        idempotencyKey: 'idem-hidden-swap-001',
+        idempotencyKey: 'idem-hidden-swap-001:reserved-capital-confirmation:unassigned_only',
         rootedWalletContextId: 'rwc-user-protocol-001',
         reservationConflictHandling: {
           kind: 'unassigned_only',
@@ -4257,6 +4257,84 @@ describe('createPortfolioManagerDomain', () => {
           kind: 'allow_reserved_for_other_agent',
         },
       },
+    });
+  });
+
+  it('uses a distinct idempotency key for confirmed reserved-capital retries', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'USDC',
+          amount: '100000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.0001',
+          displayToAmount: '0.22',
+        },
+        transactionPlanId: 'txplan-hidden-swap-confirmed-idem-001',
+        requestId: 'req-hidden-swap-confirmed-idem-001',
+        transactionHash: '0xconfirmedreservedidem',
+        committedEventIds: ['evt-hidden-swap-confirmed-idem-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'active',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 9,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: createOnboardingBootstrap(),
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: null,
+        pendingSpotSwapConflict: {
+          dispatch: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '100000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'USDC',
+            capitalPool: 'all',
+            idempotencyKey: 'idem-hidden-oca-swap-user-selected-001',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+          },
+          conflict: {
+            kind: 'reserved_for_other_agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            reservationId: 'res-ember-lending-weth-001',
+            message: 'WETH is reserved for another agent.',
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+      operation: {
+        source: 'tool',
+        name: 'confirm_spot_swap_reserved_capital',
+        input: {
+          outcome: 'allow_reserved_for_other_agent',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 9,
+      input: expect.objectContaining({
+        idempotencyKey:
+          'idem-hidden-oca-swap-user-selected-001:reserved-capital-confirmation:allow_reserved_for_other_agent',
+        reservationConflictHandling: {
+          kind: 'allow_reserved_for_other_agent',
+        },
+      }),
     });
   });
 

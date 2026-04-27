@@ -828,6 +828,7 @@ const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
   'amountType must be "exactIn" or "exactOut"; for requests like "half my WETH" or "$3 of WETH", infer the token amount from current portfolio state when possible before dispatching.',
   'capitalPool may be "unassigned_only", "reserved_or_assigned", or "all"; use reserved_or_assigned when the user explicitly asks to use reserved or assigned units, and use all when the selected asset pool should include both free and reserved units.',
   'Never suggest releasing or adjusting a reservation for spot swaps; dispatch with capitalPool instead and let the reserved-capital confirmation interrupt ask the user to proceed or retry with unassigned capital only.',
+  `If ${PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND} returns a reserved-capital confirmation, stop the current assistant turn and wait for the user's next reply before calling ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND}.`,
   'Do not set reservationConflictHandling in inputJson; it is supplied only by the portfolio-manager conflict confirmation retry.',
   'Example inputJson: {"walletAddress":"0x...","amount":"894102247158860","amountType":"exactIn","fromChain":"arbitrum","toChain":"arbitrum","fromToken":"WETH","toToken":"USDC","capitalPool":"reserved_or_assigned"}.',
 ].join(' ');
@@ -2083,6 +2084,23 @@ function readSpotSwapConflictOutcome(
   }
 
   return null;
+}
+
+function buildConfirmedSpotSwapDispatch(input: {
+  dispatch: HiddenOcaSpotSwapInput;
+  outcome: HiddenOcaReservationConflictHandling['kind'];
+}): HiddenOcaSpotSwapInput {
+  return {
+    ...input.dispatch,
+    ...(input.dispatch.idempotencyKey
+      ? {
+          idempotencyKey: `${input.dispatch.idempotencyKey}:reserved-capital-confirmation:${input.outcome}`,
+        }
+      : {}),
+    reservationConflictHandling: {
+      kind: input.outcome,
+    },
+  };
 }
 
 function readApprovedSetupFromOnboardingBootstrap(
@@ -3881,12 +3899,10 @@ export function createPortfolioManagerDomain(
             };
           }
 
-          const dispatch: HiddenOcaSpotSwapInput = {
-            ...pendingConflict.dispatch,
-            reservationConflictHandling: {
-              kind: outcome,
-            },
-          };
+          const dispatch = buildConfirmedSpotSwapDispatch({
+            dispatch: pendingConflict.dispatch,
+            outcome,
+          });
           const result = await options.hiddenOcaSpotSwapExecutor.executeSpotSwap({
             threadId,
             currentRevision: currentState.lastSharedEmberRevision,

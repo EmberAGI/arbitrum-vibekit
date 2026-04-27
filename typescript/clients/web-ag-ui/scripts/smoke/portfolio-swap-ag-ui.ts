@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { signDelegationWithFallback } from '../../apps/web/src/utils/delegationSigning.js';
+import { buildPortfolioManagerSetupInput } from '../../apps/web/src/utils/portfolioManagerSetup.js';
 
 const WEB_PACKAGE_JSON_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -109,6 +110,7 @@ type DelegationSigningInterruptPayload = {
 
 const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
 const DEFAULT_PORTFOLIO_MANAGER_BASE_URL = 'http://127.0.0.1:3420/ag-ui';
+const DEFAULT_WEB_BASE_URL = 'http://127.0.0.1:3000';
 const DEFAULT_ARBITRUM_RPC_URL = 'https://arb1.arbitrum.io/rpc';
 const CHAIN_ID = 42161;
 const WETH = '0x82af49447d8a07e3bd95bd0d56f35241523fbab1' as const;
@@ -411,6 +413,14 @@ function resolvePortfolioManagerBaseUrl(): string {
 
   const ready = resolveLatestWalletQaReady();
   return readString(ready?.['portfolioManagerBaseUrl']) ?? DEFAULT_PORTFOLIO_MANAGER_BASE_URL;
+}
+
+function resolveWebBaseUrl(): string {
+  return (
+    readString(process.env['PM_SWAP_SMOKE_WEB_BASE_URL']) ??
+    readString(resolveLatestWalletQaReady()?.['webBaseUrl']) ??
+    DEFAULT_WEB_BASE_URL
+  );
 }
 
 function resolveChainConfig(rootWalletAddressOverride?: `0x${string}`): SmokeChainConfig {
@@ -1071,43 +1081,6 @@ function hasStateReplace(input: {
   );
 }
 
-function buildPortfolioManagerSetupInput(walletAddress: `0x${string}`) {
-  return {
-    walletAddress,
-    portfolioMandate: {
-      approved: true,
-      riskLevel: 'medium',
-    },
-    firstManagedMandate: {
-      targetAgentId: 'ember-lending',
-      targetAgentKey: 'ember-lending-primary',
-      managedMandate: {
-        lending_policy: {
-          collateral_policy: {
-            assets: [
-              {
-                asset: 'USDC',
-                max_allocation_pct: 35,
-              },
-              {
-                asset: 'WETH',
-                max_allocation_pct: 35,
-              },
-            ],
-          },
-          borrow_policy: {
-            allowed_assets: ['USDC'],
-          },
-          risk_policy: {
-            max_ltv_bps: 7000,
-            min_health_factor: '1.25',
-          },
-        },
-      },
-    },
-  };
-}
-
 async function signRootDelegation(input: {
   walletClient: ReturnType<typeof createWalletClient>;
   delegation: UnsignedDelegation;
@@ -1126,10 +1099,52 @@ async function signRootDelegation(input: {
 
 async function runAgentCommand(input: {
   baseUrl: string;
+  webBaseUrl?: string;
   threadId: string;
   runId: string;
   command: Record<string, unknown>;
 }): Promise<{ events: unknown[]; snapshot: AgUiSnapshot | null }> {
+  if (input.webBaseUrl) {
+    const commandName = readString(input.command['name']);
+    const commandInput = input.command['input'];
+    const resumeInput = input.command['resume'];
+    const payload = Object.prototype.hasOwnProperty.call(input.command, 'resume')
+      ? {
+          agentId: PORTFOLIO_MANAGER_AGENT_ID,
+          threadId: input.threadId,
+          resume: resumeInput,
+        }
+      : {
+          agentId: PORTFOLIO_MANAGER_AGENT_ID,
+          threadId: input.threadId,
+          command: {
+            name: commandName,
+            ...(Object.prototype.hasOwnProperty.call(input.command, 'input')
+              ? { input: commandInput }
+              : {}),
+          },
+        };
+    const response = await fetch(`${input.webBaseUrl}/api/agent-command`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      throw new Error(
+        `${PORTFOLIO_MANAGER_AGENT_ID} web command failed with HTTP ${response.status}: ${await response.text()}`,
+      );
+    }
+
+    await response.json();
+    return connectAgent({
+      baseUrl: input.baseUrl,
+      threadId: input.threadId,
+      runId: `${input.runId}-snapshot`,
+    });
+  }
+
   const response = await fetch(`${input.baseUrl}/agent/${PORTFOLIO_MANAGER_AGENT_ID}/run`, {
     method: 'POST',
     headers: {
@@ -1309,14 +1324,26 @@ function assertReservedConfirmationGate(stage: string, result: AgentRunResult): 
   }
 }
 
+function buildReservedWethManagedMandate(rootWalletAddress: `0x${string}`) {
+  return buildPortfolioManagerSetupInput(rootWalletAddress, {
+    collateralPoliciesInput:
+      readString(process.env['PM_SWAP_SMOKE_RESERVED_COLLATERAL_POLICIES_INPUT']) ??
+      'WETH:35, USDC:35',
+    allowedBorrowAssetsInput:
+      readString(process.env['PM_SWAP_SMOKE_RESERVED_ALLOWED_BORROW_ASSETS_INPUT']) ?? 'USDC',
+  }).firstManagedMandate.managedMandate;
+}
+
 async function onboardPortfolioManagerThread(input: {
   baseUrl: string;
+  webBaseUrl: string;
   threadId: string;
   rootWalletAddress: `0x${string}`;
   browserSigningWalletClient: ReturnType<typeof createWalletClient>;
 }): Promise<void> {
   await runAgentCommand({
     baseUrl: input.baseUrl,
+    webBaseUrl: input.webBaseUrl,
     threadId: input.threadId,
     runId: `${input.threadId}-hire`,
     command: {
@@ -1326,10 +1353,11 @@ async function onboardPortfolioManagerThread(input: {
 
   const setupResult = await runAgentCommand({
     baseUrl: input.baseUrl,
+    webBaseUrl: input.webBaseUrl,
     threadId: input.threadId,
     runId: `${input.threadId}-setup`,
     command: {
-      resume: JSON.stringify(buildPortfolioManagerSetupInput(input.rootWalletAddress)),
+      resume: buildPortfolioManagerSetupInput(input.rootWalletAddress),
     },
   });
   let signingInterrupt = readPortfolioManagerSigningInterrupt(
@@ -1440,8 +1468,47 @@ async function onboardPortfolioManagerThread(input: {
   );
 }
 
+async function updateManagedMandateForReservedSwap(input: {
+  baseUrl: string;
+  webBaseUrl: string;
+  threadId: string;
+  rootWalletAddress: `0x${string}`;
+}): Promise<void> {
+  await runAgentCommand({
+    baseUrl: input.baseUrl,
+    webBaseUrl: input.webBaseUrl,
+    threadId: input.threadId,
+    runId: `${input.threadId}-reserve-weth-mandate`,
+    command: {
+      name: 'update_managed_mandate',
+      input: {
+        targetAgentId: 'ember-lending',
+        managedMandate: buildReservedWethManagedMandate(input.rootWalletAddress),
+      },
+    },
+  });
+
+  await runAgentCommand({
+    baseUrl: input.baseUrl,
+    webBaseUrl: input.webBaseUrl,
+    threadId: input.threadId,
+    runId: `${input.threadId}-refresh-after-reserve-weth-mandate`,
+    command: {
+      name: 'refresh_portfolio_state',
+    },
+  });
+
+  console.log(
+    JSON.stringify({
+      phase: 'managed-mandate-updated-for-reserved-swap',
+      rootWalletAddress: input.rootWalletAddress,
+    }),
+  );
+}
+
 async function main() {
   const baseUrl = resolvePortfolioManagerBaseUrl();
+  const webBaseUrl = resolveWebBaseUrl();
   const identities = readIdentities();
   const rootAccount = privateKeyToAccount(identities.root_owner.private_key);
   const executorAccount = privateKeyToAccount(identities.subagent.private_key);
@@ -1507,6 +1574,7 @@ async function main() {
   console.log(
     JSON.stringify({
       phase: 'start',
+      webBaseUrl,
       portfolioManagerBaseUrl: baseUrl,
       rootWalletAddress: chainConfig.rootWalletAddress,
       wethBalance: formatUnits(fundedWethBalance, 18),
@@ -1516,6 +1584,7 @@ async function main() {
 
   await onboardPortfolioManagerThread({
     baseUrl,
+    webBaseUrl,
     threadId: portfolioThreadId,
     rootWalletAddress: chainConfig.rootWalletAddress,
     browserSigningWalletClient,
@@ -1547,6 +1616,13 @@ async function main() {
       assistantText: truncateForLog(nonReservedResult.assistantText ?? ''),
     }),
   );
+
+  await updateManagedMandateForReservedSwap({
+    baseUrl,
+    webBaseUrl,
+    threadId: portfolioThreadId,
+    rootWalletAddress: chainConfig.rootWalletAddress,
+  });
 
   const mixedBefore = await readSwapBalances({
     publicClient,
@@ -1588,6 +1664,13 @@ async function main() {
       assistantText: truncateForLog(mixedConfirmedResult.assistantText ?? ''),
     }),
   );
+
+  await updateManagedMandateForReservedSwap({
+    baseUrl,
+    webBaseUrl,
+    threadId: portfolioThreadId,
+    rootWalletAddress: chainConfig.rootWalletAddress,
+  });
 
   const reservedBefore = await readSwapBalances({
     publicClient,

@@ -47,6 +47,9 @@ describe('createPortfolioManagerAgentConfig', () => {
     });
     expect(config.systemPrompt).toContain('portfolio manager orchestrator');
     expect(config.systemPrompt).toContain('Never suggest releasing or adjusting a reservation');
+    expect(config.systemPrompt).toContain(
+      'do not call confirm_spot_swap_reserved_capital in the same assistant turn',
+    );
     expect(config.systemPrompt).toContain('confirm_spot_swap_reserved_capital');
     expect(config.databaseUrl).toBe('postgresql://portfolio:secret@db.internal:5432/pi_runtime');
     expect(config.tools).toEqual([]);
@@ -111,6 +114,7 @@ describe('createPortfolioManagerAgentConfig', () => {
     expect(spotSwapCommand?.description).toContain('capitalPool');
     expect(spotSwapCommand?.description).toContain('reserved_or_assigned');
     expect(spotSwapCommand?.description).toContain('Never suggest releasing or adjusting');
+    expect(spotSwapCommand?.description).toContain('stop the current assistant turn');
     const spotSwapConfirmationCommand = config.domain?.lifecycle.commands.find(
       (command) => command.name === 'confirm_spot_swap_reserved_capital',
     );
