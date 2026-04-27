@@ -59,7 +59,7 @@ describe('AgentDetailPage managed mandate editor', () => {
     container.remove();
   });
 
-  it('shows the lending avatar rail next to the mandate editor on the portfolio manager page', async () => {
+  it('renders the portfolio manager mandate editor on the portfolio manager page', async () => {
     const root = createRoot(container);
 
     await act(async () => {
@@ -88,31 +88,17 @@ describe('AgentDetailPage managed mandate editor', () => {
             phase: 'active',
           } as never,
           domainProjection: {
-            managedMandateEditor: {
+            portfolioManagerMandateEditor: {
               ownerAgentId: 'agent-portfolio-manager',
-              targetAgentId: 'ember-lending',
-              targetAgentRouteId: 'agent-ember-lending',
-              targetAgentKey: 'ember-lending-primary',
-              targetAgentTitle: 'Ember Lending',
-              mandateRef: 'mandate-ember-lending-001',
+              targetAgentId: 'agent-portfolio-manager',
+              targetAgentRouteId: 'agent-portfolio-manager',
+              targetAgentKey: 'portfolio-manager-primary',
+              targetAgentTitle: 'Portfolio Manager Mandate',
+              mandateRef: 'mandate-portfolio-manager',
               managedMandate: {
-                lending_policy: {
-                  collateral_policy: {
-                    assets: [
-                      {
-                        asset: 'USDC',
-                        max_allocation_pct: 35,
-                      },
-                    ],
-                  },
-                  borrow_policy: {
-                    allowed_assets: ['WETH'],
-                  },
-                  risk_policy: {
-                    max_ltv_bps: 7000,
-                    min_health_factor: '1.25',
-                  },
-                },
+                betaExposureCapPct: 65,
+                riskBudgetBps: 1800,
+                minimumCashUsd: 5000,
               },
             },
           },
@@ -120,15 +106,17 @@ describe('AgentDetailPage managed mandate editor', () => {
       );
     });
 
-    const lendingAvatar = container.querySelector('img[alt="Ember Lending"]');
-    const lendingLink = container.querySelector(
-      'a[aria-label="Open Ember Lending"]',
-    ) as HTMLAnchorElement | null;
+    const lendingSaveButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Save managed mandate'),
+    );
+    const portfolioManagerSaveButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Save portfolio mandate'),
+    );
 
-    expect(lendingAvatar).not.toBeNull();
-    expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
-    expect(lendingLink?.getAttribute('href')).toBe('/hire-agents/agent-ember-lending');
-    expect(container.textContent).toContain('Aave');
+    expect(lendingSaveButton).toBeUndefined();
+    expect(portfolioManagerSaveButton).toBeDefined();
+    expect(container.textContent).toContain('Portfolio manager mandate');
+    expect(container.textContent).toContain('Beta exposure cap');
 
     await act(async () => {
       root.unmount();
@@ -299,6 +287,175 @@ describe('AgentDetailPage managed mandate editor', () => {
         },
       },
     });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('renders and saves the portfolio manager mandate editor with numeric inputs', async () => {
+    const onManagedMandateSave = vi.fn(async () => undefined);
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        React.createElement(AgentDetailPage, {
+          agentId: 'agent-portfolio-manager',
+          agentName: 'Ember Portfolio Agent',
+          agentDescription: 'desc',
+          creatorName: 'Ember AI Team',
+          creatorVerified: true,
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+            tokens: ['USDC'],
+          },
+          metrics: {},
+          isHired: true,
+          isHiring: false,
+          hasLoadedView: true,
+          onHire: () => {},
+          onFire: () => {},
+          onSync: () => {},
+          onBack: () => {},
+          allowedPools: [],
+          lifecycleState: {
+            phase: 'active',
+          } as never,
+          domainProjection: {
+            portfolioManagerMandateEditor: {
+              ownerAgentId: 'agent-portfolio-manager',
+              targetAgentId: 'agent-portfolio-manager',
+              targetAgentRouteId: 'agent-portfolio-manager',
+              targetAgentKey: 'portfolio-manager-primary',
+              targetAgentTitle: 'Portfolio Manager Mandate',
+              mandateRef: 'mandate-portfolio-manager',
+              managedMandate: {
+                betaExposureCapPct: 65,
+                riskBudgetBps: 1800,
+                minimumCashUsd: 5000,
+              },
+            },
+          },
+          onManagedMandateSave,
+        }),
+      );
+    });
+
+    const betaExposureInput = container.querySelector(
+      'input[name="portfolio-manager-mandate-beta-exposure-cap-pct"]',
+    ) as HTMLInputElement | null;
+    const riskBudgetInput = container.querySelector(
+      'input[name="portfolio-manager-mandate-risk-budget-bps"]',
+    ) as HTMLInputElement | null;
+    const minimumCashInput = container.querySelector(
+      'input[name="portfolio-manager-mandate-minimum-cash-usd"]',
+    ) as HTMLInputElement | null;
+    const submitButton = [...container.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Save portfolio mandate'),
+    );
+
+    expect(betaExposureInput).toBeDefined();
+    expect(riskBudgetInput).toBeDefined();
+    expect(minimumCashInput).toBeDefined();
+    expect(submitButton).toBeDefined();
+    expect(betaExposureInput!.value).toBe('65');
+    expect(riskBudgetInput!.value).toBe('1800');
+    expect(minimumCashInput!.value).toBe('5000');
+
+    await act(async () => {
+      setInputValue(betaExposureInput!, '68.5');
+      setInputValue(riskBudgetInput!, '2000');
+      setInputValue(minimumCashInput!, '4000');
+    });
+
+    await act(async () => {
+      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onManagedMandateSave).toHaveBeenCalledWith({
+      ownerAgentId: 'agent-portfolio-manager',
+      targetAgentId: 'agent-portfolio-manager',
+      targetAgentRouteId: 'agent-portfolio-manager',
+      managedMandate: {
+        betaExposureCapPct: 68.5,
+        riskBudgetBps: 2000,
+        minimumCashUsd: 4000,
+      },
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it('renders the portfolio manager mandate editor while portfolio manager onboarding is active', async () => {
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(
+        React.createElement(AgentDetailPage, {
+          agentId: 'agent-portfolio-manager',
+          agentName: 'Ember Portfolio Agent',
+          agentDescription: 'desc',
+          creatorName: 'Ember AI Team',
+          creatorVerified: true,
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Pi Runtime', 'Shared Ember Domain Service'],
+            tokens: ['USDC'],
+          },
+          metrics: {},
+          isHired: true,
+          isHiring: false,
+          hasLoadedView: true,
+          onHire: () => {},
+          onFire: () => {},
+          onSync: () => {},
+          onBack: () => {},
+          allowedPools: [],
+          lifecycleState: {
+            phase: 'onboarding',
+          } as never,
+          onboardingFlow: {
+            status: 'in_progress',
+            revision: 1,
+            steps: [],
+          } as never,
+          domainProjection: {
+            portfolioManagerMandateEditor: {
+              ownerAgentId: 'agent-portfolio-manager',
+              targetAgentId: 'agent-portfolio-manager',
+              targetAgentRouteId: 'agent-portfolio-manager',
+              targetAgentKey: 'portfolio-manager-primary',
+              targetAgentTitle: 'Portfolio Manager Mandate',
+              mandateRef: 'mandate-portfolio-manager',
+              managedMandate: {
+                betaExposureCapPct: 65,
+                riskBudgetBps: 1800,
+                minimumCashUsd: 5000,
+              },
+            },
+          },
+        }),
+      );
+    });
+
+    const betaExposureInput = container.querySelector(
+      'input[name="portfolio-manager-mandate-beta-exposure-cap-pct"]',
+    ) as HTMLInputElement | null;
+    const riskBudgetInput = container.querySelector(
+      'input[name="portfolio-manager-mandate-risk-budget-bps"]',
+    ) as HTMLInputElement | null;
+    const minimumCashInput = container.querySelector(
+      'input[name="portfolio-manager-mandate-minimum-cash-usd"]',
+    ) as HTMLInputElement | null;
+
+    expect(betaExposureInput).toBeDefined();
+    expect(riskBudgetInput).toBeDefined();
+    expect(minimumCashInput).toBeDefined();
+    expect(container.textContent).toContain('Portfolio manager mandate');
+    expect(container.textContent).toContain('Save portfolio mandate');
 
     await act(async () => {
       root.unmount();

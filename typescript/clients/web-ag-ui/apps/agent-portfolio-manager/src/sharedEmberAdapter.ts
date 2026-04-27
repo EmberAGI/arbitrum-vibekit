@@ -40,6 +40,7 @@ export type PortfolioManagerLifecycleState = {
   pendingOnboardingWalletAddress: `0x${string}` | null;
   pendingApprovedSetup?: PortfolioManagerApprovedSetup | null;
   pendingSpotSwapConflict?: PortfolioManagerPendingSpotSwapConflict | null;
+  portfolioManagerMandate?: PortfolioManagerMandatePayload | null;
 };
 
 type PortfolioManagerPendingSpotSwapConflict = {
@@ -128,6 +129,7 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     pendingOnboardingWalletAddress: null,
     pendingApprovedSetup: null,
     pendingSpotSwapConflict: null,
+    portfolioManagerMandate: null,
   };
 }
 
@@ -865,7 +867,11 @@ const FIRST_MANAGED_AGENT_BENCHMARK_ASSET = 'USD';
 const FIRST_MANAGED_AGENT_KEY = 'ember-lending-primary';
 const PORTFOLIO_MANAGER_ROUTE_AGENT_ID = 'agent-portfolio-manager';
 const FIRST_MANAGED_AGENT_ROUTE_ID = 'agent-ember-lending';
+const PORTFOLIO_MANAGER_MANDATE_ROUTE_ID = 'agent-portfolio-manager';
+const PORTFOLIO_MANAGER_MANDATE_KEY = 'portfolio-manager-primary';
+const PORTFOLIO_MANAGER_MANDATE_TITLE = 'Portfolio Manager Mandate';
 const FIRST_MANAGED_AGENT_TITLE = 'Ember Lending';
+const PORTFOLIO_MANAGER_MANDATE_REF = 'mandate-portfolio-manager';
 const PM_SIGNING_TRACE_ENABLED = process.env['DEBUG_PM_SIGNING'] === '1';
 
 function tracePmSigning(step: string, details?: Record<string, unknown>) {
@@ -881,6 +887,8 @@ type PortfolioManagerPortfolioMandate = {
   approved: true;
   riskLevel: typeof PORTFOLIO_MANAGER_DEFAULT_RISK_LEVEL;
 };
+
+type PortfolioManagerMandatePayload = Record<string, unknown>;
 
 type ManagedMandate = Record<string, unknown> & {
   lending_policy: Record<string, unknown> & {
@@ -920,6 +928,20 @@ type ManagedMandateEditorProjection = {
     rootAsset: string | null;
     quantity: string | null;
   } | null;
+};
+
+type PortfolioManagerMandateEditorProjection = {
+  ownerAgentId: typeof PORTFOLIO_MANAGER_ROUTE_AGENT_ID;
+  targetAgentId: typeof PORTFOLIO_MANAGER_ROUTE_AGENT_ID;
+  targetAgentRouteId: typeof PORTFOLIO_MANAGER_MANDATE_ROUTE_ID;
+  targetAgentKey: typeof PORTFOLIO_MANAGER_MANDATE_KEY;
+  targetAgentTitle: typeof PORTFOLIO_MANAGER_MANDATE_TITLE;
+  mandateRef: typeof PORTFOLIO_MANAGER_MANDATE_REF;
+  managedMandate: PortfolioManagerMandatePayload;
+  agentWallet: `0x${string}` | null;
+  rootUserWallet: `0x${string}` | null;
+  rootedWalletContextId: string | null;
+  reservation: null;
 };
 
 type PortfolioProjectionEconomicExposureInput = {
@@ -1033,6 +1055,7 @@ type PortfolioManagerFirstManagedMandate = {
 type PortfolioManagerApprovedSetup = {
   portfolioMandate: PortfolioManagerPortfolioMandate;
   firstManagedMandate: PortfolioManagerFirstManagedMandate;
+  portfolioManagerMandate?: PortfolioManagerMandatePayload | null;
 };
 
 type PortfolioManagerSetupInput = PortfolioManagerApprovedSetup & {
@@ -1040,8 +1063,8 @@ type PortfolioManagerSetupInput = PortfolioManagerApprovedSetup & {
 };
 
 type ManagedMandateUpdateInput = {
-  targetAgentId: typeof FIRST_MANAGED_AGENT_TYPE;
-  managedMandate: ManagedMandate;
+  targetAgentId: typeof FIRST_MANAGED_AGENT_TYPE | typeof PORTFOLIO_MANAGER_ROUTE_AGENT_ID;
+  managedMandate: PortfolioManagerMandatePayload | ManagedMandate;
 };
 
 type PortfolioManagerUnsignedDelegation = {
@@ -1765,8 +1788,15 @@ function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupI
 
   const portfolioMandate = 'portfolioMandate' in input ? input.portfolioMandate : null;
   const firstManagedMandate = 'firstManagedMandate' in input ? input.firstManagedMandate : null;
+  const portfolioManagerMandate = 'portfolioManagerMandate' in input
+    ? input.portfolioManagerMandate
+    : null;
   const parsedPortfolioMandate = parsePortfolioMandate(portfolioMandate);
   const parsedFirstManagedMandate = parseFirstManagedMandate(firstManagedMandate);
+  const parsedPortfolioManagerMandate =
+    portfolioManagerMandate === null || !isRecord(portfolioManagerMandate)
+      ? null
+      : portfolioManagerMandate;
 
   if (!parsedPortfolioMandate || !parsedFirstManagedMandate) {
     return null;
@@ -1776,6 +1806,7 @@ function parsePortfolioManagerSetupInput(input: unknown): PortfolioManagerSetupI
     walletAddress: walletAddress as `0x${string}`,
     portfolioMandate: parsedPortfolioMandate,
     firstManagedMandate: parsedFirstManagedMandate,
+    portfolioManagerMandate: parsedPortfolioManagerMandate,
   };
 }
 
@@ -1785,15 +1816,31 @@ function parseManagedMandateUpdateInput(input: unknown): ManagedMandateUpdateInp
   }
 
   const targetAgentId = readString(input['targetAgentId']);
-  const managedMandate = readManagedMandate(input['managedMandate']);
+  const managedMandate = isRecord(input['managedMandate']) ? input['managedMandate'] : null;
 
-  if (targetAgentId !== FIRST_MANAGED_AGENT_TYPE || managedMandate === null) {
+  if (
+    !managedMandate ||
+    (targetAgentId !== FIRST_MANAGED_AGENT_TYPE &&
+      targetAgentId !== PORTFOLIO_MANAGER_MANDATE_ROUTE_ID)
+  ) {
+    return null;
+  }
+
+  if (targetAgentId === PORTFOLIO_MANAGER_MANDATE_ROUTE_ID) {
+    return {
+      targetAgentId: PORTFOLIO_MANAGER_MANDATE_ROUTE_ID,
+      managedMandate,
+    };
+  }
+
+  const validatedManagedMandate = readManagedMandate(managedMandate);
+  if (validatedManagedMandate === null) {
     return null;
   }
 
   return {
     targetAgentId: FIRST_MANAGED_AGENT_TYPE,
-    managedMandate,
+    managedMandate: validatedManagedMandate,
   };
 }
 
@@ -2133,6 +2180,14 @@ function readApprovedSetupFromOnboardingBootstrap(
     'firstManagedMandate' in approvedOnboardingSetup
       ? parseFirstManagedMandate(approvedOnboardingSetup.firstManagedMandate)
       : null;
+  const portfolioManagerMandate =
+    'portfolioManagerMandate' in approvedOnboardingSetup
+      ? approvedOnboardingSetup.portfolioManagerMandate
+      : null;
+  const parsedPortfolioManagerMandate =
+    portfolioManagerMandate === null || !isRecord(portfolioManagerMandate)
+      ? null
+      : portfolioManagerMandate;
 
   if (!portfolioMandate || !firstManagedMandate) {
     return null;
@@ -2141,6 +2196,7 @@ function readApprovedSetupFromOnboardingBootstrap(
   return {
     portfolioMandate,
     firstManagedMandate,
+    portfolioManagerMandate: parsedPortfolioManagerMandate,
   };
 }
 
@@ -2388,7 +2444,7 @@ function readManagedMandateEditorProjection(value: unknown): ManagedMandateEdito
   const targetAgentId = readString(editor['targetAgentId']);
   const targetAgentKey = readString(editor['targetAgentKey']);
   const mandateRef = readString(editor['mandateRef']);
-  const managedMandate = readManagedMandate(editor['managedMandate']);
+  const managedMandate = isRecord(editor['managedMandate']) ? editor['managedMandate'] : null;
   if (
     targetAgentId !== FIRST_MANAGED_AGENT_TYPE ||
     targetAgentKey === null ||
@@ -2452,6 +2508,85 @@ function buildManagedMandateEditorProjectionFromOnboardingBootstrap(
     agentWallet: null,
     rootUserWallet: readOnboardingBootstrapWalletAddress(value),
     rootedWalletContextId: readOnboardingBootstrapRootedWalletContextId(value),
+    reservation: null,
+  };
+}
+
+function buildPortfolioManagerMandateEditorProjection(
+  params: {
+    rootUserWallet: `0x${string}` | null;
+    lastRootedWalletContextId: string | null;
+    portfolioManagerMandate: PortfolioManagerMandatePayload;
+  },
+): PortfolioManagerMandateEditorProjection {
+  return {
+    ownerAgentId: PORTFOLIO_MANAGER_ROUTE_AGENT_ID,
+    targetAgentId: PORTFOLIO_MANAGER_MANDATE_ROUTE_ID,
+    targetAgentRouteId: PORTFOLIO_MANAGER_MANDATE_ROUTE_ID,
+    targetAgentKey: PORTFOLIO_MANAGER_MANDATE_KEY,
+    targetAgentTitle: PORTFOLIO_MANAGER_MANDATE_TITLE,
+    mandateRef: PORTFOLIO_MANAGER_MANDATE_REF,
+    managedMandate: params.portfolioManagerMandate,
+    agentWallet: params.rootUserWallet,
+    rootUserWallet: params.rootUserWallet,
+    rootedWalletContextId: params.lastRootedWalletContextId,
+    reservation: null,
+  };
+}
+
+function readPortfolioManagerMandateProjectionFromState(
+  state: PortfolioManagerLifecycleState,
+): PortfolioManagerMandateEditorProjection | null {
+  if (!state.portfolioManagerMandate) {
+    return null;
+  }
+
+  return buildPortfolioManagerMandateEditorProjection({
+    rootUserWallet: readPortfolioManagerContextWalletAddress(state),
+    lastRootedWalletContextId: state.lastRootedWalletContextId,
+    portfolioManagerMandate: state.portfolioManagerMandate,
+  });
+}
+
+function readPortfolioManagerMandateEditorProjection(
+  value: unknown,
+): PortfolioManagerMandateEditorProjection | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const editor = isRecord(value['portfolioManagerMandateEditor'])
+    ? value['portfolioManagerMandateEditor']
+    : null;
+  if (!editor) {
+    return null;
+  }
+
+  const targetAgentId = readString(editor['targetAgentId']);
+  const targetAgentKey = readString(editor['targetAgentKey']);
+  const mandateRef = readString(editor['mandateRef']);
+  const managedMandate = isRecord(editor['managedMandate']) ? editor['managedMandate'] : null;
+
+  if (
+    targetAgentId !== PORTFOLIO_MANAGER_MANDATE_ROUTE_ID ||
+    targetAgentKey === null ||
+    mandateRef === null ||
+    managedMandate === null
+  ) {
+    return null;
+  }
+
+  return {
+    ownerAgentId: PORTFOLIO_MANAGER_ROUTE_AGENT_ID,
+    targetAgentId: PORTFOLIO_MANAGER_MANDATE_ROUTE_ID,
+    targetAgentRouteId: PORTFOLIO_MANAGER_MANDATE_ROUTE_ID,
+    targetAgentKey,
+    targetAgentTitle: PORTFOLIO_MANAGER_MANDATE_TITLE,
+    mandateRef,
+    managedMandate,
+    agentWallet: readHexAddress(editor['agentWallet']),
+    rootUserWallet: readHexAddress(editor['rootUserWallet']),
+    rootedWalletContextId: readString(editor['rootedWalletContextId']),
     reservation: null,
   };
 }
@@ -2861,6 +2996,9 @@ export function createPortfolioManagerDomain(
       const visibleManagedMandateProjection =
         liveManagedMandateProjection ??
         (currentState.phase === 'active' ? projectedManagedMandateProjection : null);
+      const visiblePortfolioManagerMandateProjection =
+        readPortfolioManagerMandateProjectionFromState(currentState) ??
+        readPortfolioManagerMandateEditorProjection(currentProjection);
 
       context.push(`  <lifecycle_phase>${currentState.phase}</lifecycle_phase>`);
 
@@ -2942,41 +3080,28 @@ export function createPortfolioManagerDomain(
       const approvedSetup = readApprovedSetupFromOnboardingBootstrap(
         currentState.lastOnboardingBootstrap,
       );
-      if (visibleManagedMandateProjection) {
-        const managedMandate = visibleManagedMandateProjection.managedMandate;
-        context.push('  <managed_agent_mandates>');
-        context.push(
-          `    <managed_agent agent_key="${escapeXml(
-            visibleManagedMandateProjection.targetAgentKey,
-          )}" agent_type="${escapeXml(
-            visibleManagedMandateProjection.targetAgentId,
-          )}" approved="true" mandate_ref="${escapeXml(visibleManagedMandateProjection.mandateRef)}">`,
-        );
-        appendStructuredXmlNode({
-          lines: context,
-          indent: '      ',
-          tag: 'managed_mandate',
-          value: managedMandate,
-        });
-        context.push('    </managed_agent>');
-        context.push('  </managed_agent_mandates>');
-      } else if (currentState.phase !== 'active' && approvedSetup) {
-        const mandateSources = readOnboardingMandateSources(currentState.lastOnboardingBootstrap);
-        const firstManagedMandateSource =
-          mandateSources.find(
-            (mandate) => mandate.agent_id === approvedSetup.firstManagedMandate.targetAgentId,
-          ) ?? null;
+      const mandateSources = approvedSetup ? readOnboardingMandateSources(currentState.lastOnboardingBootstrap) : [];
+      const firstManagedMandateSource =
+        currentState.phase !== 'active'
+          ? mandateSources.find(
+              (mandate) => mandate.agent_id === approvedSetup?.firstManagedMandate.targetAgentId,
+            ) ?? null
+          : null;
 
-        if (firstManagedMandateSource) {
-          const firstManagedMandate = approvedSetup.firstManagedMandate;
-          const managedMandate = firstManagedMandate.managedMandate;
-          context.push('  <managed_agent_mandates>');
+      if (
+        visibleManagedMandateProjection ||
+        (currentState.phase !== 'active' && firstManagedMandateSource) ||
+        visiblePortfolioManagerMandateProjection
+      ) {
+        context.push('  <managed_agent_mandates>');
+        if (visibleManagedMandateProjection) {
+          const managedMandate = visibleManagedMandateProjection.managedMandate;
           context.push(
             `    <managed_agent agent_key="${escapeXml(
-              firstManagedMandate.targetAgentKey,
+              visibleManagedMandateProjection.targetAgentKey,
             )}" agent_type="${escapeXml(
-              firstManagedMandate.targetAgentId,
-            )}" approved="true" mandate_ref="${escapeXml(firstManagedMandateSource.mandate_ref)}">`,
+              visibleManagedMandateProjection.targetAgentId,
+            )}" approved="true" mandate_ref="${escapeXml(visibleManagedMandateProjection.mandateRef)}">`,
           );
           appendStructuredXmlNode({
             lines: context,
@@ -2985,8 +3110,50 @@ export function createPortfolioManagerDomain(
             value: managedMandate,
           });
           context.push('    </managed_agent>');
-          context.push('  </managed_agent_mandates>');
         }
+        if (
+          currentState.phase !== 'active' &&
+          firstManagedMandateSource &&
+          firstManagedMandateSource.agent_id !== visibleManagedMandateProjection?.targetAgentId
+        ) {
+          const firstManagedMandate = approvedSetup?.firstManagedMandate;
+          if (firstManagedMandate) {
+            const managedMandate = firstManagedMandate.managedMandate;
+            context.push(
+              `    <managed_agent agent_key="${escapeXml(
+                firstManagedMandate.targetAgentKey,
+              )}" agent_type="${escapeXml(
+                firstManagedMandate.targetAgentId,
+              )}" approved="true" mandate_ref="${escapeXml(firstManagedMandateSource.mandate_ref)}">`,
+            );
+            appendStructuredXmlNode({
+              lines: context,
+              indent: '      ',
+              tag: 'managed_mandate',
+              value: managedMandate,
+            });
+            context.push('    </managed_agent>');
+          }
+        }
+        if (visiblePortfolioManagerMandateProjection) {
+          context.push(
+            `    <managed_agent agent_key="${escapeXml(
+              visiblePortfolioManagerMandateProjection.targetAgentKey,
+            )}" agent_type="${escapeXml(
+              visiblePortfolioManagerMandateProjection.targetAgentId,
+            )}" approved="true" mandate_ref="${escapeXml(
+              visiblePortfolioManagerMandateProjection.mandateRef,
+            )}">`,
+          );
+          appendStructuredXmlNode({
+            lines: context,
+            indent: '      ',
+            tag: 'managed_mandate',
+            value: visiblePortfolioManagerMandateProjection.managedMandate,
+          });
+          context.push('    </managed_agent>');
+        }
+        context.push('  </managed_agent_mandates>');
       }
 
       context.push('</portfolio_manager_context>');
@@ -3073,6 +3240,7 @@ export function createPortfolioManagerDomain(
             pendingOnboardingWalletAddress: null,
             pendingApprovedSetup: null,
             pendingSpotSwapConflict: null,
+            portfolioManagerMandate: null,
           };
 
           return {
@@ -3117,9 +3285,11 @@ export function createPortfolioManagerDomain(
             phase: 'onboarding',
             activeWalletAddress: setupInput.walletAddress,
             pendingOnboardingWalletAddress: setupInput.walletAddress,
+            portfolioManagerMandate: setupInput.portfolioManagerMandate ?? null,
             pendingApprovedSetup: {
               portfolioMandate: setupInput.portfolioMandate,
               firstManagedMandate: setupInput.firstManagedMandate,
+              portfolioManagerMandate: setupInput.portfolioManagerMandate ?? null,
             },
           };
 
@@ -3438,16 +3608,31 @@ export function createPortfolioManagerDomain(
             activeWalletAddress: walletAddress,
             pendingOnboardingWalletAddress: null,
             pendingApprovedSetup: null,
+            portfolioManagerMandate:
+              approvedSetup.portfolioManagerMandate ?? currentState.portfolioManagerMandate ?? null,
           };
           const onboardingManagedMandateProjection =
             buildManagedMandateEditorProjectionFromOnboardingBootstrap(onboarding);
+          const onboardingPortfolioManagerMandateProjection =
+            approvedSetup.portfolioManagerMandate
+              ? buildPortfolioManagerMandateEditorProjection({
+                  rootUserWallet: readPortfolioManagerContextWalletAddress(nextState),
+                  lastRootedWalletContextId: nextState.lastRootedWalletContextId,
+                  portfolioManagerMandate: approvedSetup.portfolioManagerMandate,
+                })
+              : null;
 
           return {
             state: nextState,
-            ...(onboardingManagedMandateProjection
+            ...(onboardingManagedMandateProjection || onboardingPortfolioManagerMandateProjection
               ? {
                   domainProjectionUpdate: {
-                    managedMandateEditor: onboardingManagedMandateProjection,
+                    ...(onboardingManagedMandateProjection
+                      ? { managedMandateEditor: onboardingManagedMandateProjection }
+                      : {}),
+                    ...(onboardingPortfolioManagerMandateProjection
+                      ? { portfolioManagerMandateEditor: onboardingPortfolioManagerMandateProjection }
+                      : {}),
                   },
                 }
               : {}),
@@ -3571,6 +3756,9 @@ export function createPortfolioManagerDomain(
           });
           const managedMandateProjection = managedSnapshot.managedMandateProjection;
           const portfolioProjectionInput = managedSnapshot.portfolioProjectionInput;
+          const portfolioManagerMandateProjection = readPortfolioManagerMandateProjectionFromState(
+            currentState,
+          );
           const nextPhase = managedMandateProjection ? 'active' : currentState.phase;
           const nextRevision =
             managedMandateProjection === null && managedSnapshot.accountingStateReads.length === 0
@@ -3600,11 +3788,16 @@ export function createPortfolioManagerDomain(
 
           return {
             state: nextState,
-            ...(managedMandateProjection || portfolioProjectionInput
+            ...(managedMandateProjection ||
+            portfolioManagerMandateProjection ||
+            portfolioProjectionInput
               ? {
                   domainProjectionUpdate: {
                     ...(managedMandateProjection
                       ? { managedMandateEditor: managedMandateProjection }
+                      : {}),
+                    ...(portfolioManagerMandateProjection
+                      ? { portfolioManagerMandateEditor: portfolioManagerMandateProjection }
                       : {}),
                     ...(portfolioProjectionInput ? { portfolioProjectionInput } : {}),
                   },
@@ -3628,18 +3821,6 @@ export function createPortfolioManagerDomain(
           };
         }
         case 'update_managed_mandate': {
-          if (!options.protocolHost) {
-            return {
-              state: currentState,
-              outputs: {
-                status: {
-                  executionStatus: 'failed',
-                  statusMessage: 'Shared Ember Domain Service host is not configured.',
-                },
-              },
-            };
-          }
-
           const updateInput = parseManagedMandateUpdateInput(operation.input);
           if (!updateInput) {
             return {
@@ -3648,7 +3829,45 @@ export function createPortfolioManagerDomain(
                 status: {
                   executionStatus: 'failed',
                   statusMessage:
-                    'Managed mandate updates require targetAgentId and a durable managedMandate payload.',
+                  'Managed mandate updates require targetAgentId and a durable managedMandate payload.',
+                },
+              },
+            };
+          }
+
+          if (updateInput.targetAgentId === PORTFOLIO_MANAGER_MANDATE_ROUTE_ID) {
+            const nextState: PortfolioManagerLifecycleState = {
+              ...currentState,
+              portfolioManagerMandate: updateInput.managedMandate,
+            };
+            const nextProjection = buildPortfolioManagerMandateEditorProjection({
+              rootUserWallet: readPortfolioManagerContextWalletAddress(currentState),
+              lastRootedWalletContextId: currentState.lastRootedWalletContextId,
+              portfolioManagerMandate: updateInput.managedMandate,
+            });
+
+            return {
+              state: nextState,
+              domainProjectionUpdate: {
+                portfolioManagerMandateEditor: nextProjection,
+              },
+              outputs: {
+                status: {
+                  executionStatus: 'completed',
+                  statusMessage:
+                    'Portfolio manager mandate updated for local execution and persisted in session state.',
+                },
+              },
+            };
+          }
+
+          if (!options.protocolHost) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage: 'Shared Ember Domain Service host is not configured.',
                 },
               },
             };

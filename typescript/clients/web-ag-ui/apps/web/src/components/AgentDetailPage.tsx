@@ -41,6 +41,7 @@ import type {
   OperatorConfigInput,
   PendleSetupInput,
   PortfolioManagerSetupInput,
+  PortfolioManagerMandateInput,
   FundWalletAcknowledgement,
   GmxSetupInput,
   PiOperatorNoteInput,
@@ -594,12 +595,24 @@ type ManagedMandateEditorView = {
   reservationSummary: string | null;
 };
 
+type PortfolioManagerMandateEditorView = {
+  ownerAgentId: string;
+  targetAgentId: string;
+  targetAgentRouteId: string;
+  targetAgentKey: string;
+  title: string;
+  mandateRef: string | null;
+  managedMandate: PortfolioManagerMandateInput;
+};
+
 type ManagedMandateEditorSubmitInput = {
   ownerAgentId: string;
   targetAgentId: string;
   targetAgentRouteId: string;
-  managedMandate: ManagedMandateInput;
+  managedMandate: Record<string, unknown>;
 };
+
+type PortfolioManagerMandateEditorSubmitInput = ManagedMandateEditorSubmitInput;
 
 function buildReservationSummaryFromProjection(
   reservation: Record<string, unknown> | null,
@@ -625,6 +638,17 @@ function buildReservationSummaryFromProjection(
   return normalizeReservationSummaryForDisplay(
     `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`,
   );
+}
+
+function readPortfolioManagerNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function readManagedMandateEditorView(
@@ -666,6 +690,39 @@ function readManagedMandateEditorView(
     rootUserWallet: readString(editor['rootUserWallet']),
     rootedWalletContextId: readString(editor['rootedWalletContextId']),
     reservationSummary: buildReservationSummaryFromProjection(asRecord(editor['reservation'])),
+  };
+}
+
+function readPortfolioManagerMandateEditorView(
+  domainProjection: Record<string, unknown> | undefined,
+): PortfolioManagerMandateEditorView | null {
+  const editor = asRecord(domainProjection?.['portfolioManagerMandateEditor']);
+  if (!editor) {
+    return null;
+  }
+
+  const targetAgentRouteId = readString(editor['targetAgentRouteId']);
+  if (!targetAgentRouteId) {
+    return null;
+  }
+  const ownerAgentId = readString(editor['ownerAgentId']);
+  const targetAgentId = readString(editor['targetAgentId']);
+  const targetAgentKey = readString(editor['targetAgentKey']);
+  if (!ownerAgentId || !targetAgentId || !targetAgentKey) {
+    return null;
+  }
+
+  const managedMandateRecord = asRecord(editor['managedMandate']) ?? null;
+  const managedMandate: PortfolioManagerMandateInput = managedMandateRecord ?? {};
+
+  return {
+    ownerAgentId,
+    targetAgentId,
+    targetAgentRouteId,
+    targetAgentKey,
+    title: readString(editor['targetAgentTitle']) ?? 'Portfolio manager mandate',
+    mandateRef: readString(editor['mandateRef']),
+    managedMandate,
   };
 }
 
@@ -730,6 +787,166 @@ function ManagedMandateEditorCard(props: {
         })
       }
     />
+  );
+}
+
+function PortfolioManagerMandateWorkbenchCard(props: {
+  view: PortfolioManagerMandateEditorView;
+  onSave?: (input: PortfolioManagerMandateEditorSubmitInput) => Promise<void> | void;
+  submitLabel?: string;
+  chrome?: 'card' | 'plain';
+}) {
+  const initialBetaExposureCapPct = readPortfolioManagerNumber(props.view.managedMandate.betaExposureCapPct);
+  const initialRiskBudgetBps = readPortfolioManagerNumber(props.view.managedMandate.riskBudgetBps);
+  const initialMinimumCashUsd = readPortfolioManagerNumber(props.view.managedMandate.minimumCashUsd);
+
+  const [betaExposureCapPctInput, setBetaExposureCapPctInput] = useState(
+    initialBetaExposureCapPct === undefined ? '' : String(initialBetaExposureCapPct),
+  );
+  const [riskBudgetBpsInput, setRiskBudgetBpsInput] = useState(
+    initialRiskBudgetBps === undefined ? '' : String(initialRiskBudgetBps),
+  );
+  const [minimumCashUsdInput, setMinimumCashUsdInput] = useState(
+    initialMinimumCashUsd === undefined ? '' : String(initialMinimumCashUsd),
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setBetaExposureCapPctInput(
+      readPortfolioManagerNumber(props.view.managedMandate.betaExposureCapPct) === undefined
+        ? ''
+        : String(readPortfolioManagerNumber(props.view.managedMandate.betaExposureCapPct)),
+    );
+    setRiskBudgetBpsInput(
+      readPortfolioManagerNumber(props.view.managedMandate.riskBudgetBps) === undefined
+        ? ''
+        : String(readPortfolioManagerNumber(props.view.managedMandate.riskBudgetBps)),
+    );
+    setMinimumCashUsdInput(
+      readPortfolioManagerNumber(props.view.managedMandate.minimumCashUsd) === undefined
+        ? ''
+        : String(readPortfolioManagerNumber(props.view.managedMandate.minimumCashUsd)),
+    );
+    setSubmitError(null);
+  }, [props.view.mandateRef, props.view.managedMandate]);
+
+  const handleSave = async () => {
+    if (!props.onSave) {
+      return;
+    }
+
+    const betaExposureCapPct = Number(betaExposureCapPctInput.trim());
+    if (!Number.isFinite(betaExposureCapPct)) {
+      setSubmitError('Beta exposure cap must be a valid number.');
+      return;
+    }
+
+    const riskBudgetBps = Number(riskBudgetBpsInput.trim());
+    if (!Number.isFinite(riskBudgetBps)) {
+      setSubmitError('Risk budget must be a valid number.');
+      return;
+    }
+
+    const minimumCashUsd = Number(minimumCashUsdInput.trim());
+    if (!Number.isFinite(minimumCashUsd)) {
+      setSubmitError('Minimum cash threshold must be a valid number.');
+      return;
+    }
+
+    setIsSaving(true);
+    setSubmitError(null);
+    try {
+      await props.onSave({
+        ownerAgentId: props.view.ownerAgentId,
+        targetAgentId: props.view.targetAgentId,
+        targetAgentRouteId: props.view.targetAgentRouteId,
+        managedMandate: {
+          ...props.view.managedMandate,
+          betaExposureCapPct,
+          riskBudgetBps,
+          minimumCashUsd,
+        },
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Portfolio mandate update failed.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const rootClassName =
+    props.chrome === 'plain'
+      ? 'py-1'
+      : 'rounded-[22px] border border-[#eadac7] bg-white/80 px-3.5 py-3 shadow-[0_14px_28px_rgba(148,111,79,0.09)]';
+
+  return (
+    <div className={rootClassName}>
+      <div className="space-y-3">
+        <div>
+          <div className="text-[0.88rem] font-semibold text-[#503826]">Portfolio manager mandate</div>
+          <div className="mt-1 text-xs text-[#7c6757]">
+            Tune these portfolio-wide policy defaults before runtime dispatch.
+          </div>
+        </div>
+
+        <label className="space-y-1.5 block">
+          <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#9b826f]">
+            Beta exposure cap (%)
+          </span>
+          <input
+            name="portfolio-manager-mandate-beta-exposure-cap-pct"
+            aria-label="Portfolio manager beta exposure cap"
+            type="number"
+            className={DETAIL_INPUT_CLASS}
+            value={betaExposureCapPctInput}
+            onChange={(event) => setBetaExposureCapPctInput(event.target.value)}
+            disabled={isSaving}
+          />
+        </label>
+
+        <label className="space-y-1.5 block">
+          <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#9b826f]">
+            Risk budget (bps)
+          </span>
+          <input
+            name="portfolio-manager-mandate-risk-budget-bps"
+            aria-label="Portfolio manager risk budget"
+            type="number"
+            className={DETAIL_INPUT_CLASS}
+            value={riskBudgetBpsInput}
+            onChange={(event) => setRiskBudgetBpsInput(event.target.value)}
+            disabled={isSaving}
+          />
+        </label>
+
+        <label className="space-y-1.5 block">
+          <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-[#9b826f]">
+            Minimum cash reserve (USD)
+          </span>
+          <input
+            name="portfolio-manager-mandate-minimum-cash-usd"
+            aria-label="Portfolio manager minimum cash reserve"
+            type="number"
+            className={DETAIL_INPUT_CLASS}
+            value={minimumCashUsdInput}
+            onChange={(event) => setMinimumCashUsdInput(event.target.value)}
+            disabled={isSaving}
+          />
+        </label>
+
+        {submitError ? <p className="text-xs text-[#8a2f2f]">{submitError}</p> : null}
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-5 py-2`}
+        >
+          {isSaving ? 'Saving...' : props.submitLabel ?? 'Save portfolio mandate'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -864,6 +1081,10 @@ export function AgentDetailPage({
     () => readManagedMandateEditorView(domainProjection),
     [domainProjection],
   );
+  const portfolioManagerMandateEditorView = useMemo(
+    () => readPortfolioManagerMandateEditorView(domainProjection),
+    [domainProjection],
+  );
   const emberLendingRuntimeView = useMemo(
     () =>
       agentId === 'agent-ember-lending'
@@ -878,10 +1099,14 @@ export function AgentDetailPage({
     onboardingStatus: onboardingFlow?.status,
   });
   const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
-  const portfolioManagedContextVisible =
-    managedRuntimePhaseIsActive && (!isPortfolioAgent || !isOnboardingActive);
+  const managedOnboardingRuntimeActive = lifecycleState?.phase === 'onboarding';
+  const portfolioManagedContextVisible = isPortfolioAgent
+    ? managedRuntimePhaseIsActive || managedOnboardingRuntimeActive
+    : managedRuntimePhaseIsActive && !isOnboardingActive;
   const visibleManagedMandateEditorView = portfolioManagedContextVisible
-    ? managedMandateEditorView
+    ? isPortfolioAgent
+      ? portfolioManagerMandateEditorView
+      : managedMandateEditorView
     : null;
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
@@ -1235,18 +1460,14 @@ export function AgentDetailPage({
   const managedAgentContextCards = visibleManagedMandateEditorView ? (
     <div className={isPortfolioAgent ? 'mt-6 border-t border-[#eadac7] pt-5' : 'mt-6'}>
       {isPortfolioAgent ? (
-        <PortfolioManagerMandateWorkbenchShell>
-          <ManagedMandateEditorCard
-            view={visibleManagedMandateEditorView}
-            availableTokenSymbols={managedMandateAvailableTokenSymbols}
-            tokenIconBySymbol={tokenIconBySymbol}
-            onSave={onManagedMandateSave}
-            chrome="plain"
-          />
-        </PortfolioManagerMandateWorkbenchShell>
+        <PortfolioManagerMandateWorkbenchCard
+          view={visibleManagedMandateEditorView as PortfolioManagerMandateEditorView}
+          onSave={onManagedMandateSave}
+          chrome="plain"
+        />
       ) : (
         <ManagedMandateEditorCard
-          view={visibleManagedMandateEditorView}
+          view={visibleManagedMandateEditorView as ManagedMandateEditorView}
           availableTokenSymbols={managedMandateAvailableTokenSymbols}
           tokenIconBySymbol={tokenIconBySymbol}
           onSave={onManagedMandateSave}

@@ -254,6 +254,12 @@ export interface PortfolioManagerMandateApproval {
   riskLevel: 'medium';
 }
 
+export interface PortfolioManagerMandateInput extends Record<string, unknown> {
+  betaExposureCapPct?: number;
+  riskBudgetBps?: number;
+  minimumCashUsd?: number;
+}
+
 export interface ManagedLendingCollateralAssetPolicyInput {
   asset: string;
   max_allocation_pct: number;
