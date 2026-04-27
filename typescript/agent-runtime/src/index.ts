@@ -265,6 +265,20 @@ type AgentRuntimeExecutionContext = {
   threadId: string;
 };
 
+type AgentRuntimeScheduledAutomationContext = {
+  automationId: string;
+  automationTitle: string;
+  scheduledAt: Date;
+  rootThreadId: string;
+  rootThreadRecordId: string;
+  previousRun?: {
+    runId: string;
+    executionId: string | null;
+    status: string;
+    completedAt: Date | null;
+  };
+};
+
 const AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY = '__agentRuntimeDomainState';
 
 type AgentRuntimeSessionStore = {
@@ -373,6 +387,44 @@ function appendDomainSystemPromptContext(
   }
 
   return `${systemPrompt}\n\n${appended}`;
+}
+
+function escapeSystemContextXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function buildScheduledAutomationSystemContextLines(
+  context: AgentRuntimeScheduledAutomationContext | undefined,
+): string[] {
+  if (!context) {
+    return [];
+  }
+
+  const lines = [
+    '<scheduled_automation_context>',
+    `<automation_id>${escapeSystemContextXml(context.automationId)}</automation_id>`,
+    `<automation_title>${escapeSystemContextXml(context.automationTitle)}</automation_title>`,
+    `<scheduled_at>${context.scheduledAt.toISOString()}</scheduled_at>`,
+    `<root_thread_id>${escapeSystemContextXml(context.rootThreadId)}</root_thread_id>`,
+    `<root_thread_record_id>${escapeSystemContextXml(context.rootThreadRecordId)}</root_thread_record_id>`,
+  ];
+
+  if (context.previousRun) {
+    lines.push(
+      '<previous_run>',
+      `<previous_run_id>${escapeSystemContextXml(context.previousRun.runId)}</previous_run_id>`,
+      `<previous_run_execution_id>${escapeSystemContextXml(context.previousRun.executionId ?? '')}</previous_run_execution_id>`,
+      `<previous_run_status>${escapeSystemContextXml(context.previousRun.status)}</previous_run_status>`,
+      `<previous_run_completed_at>${context.previousRun.completedAt?.toISOString() ?? ''}</previous_run_completed_at>`,
+      '</previous_run>',
+    );
+  }
+
+  lines.push('</scheduled_automation_context>');
+  return lines;
 }
 
 function shouldDebugLogSystemPrompt(): boolean {
@@ -1964,6 +2016,7 @@ export async function createAgentRuntime<TState = unknown>(
   const automationRegistry = createAutomationRegistry();
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
+  const scheduledAutomationContexts = new Map<string, AgentRuntimeScheduledAutomationContext>();
   const persistedThreads = new Set<string>();
   const getActiveThreadId = (): string | undefined => {
     const context = executionContext.getStore();
@@ -2243,6 +2296,13 @@ export async function createAgentRuntime<TState = unknown>(
                 ),
               ]
             : [];
+          if (threadId) {
+            lines.push(
+              ...buildScheduledAutomationSystemContextLines(
+                scheduledAutomationContexts.get(threadId),
+              ),
+            );
+          }
           const nextContext = lines.length
             ? {
                 ...context,
@@ -2956,6 +3016,40 @@ export async function createAgentRuntime<TState = unknown>(
             ? automation.schedulePayload.instruction
             : automation.commandName;
         const runThreadId = `automation:${automationId}:run:${scheduledRun.runId}`;
+        const previousRun = inspectionState.automationRuns
+          .filter(
+            (run) =>
+              run.automationId === automationId &&
+              run.runId !== scheduledRun.runId &&
+              run.status !== 'scheduled',
+          )
+          .sort((left, right) => {
+            const leftTime = left.completedAt?.getTime() ?? left.scheduledAt.getTime();
+            const rightTime = right.completedAt?.getTime() ?? right.scheduledAt.getTime();
+            return rightTime - leftTime;
+          })[0];
+        const automationTitle =
+          typeof automation.schedulePayload.title === 'string' &&
+          automation.schedulePayload.title.trim().length > 0
+            ? automation.schedulePayload.title
+            : automation.commandName;
+        scheduledAutomationContexts.set(runThreadId, {
+          automationId,
+          automationTitle,
+          scheduledAt: scheduledRun.scheduledAt,
+          rootThreadId: thread.threadKey,
+          rootThreadRecordId: automation.threadId,
+          ...(previousRun
+            ? {
+                previousRun: {
+                  runId: previousRun.runId,
+                  executionId: previousRun.executionId,
+                  status: previousRun.status,
+                  completedAt: previousRun.completedAt,
+                },
+              }
+            : {}),
+        });
         setSession(runThreadId, {
           ...getSession(runThreadId),
           thread: {
@@ -2987,6 +3081,7 @@ export async function createAgentRuntime<TState = unknown>(
             ],
           }),
         );
+        scheduledAutomationContexts.delete(runThreadId);
 
         await postgres.executeStatements(
           resolvedDatabaseUrl,

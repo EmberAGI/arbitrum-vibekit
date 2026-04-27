@@ -1567,6 +1567,7 @@ describe('agent-runtime integration', () => {
       const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
       const observedScheduledUserMessages: string[] = [];
       const observedScheduledPromptUserMessages: string[][] = [];
+      const observedScheduledSystemPrompts: string[] = [];
       let inspectionState = {
         threads: [],
         executions: [],
@@ -1603,6 +1604,7 @@ describe('agent-runtime integration', () => {
               .find((message: Message) => message.role === 'user');
             if (latestUserMessage?.content === 'sync treasury balances') {
               observedScheduledUserMessages.push(latestUserMessage.content);
+              observedScheduledSystemPrompts.push(context.systemPrompt);
               observedScheduledPromptUserMessages.push(
                 context.messages
                   .filter((message: Message) => message.role === 'user')
@@ -1665,10 +1667,11 @@ describe('agent-runtime integration', () => {
           {
             automationId: 'automation-1',
             threadId: 'thread-record-1',
-            commandName: 'sync',
+            commandName: 'Sync every minute',
             nextRunAt: new Date(currentTime - 1_000),
             suspended: false,
             schedulePayload: {
+              title: 'Sync every minute',
               instruction: 'sync treasury balances',
               minutes: 1,
             },
@@ -1681,6 +1684,15 @@ describe('agent-runtime integration', () => {
             executionId: 'execution-automation-1',
             status: 'scheduled',
             scheduledAt: new Date(currentTime - 60_000),
+          },
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-previous',
+            executionId: 'execution-automation-previous',
+            status: 'completed',
+            scheduledAt: new Date(currentTime - 120_000),
+            startedAt: new Date(currentTime - 119_000),
+            completedAt: new Date(currentTime - 110_000),
           },
         ],
         interrupts: [],
@@ -1704,10 +1716,17 @@ describe('agent-runtime integration', () => {
       expect(connectSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
         type: 'automation-status',
         status: 'completed',
-        command: 'sync',
+        command: 'Sync every minute',
       });
       expect(observedScheduledUserMessages).toContain('sync treasury balances');
       expect(observedScheduledPromptUserMessages).toContainEqual(['sync treasury balances']);
+      const scheduledSystemPrompt = observedScheduledSystemPrompts.join('\n');
+      expect(scheduledSystemPrompt).toContain('<scheduled_automation_context>');
+      expect(scheduledSystemPrompt).toContain('<automation_id>automation-1</automation_id>');
+      expect(scheduledSystemPrompt).toContain('<automation_title>Sync every minute</automation_title>');
+      expect(scheduledSystemPrompt).toContain('<root_thread_id>thread-1</root_thread_id>');
+      expect(scheduledSystemPrompt).toContain('<previous_run_status>completed</previous_run_status>');
+      expect(scheduledSystemPrompt).toContain('<previous_run_id>run-automation-previous</previous_run_id>');
       const rootMessages = await readFirstMatchingEvent(
         await runtime.service.connect({
           threadId: 'thread-1',
