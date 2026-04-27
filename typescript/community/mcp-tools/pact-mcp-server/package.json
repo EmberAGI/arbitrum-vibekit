@@ -1,0 +1,45 @@
+{
+  "name": "@arbitrum-vibekit/pact-mcp-server",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "pact-mcp-server": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "watch": "nodemon --watch 'src/**/*.ts' --exec 'tsx' src/index.ts",
+    "test:ci": "echo \"No CI tests defined for pact-mcp-server\""
+  },
+  "keywords": [
+    "mcp",
+    "pact",
+    "arbitrum",
+    "escrow",
+    "payment-channel",
+    "agent-commerce",
+    "defi"
+  ],
+  "author": "Praxis Agent <praxis@dopeasset.com>",
+  "license": "MIT",
+  "description": "MCP server for PACT Protocol — trustless escrow and payment channels for autonomous agents on Arbitrum",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@types/express": "^5.0.1",
+    "@types/node": "catalog:",
+    "dotenv": "catalog:",
+    "express": "catalog:",
+    "typescript": "catalog:",
+    "viem": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "tsx": "catalog:"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
