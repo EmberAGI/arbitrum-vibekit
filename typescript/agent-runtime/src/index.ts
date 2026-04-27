@@ -1837,6 +1837,16 @@ function tapAttachedEventSource(
   };
 }
 
+async function drainAttachedEventSource(source: AgentRuntimeAttachedEventSource): Promise<void> {
+  if (Array.isArray(source)) {
+    return;
+  }
+
+  for await (const _event of source) {
+    // Drain the stream so runtime-owned side effects and persistence complete.
+  }
+}
+
 function mapSessionExecutionStatusToPersistedStatus(
   status: AgentRuntimeExecutionStatus,
 ): PersistedExecutionCheckpointStatus {
@@ -2939,6 +2949,44 @@ export async function createAgentRuntime<TState = unknown>(
           nextSession: runningSession,
           runId: scheduledRun.runId,
         });
+
+        const instruction =
+          typeof automation.schedulePayload.instruction === 'string' &&
+          automation.schedulePayload.instruction.trim().length > 0
+            ? automation.schedulePayload.instruction
+            : automation.commandName;
+        const runThreadId = `automation:${automationId}:run:${scheduledRun.runId}`;
+        setSession(runThreadId, {
+          ...getSession(runThreadId),
+          thread: {
+            id: runThreadId,
+          },
+          execution: {
+            id: scheduledRun.executionId,
+            status: 'working',
+            statusMessage: `Running scheduled automation ${automation.commandName}.`,
+          },
+          automation: {
+            id: automationId,
+            runId: scheduledRun.runId,
+          },
+        });
+        await drainAttachedEventSource(
+          await runtimeWithDomain.run({
+            threadId: runThreadId,
+            runId: scheduledRun.runId,
+            messages: [
+              {
+                id: buildPiRuntimeStableUuid(
+                  'message',
+                  `agent-runtime:${automationId}:run:${scheduledRun.runId}:instruction`,
+                ),
+                role: 'user',
+                content: instruction,
+              },
+            ],
+          }),
+        );
 
         await postgres.executeStatements(
           resolvedDatabaseUrl,

@@ -1560,11 +1560,13 @@ describe('agent-runtime integration', () => {
     ).toBe(true);
   });
 
-  it('runs scheduled automation updates through the runtime-owned default Postgres bootstrap path', async () => {
+  it('runs due scheduled automations through the agent with the saved instruction', async () => {
     vi.useFakeTimers();
 
     try {
       const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const observedScheduledPromptUserMessages: string[][] = [];
       let inspectionState = {
         threads: [],
         executions: [],
@@ -1596,6 +1598,22 @@ describe('agent-runtime integration', () => {
         now: () => currentTime,
         agentOptions: {
           streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+              observedScheduledPromptUserMessages.push(
+                context.messages
+                  .filter((message: Message) => message.role === 'user')
+                  .map((message: Message) =>
+                    typeof message.content === 'string'
+                      ? message.content
+                      : JSON.stringify(message.content),
+                  ),
+              );
+            }
+
             const latestToolResult = [...context.messages]
               .reverse()
               .find((message: Message) => message.role === 'toolResult');
@@ -1651,6 +1669,7 @@ describe('agent-runtime integration', () => {
             nextRunAt: new Date(currentTime - 1_000),
             suspended: false,
             schedulePayload: {
+              instruction: 'sync treasury balances',
               minutes: 1,
             },
           },
@@ -1687,6 +1706,21 @@ describe('agent-runtime integration', () => {
         status: 'completed',
         command: 'sync',
       });
+      expect(observedScheduledUserMessages).toContain('sync treasury balances');
+      expect(observedScheduledPromptUserMessages).toContainEqual(['sync treasury balances']);
+      const rootMessages = await readFirstMatchingEvent(
+        await runtime.service.connect({
+          threadId: 'thread-1',
+          runId: 'run-connect-messages',
+        }),
+        isMessagesSnapshotEvent,
+      );
+      expect(rootMessages?.messages).not.toContainEqual(
+        expect.objectContaining({
+          role: 'user',
+          content: 'sync treasury balances',
+        }),
+      );
       expect(internalPostgres.ensureReady).toHaveBeenCalledWith({});
       expect(internalPostgres.loadInspectionState).toHaveBeenCalled();
       expect(internalPostgres.executeStatements).toHaveBeenCalled();
