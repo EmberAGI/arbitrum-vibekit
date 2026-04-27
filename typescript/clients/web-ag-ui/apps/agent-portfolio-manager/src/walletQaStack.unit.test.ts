@@ -277,14 +277,43 @@ describe('resolveManagedWalletIds', () => {
 
     expect(resolved).toEqual({
       portfolioManagerWalletId: 'older-controller',
-      portfolioManagerOcaExecutorWalletId: 'newer-controller',
+      portfolioManagerOcaExecutorWalletId: 'older-controller',
       emberLendingWalletId: 'older-lending',
     });
   });
 
-  it('infers the hidden OCA executor wallet from the spare portfolio-manager wallet', () => {
+  it('falls back to the selected portfolio-manager wallet for hidden OCA executor QA funding', () => {
     const resolved = resolveManagedWalletIds({
       portfolioManagerWalletName: 'portfolio-manager-controller-wallet',
+      emberLendingWalletName: null,
+      controllerSignerAddress: '0x1111111111111111111111111111111111111111',
+      portfolioManagerWallets: [
+        {
+          id: 'controller-wallet-id',
+          name: 'portfolio-manager-controller-wallet',
+          address: '0x1111111111111111111111111111111111111111',
+          createdAt: '2026-04-25T00:00:00.000Z',
+        },
+        {
+          id: 'oca-executor-wallet-id',
+          name: 'portfolio-manager-controller-wallet',
+          address: '0x2222222222222222222222222222222222222222',
+          createdAt: '2026-04-25T00:00:01.000Z',
+        },
+      ],
+      emberLendingWallets: [],
+    });
+
+    expect(resolved).toMatchObject({
+      portfolioManagerWalletId: 'controller-wallet-id',
+      portfolioManagerOcaExecutorWalletId: 'controller-wallet-id',
+    });
+  });
+
+  it('uses an explicit hidden OCA executor wallet when configured', () => {
+    const resolved = resolveManagedWalletIds({
+      portfolioManagerWalletName: 'portfolio-manager-controller-wallet',
+      portfolioManagerOcaExecutorWalletName: 'oca-executor-wallet-id',
       emberLendingWalletName: null,
       controllerSignerAddress: '0x1111111111111111111111111111111111111111',
       portfolioManagerWallets: [

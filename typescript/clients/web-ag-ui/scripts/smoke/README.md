@@ -93,6 +93,38 @@ restart.
     wallet and verifies ordinary portfolio reads ingest the resulting
     ingress/egress changes without repeated phantom deltas on follow-up reads.
 
+- `pnpm smoke:portfolio-swap-ag-ui`
+  - Speaks only to the portfolio-manager AG-UI surface; it does not call Shared
+    Ember JSON-RPC directly and does not drive browser/UI components.
+  - First completes portfolio-manager onboarding through the same AG-UI
+    hire/setup/delegation-signing interrupt flow used by the app smoke. Then it
+    uses ordinary user messages on that active thread to exercise one
+    unreserved WETH -> USDC swap, one mixed unreserved-plus-reserved WETH ->
+    USDC swap with a follow-up confirmation message, then one reserved-capital
+    WETH -> USDC swap with a follow-up confirmation message.
+  - Keeps assertions intentionally thin: the smoke fails on surfaced AG-UI
+    errors/reverts, requires an AG-UI-surfaced execution transaction hash,
+    waits for a successful receipt, and checks the root wallet actually moved
+    WETH down and USDC up. It does not reimplement candidate-unit or
+    reservation selection logic.
+  - Reads an already-running wallet QA stack from
+    `PM_SWAP_SMOKE_PORTFOLIO_MANAGER_BASE_URL`,
+    `PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL`, or the latest
+    `runtime/wallet-qa-stack/launcher*.log` READY line.
+  - Optional live setup: set `PM_SWAP_SMOKE_ENABLE_FUNDING=1` to top up the
+    rooted wallet with ETH/WETH using the bundle's `FUNDING_WALLET_PRIVATE_KEY`.
+    The reserved-capital lane still must exist in the real app/accounting
+    state; the smoke does not seed fake reservations.
+  - Useful overrides:
+    `PM_SWAP_SMOKE_IDENTITIES_PATH`,
+    `PM_SWAP_SMOKE_ROOT_WALLET_ADDRESS`,
+    `ARBITRUM_RPC_URL`,
+    `PM_SWAP_SMOKE_NON_RESERVED_PROMPT`,
+    `PM_SWAP_SMOKE_MIXED_PROMPT`,
+    `PM_SWAP_SMOKE_RESERVED_PROMPT`,
+    `PM_SWAP_SMOKE_CONFIRM_PROMPT`,
+    `PM_SWAP_SMOKE_MIN_ROOT_ETH`, and `PM_SWAP_SMOKE_MIN_ROOT_WETH`.
+
 - `pnpm stack:wallet-qa`
   - Boots the local wallet QA stack for issue-driven debugging:
     `onchain-actions`, repo-local Shared Ember, `agent-portfolio-manager`,
@@ -154,4 +186,7 @@ pnpm smoke:redelegation-browser-signing
 
 # managed idle-capital reconciliation proof without the web app
 pnpm smoke:managed-idle-reconciliation
+
+# portfolio-manager reserved and unreserved spot-swap proof without the web app
+pnpm smoke:portfolio-swap-ag-ui
 ```

@@ -396,11 +396,8 @@ export function resolveManagedWalletIds(input: {
         ) ?? null;
   const inferredOcaExecutorWallet =
     explicitOcaExecutorWallet ??
-    (input.portfolioManagerOcaExecutorWalletName === undefined &&
-    portfolioManagerCandidates.length > 1
-      ? portfolioManagerCandidates.find(
-          (wallet) => wallet.id !== selectedPortfolioManager?.id,
-        ) ?? null
+    (input.portfolioManagerOcaExecutorWalletName === undefined
+      ? selectedPortfolioManager
       : null);
 
   const emberLendingCandidates =
