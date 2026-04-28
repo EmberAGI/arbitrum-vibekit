@@ -8,6 +8,7 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
   AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
   type AgentRuntimeService,
@@ -2162,6 +2163,110 @@ describe('agent-runtime integration', () => {
     }
   });
 
+  it('cancels the current active scheduled automation run', async () => {
+    const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+    const executeStatements = vi.fn(async () => undefined);
+    const inspectionState = {
+      threads: [
+        {
+          threadId: 'thread-record-1',
+          threadKey: 'thread-1',
+          threadState: {
+            thread: {
+              id: 'thread-1',
+            },
+            execution: {
+              id: 'execution-thread-1',
+              status: 'completed',
+            },
+          },
+        },
+      ],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-1',
+          threadId: 'thread-record-1',
+          commandName: 'Sync every minute',
+          nextRunAt: new Date(currentTime + 60_000),
+          suspended: false,
+          schedulePayload: {
+            title: 'Sync every minute',
+            instruction: 'sync treasury balances',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-1',
+          runId: 'run-automation-active',
+          executionId: 'execution-automation-active',
+          status: 'running',
+          scheduledAt: new Date(currentTime - 60_000),
+          startedAt: new Date(currentTime - 55_000),
+          completedAt: null,
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            return createTextStream('Automation canceled.');
+          }
+
+          return createToolStream({
+            toolName: AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
+            toolCallId: 'tool-automation-cancel',
+            args: {
+              automationId: 'automation-1',
+            },
+          });
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      }),
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-cancel-active',
+        messages: [
+          {
+            id: 'message-cancel-active',
+            role: 'user',
+            content: 'Cancel this automation.',
+          },
+        ],
+      }),
+    );
+
+    const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+    expect(statements).toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_automation_runs',
+        text: expect.stringContaining("status in ('scheduled', 'running', 'started')"),
+        values: ['canceled', new Date(currentTime), 'run-automation-active'],
+        requiredAffectedRows: 1,
+      }),
+    );
+  });
+
   it('persists scheduled automation runs as running before invoking the agent', async () => {
     vi.useFakeTimers();
 
@@ -2412,7 +2517,7 @@ describe('agent-runtime integration', () => {
         threadActivities: [],
       };
 
-      await createAgentRuntime({
+      const runtime = await createAgentRuntime({
         model: createModel('int-model'),
         systemPrompt: 'You are an automation agent.',
         now: () => currentTime,
@@ -2468,6 +2573,28 @@ describe('agent-runtime integration', () => {
         expect.objectContaining({
           tableName: 'pi_threads',
           values: expect.arrayContaining(['automation:automation-1:run:run-automation-1']),
+        }),
+      );
+      const snapshot = await readFirstMatchingEvent(
+        await runtime.service.connect({
+          threadId: 'thread-1',
+          runId: 'run-connect-live-snapshot-artifact',
+        }),
+        isStateSnapshotEvent,
+      );
+      expect(snapshot?.snapshot.thread.activity?.events).toContainEqual(
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            artifactId: expect.any(String),
+            data: expect.objectContaining({
+              type: 'automation-run-snapshot',
+              automationRunId: 'run-automation-1',
+              snapshot: expect.objectContaining({
+                summary: 'Scheduled run summarized 42 balances.',
+              }),
+            }),
+          }),
         }),
       );
     } finally {

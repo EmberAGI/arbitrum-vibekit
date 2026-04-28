@@ -354,9 +354,9 @@ sequenceDiagram
   CTX->>DM: apply normalized domain operation handling
   DM-->>RT: outputs, artifacts, summary/failure/interrupts
   RT->>RT: persist runtime-owned tool checkpoints on scheduled PiExecution/root PiThread
-  RT->>RT: complete, fail, or time out AutomationRun at terminal-decision time
+  RT->>RT: complete, fail, time out, or cancel AutomationRun with a row-count terminal claim
   RT->>RT: schedule next AutomationRun from terminal-decision cadence time
-  RT-->>AG: root activity projection plus loaded snapshot summary, artifact refs, and run details available
+  RT-->>AG: live root activity projection includes status plus automation-run-snapshot summary/artifact/run details
   AG-->>Web: projected AG-UI state/activity from runtime-owned records
   Web->>Web: show general activity history with inspect/open controls for run snapshots and artifacts, without transcript pollution
 ```

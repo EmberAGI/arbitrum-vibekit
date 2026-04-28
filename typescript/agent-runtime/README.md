@@ -104,9 +104,16 @@ row-count checked: if another runtime process has already moved a run out of
 `scheduled`, this process rolls back the batch and skips invocation. Newly
 inserted next-run records use the future cadence timestamp for `scheduled_at`,
 matching `next_run_at`.
+Terminal completion, failure, timeout, and cancellation updates are also
+status-conditional and row-count checked. A stale scheduler cannot rewrite a
+run that another process already completed, timed out, or canceled, and it
+cannot insert a duplicate future scheduled run after losing that terminal race.
 Postgres inspection loads execution-event payloads, activity payloads, and
 artifact payloads so control-plane and AG-UI activity surfaces can expose the
-persisted `automation-run-snapshot` details after restart.
+persisted `automation-run-snapshot` details after restart. The same
+`automation-run-snapshot` artifact is also projected into the live root
+activity before completion is published, so connected clients see the run
+summary/details without requiring a reconnect or process restart.
 Previous scheduled-run prompt context includes only concise prior result
 summary plus run-detail/activity/artifact references, and that summary is read
 from the persisted scheduled-run snapshot before falling back to generic root
@@ -118,6 +125,9 @@ persistence from the timed-out run. Completion, failure, and timeout
 persistence use the terminal-decision timestamp, not the tick-start timestamp,
 for `completed_at`, terminal events/activity, lease expiry, stable replacement
 ids, and the next-run cadence timestamp.
+Canceling an automation targets the current scheduled or active run, suspends
+future cadence, deletes the scheduler lease, and asks the runtime stop path to
+abort an active same-process scheduled invocation.
 
 Runtime-owned tools invoked during scheduled execution persist their
 checkpoints against the scheduled automation `PiExecution` and the root

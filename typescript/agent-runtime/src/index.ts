@@ -1277,6 +1277,26 @@ function appendPersistedAutomationSnapshotActivityEvents(params: {
   };
 }
 
+function buildLiveScheduledAutomationSnapshotActivityEvent(params: {
+  automationId: string;
+  automationRunId: string;
+  runThreadKey: string;
+  session: PiRuntimeGatewaySession;
+}): PiRuntimeGatewayActivityEvent {
+  return buildArtifactActivityEvent({
+    artifactId: buildPiRuntimeStableUuid(
+      'artifact',
+      `agent-runtime:${params.automationId}:run:${params.automationRunId}:snapshot`,
+    ),
+    data: {
+      type: 'automation-run-snapshot',
+      automationRunId: params.automationRunId,
+      runThreadKey: params.runThreadKey,
+      snapshot: buildScheduledAutomationRunSnapshot(params.session),
+    },
+  });
+}
+
 function readPreviousAutomationRunArtifactContext(
   params: {
     inspectionState: PiRuntimeGatewayInspectionState;
@@ -2951,21 +2971,38 @@ export async function createAgentRuntime<TState = unknown>(
 
         const inspectionState = await loadInspectionState();
         const threadRecordId = resolveCurrentPersistenceContext(threadId).threadRecordId;
-        const scheduledRun = [...inspectionState.automationRuns]
-          .filter((run) => run.automationId === toolArgs.automationId && run.status === 'scheduled')
-          .sort((left, right) => right.scheduledAt.getTime() - left.scheduledAt.getTime())[0];
+        const currentRun = [...inspectionState.automationRuns]
+          .filter(
+            (run) =>
+              run.automationId === toolArgs.automationId &&
+              (run.status === 'running' || run.status === 'started' || run.status === 'scheduled'),
+          )
+          .sort((left, right) => {
+            const leftRank = left.status === 'running' || left.status === 'started' ? 1 : 0;
+            const rightRank = right.status === 'running' || right.status === 'started' ? 1 : 0;
+            return rightRank - leftRank || right.scheduledAt.getTime() - left.scheduledAt.getTime();
+          })[0];
         await postgres.executeStatements(
           resolvedDatabaseUrl,
           buildCancelAutomationStatements({
             automationId: toolArgs.automationId,
-            currentRunId: scheduledRun?.runId ?? null,
-            currentExecutionId: scheduledRun?.executionId ?? null,
+            currentRunId: currentRun?.runId ?? null,
+            currentExecutionId: currentRun?.executionId ?? null,
             threadId: threadRecordId,
             eventId: randomUUID(),
             activityId: randomUUID(),
             now: new Date(now()),
           }),
         );
+        if (
+          currentRun?.executionId &&
+          (currentRun.status === 'running' || currentRun.status === 'started')
+        ) {
+          await stopAttachedEventSource(runtimeWithDomain, {
+            threadId: `automation:${toolArgs.automationId}:run:${currentRun.runId}`,
+            runId: currentRun.runId,
+          });
+        }
 
         const record =
           currentRecord ??
@@ -3676,7 +3713,16 @@ export async function createAgentRuntime<TState = unknown>(
             leaseExpiresAt: terminalNow,
             status: runOutcome,
           });
-        await postgres.executeStatements(resolvedDatabaseUrl, completionStatements);
+        try {
+          await postgres.executeStatements(resolvedDatabaseUrl, completionStatements);
+        } catch (error) {
+          if (isPostgresAffectedRowsError(error)) {
+            scheduledAutomationContexts.delete(runThreadId);
+            timedOutScheduledRunThreadIds.delete(runThreadId);
+            continue;
+          }
+          throw error;
+        }
 
         const finalAutomationStatus: AgentRuntimeAutomationStatus =
           runOutcome === 'completed' ? 'completed' : runOutcome === 'timed_out' ? 'timed_out' : 'failed';
@@ -3686,7 +3732,7 @@ export async function createAgentRuntime<TState = unknown>(
             : runOutcome === 'timed_out'
               ? runFailureDetail ?? `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`
               : `Automation ${automation.commandName} failed: ${runFailureDetail ?? 'Unknown error'}.`;
-        const completedSession = applyAutomationStatusUpdate({
+        const completedStatusSession = applyAutomationStatusUpdate({
           sessionStore,
           threadId: thread.threadKey,
           artifactId,
@@ -3698,6 +3744,16 @@ export async function createAgentRuntime<TState = unknown>(
           minutes,
           detail: finalAutomationDetail,
         });
+        const completedSession = sessionStore.updateSession(thread.threadKey, () =>
+          appendSessionActivityEvents(completedStatusSession, [
+            buildLiveScheduledAutomationSnapshotActivityEvent({
+              automationId,
+              automationRunId: scheduledRun.runId,
+              runThreadKey: runThreadId,
+              session: getSession(runThreadId),
+            }),
+          ]),
+        );
         await persistSessionSnapshot(thread.threadKey, completedSession);
         await publishSessionUpdate({
           threadId: thread.threadKey,

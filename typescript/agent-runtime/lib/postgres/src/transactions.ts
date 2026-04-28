@@ -220,8 +220,9 @@ export function buildCompleteAutomationExecutionStatements(params: {
   return [
     buildStatement(
       'pi_automation_runs',
-      'update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4',
+      "update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4 and status = 'running'",
       [status, params.now, params.now, params.currentRunId],
+      { requiredAffectedRows: 1 },
     ),
     buildStatement(
       'pi_executions',
@@ -356,8 +357,9 @@ export function buildTimeoutAutomationExecutionStatements(params: {
   return [
     buildStatement(
       'pi_automation_runs',
-      'update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4',
+      "update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4 and status = 'running'",
       ['timed_out', params.now, params.now, params.currentRunId],
+      { requiredAffectedRows: 1 },
     ),
     buildStatement(
       'pi_executions',
@@ -442,8 +444,9 @@ export function buildCancelAutomationStatements(params: {
     statements.push(
       buildStatement(
         'pi_automation_runs',
-        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and status = 'scheduled'",
+        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and status in ('scheduled', 'running', 'started')",
         ['canceled', params.now, params.currentRunId],
+        { requiredAffectedRows: 1 },
       ),
     );
   }
