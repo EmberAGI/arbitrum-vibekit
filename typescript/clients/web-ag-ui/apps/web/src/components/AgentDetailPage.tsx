@@ -444,7 +444,21 @@ function buildActivityAnchor(kind: ActivityInspectionAction['kind'], id: string)
   return `#${buildActivityElementId(kind, id)}`;
 }
 
+function buildActivityInspectionHref(params: {
+  agentId: string;
+  kind: ActivityInspectionAction['kind'];
+  id: string;
+}): string {
+  const searchParams = new URLSearchParams({
+    agentId: params.agentId,
+    ...(params.kind === 'run' ? { runId: params.id } : { artifactId: params.id }),
+  });
+  const resource = params.kind === 'run' ? 'automation-runs' : 'artifacts';
+  return `/api/copilotkit/control/${resource}?${searchParams.toString()}`;
+}
+
 function buildActivityInspectionActions(params: {
+  agentId: string;
   runId: string | null;
   artifactId: string | null;
   summary?: string | null;
@@ -457,7 +471,11 @@ function buildActivityInspectionActions(params: {
       kind: 'run',
       id: params.runId,
       label: `Inspect run ${params.runId}`,
-      href: buildActivityAnchor('run', params.runId),
+      href: buildActivityInspectionHref({
+        agentId: params.agentId,
+        kind: 'run',
+        id: params.runId,
+      }),
       detailLines: [
         `Run ${params.runId}`,
         params.summary ? `Summary ${params.summary}` : null,
@@ -471,7 +489,11 @@ function buildActivityInspectionActions(params: {
       kind: 'artifact',
       id: params.artifactId,
       label: `Open artifact ${params.artifactId}`,
-      href: buildActivityAnchor('artifact', params.artifactId),
+      href: buildActivityInspectionHref({
+        agentId: params.agentId,
+        kind: 'artifact',
+        id: params.artifactId,
+      }),
       detailLines: [`Artifact ${params.artifactId}`],
     });
   }
@@ -479,7 +501,7 @@ function buildActivityInspectionActions(params: {
   return actions;
 }
 
-function describeActivityEvent(event: ClmmEvent): ActivityDescription {
+function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescription {
   if (event.type === 'status') {
     return { body: event.message, details: [], inspections: [] };
   }
@@ -504,7 +526,7 @@ function describeActivityEvent(event: ClmmEvent): ActivityDescription {
     return {
       body: `Automation ${status}\n${command}: ${detail}`,
       details,
-      inspections: buildActivityInspectionActions({ runId, artifactId }),
+      inspections: buildActivityInspectionActions({ agentId, runId, artifactId }),
     };
   }
 
@@ -522,14 +544,14 @@ function describeActivityEvent(event: ClmmEvent): ActivityDescription {
     return {
       body: summary ? `Automation run snapshot\n${summary}` : 'Automation run snapshot',
       details,
-      inspections: buildActivityInspectionActions({ runId, artifactId, summary, runThreadKey }),
+      inspections: buildActivityInspectionActions({ agentId, runId, artifactId, summary, runThreadKey }),
     };
   }
 
   return {
     body: `Artifact: ${readArtifactEventType(event)}`,
     details: artifactId ? [`Artifact ${artifactId}`] : [],
-    inspections: buildActivityInspectionActions({ runId: null, artifactId }),
+    inspections: buildActivityInspectionActions({ agentId, runId: null, artifactId }),
   };
 }
 
@@ -1540,6 +1562,7 @@ export function AgentDetailPage({
 
         {resolvedTab === 'transactions' && (
           <TransactionHistoryTab
+            agentId={agentId}
             transactions={transactions}
             taskId={taskId}
             taskStatus={taskStatus}
@@ -2321,6 +2344,7 @@ function AgentChatTab(props: {
 
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
+  agentId: string;
   transactions: Transaction[];
   taskId?: string;
   taskStatus?: string;
@@ -2332,6 +2356,7 @@ interface TransactionHistoryTabProps {
 }
 
 function TransactionHistoryTab({
+  agentId,
   transactions,
   taskId,
   taskStatus,
@@ -2517,7 +2542,7 @@ function TransactionHistoryTab({
           <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
             {events.slice(-10).reverse().map((event, i) => {
-              const activityDescription = describeActivityEvent(event);
+              const activityDescription = describeActivityEvent(event, agentId);
               return (
                 <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
                   <div

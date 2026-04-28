@@ -381,6 +381,12 @@ describe('transactions', () => {
     expect(statements[1]?.text).toContain("status in ('scheduled', 'running', 'started')");
     expect(statements[1]?.requiredAffectedRows).toBe(1);
     expect(statements[2]?.text).toContain('update pi_executions');
+    expect(statements[2]?.values).toEqual([
+      'failed',
+      new Date('2026-03-18T20:05:00.000Z'),
+      new Date('2026-03-18T20:05:00.000Z'),
+      'exec-1',
+    ]);
     expect(statements[3]?.text).toContain('delete from pi_scheduler_leases');
     expect(statements[4]?.text).toContain('insert into pi_execution_events');
     expect(statements[5]?.text).toContain('insert into pi_thread_activity');

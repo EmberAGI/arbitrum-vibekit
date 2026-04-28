@@ -355,9 +355,11 @@ sequenceDiagram
   DM-->>RT: outputs, artifacts, summary/failure/interrupts
   RT->>RT: persist runtime-owned tool checkpoints on scheduled PiExecution/root PiThread
   RT->>RT: complete, fail, time out, or cancel AutomationRun with a row-count terminal claim
+  RT->>RT: skip lost stale-timeout races and continue later due automations
   RT->>RT: schedule next AutomationRun from terminal-decision cadence time
   RT-->>AG: live root activity projection includes status plus automation-run-snapshot summary/artifact/run details
   AG-->>Web: projected AG-UI state/activity from runtime-owned records
+  Web->>RT: open run/artifact detail through control-plane-backed inspection routes
   Web->>Web: show general activity history with inspect/open controls for run snapshots and artifacts, without transcript pollution
 ```
 

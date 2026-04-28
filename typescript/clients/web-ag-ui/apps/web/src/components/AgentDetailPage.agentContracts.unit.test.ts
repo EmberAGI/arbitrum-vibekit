@@ -360,8 +360,12 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Artifact automation-artifact-1');
     expect(html).toContain('Inspect run run-automation-1');
     expect(html).toContain('Open artifact automation-artifact-1');
-    expect(html).toContain('href="#automation-run-run-automation-1"');
-    expect(html).toContain('href="#automation-artifact-automation-artifact-1"');
+    expect(html).toContain(
+      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;runId=run-automation-1"',
+    );
+    expect(html).toContain(
+      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;artifactId=automation-artifact-1"',
+    );
   });
 
   it('renders persisted automation run snapshots with inline inspection affordances', () => {
@@ -394,6 +398,12 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Inspect run run-automation-1');
     expect(html).toContain('Open artifact automation-run-snapshot-artifact-1');
     expect(html).toContain('Run thread automation:automation-1:run:run-automation-1');
+    expect(html).toContain(
+      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;runId=run-automation-1"',
+    );
+    expect(html).toContain(
+      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;artifactId=automation-run-snapshot-artifact-1"',
+    );
   });
 
   it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {

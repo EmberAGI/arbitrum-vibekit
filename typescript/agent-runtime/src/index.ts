@@ -3397,37 +3397,44 @@ export async function createAgentRuntime<TState = unknown>(
 
           const timeoutDetail = `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`;
           const previousSession = await hydrateThreadSession(thread.threadKey);
-          await postgres.executeStatements(
-            resolvedDatabaseUrl,
-            buildTimeoutAutomationExecutionStatements({
-              automationId,
-              currentRunId: activeRun.runId,
-              currentExecutionId: activeRun.executionId,
-              nextRunId: buildPiRuntimeStableUuid(
-                'automation-run',
-                `agent-runtime:${automationId}:run:${currentNow.toISOString()}`,
-              ),
-              nextExecutionId: buildPiRuntimeStableUuid(
-                'execution',
-                `agent-runtime:${automationId}:execution:${currentNow.toISOString()}`,
-              ),
-              threadId: automation.threadId,
-              commandName: automation.commandName,
-              schedulePayload: automation.schedulePayload,
-              eventId: buildPiRuntimeStableUuid(
-                'execution-event',
-                `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
-              ),
-              activityId: buildPiRuntimeStableUuid(
-                'activity',
-                `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
-              ),
-              now: currentNow,
-              nextRunAt,
-              leaseExpiresAt: currentNow,
-              timeoutDetail,
-            }),
-          );
+          try {
+            await postgres.executeStatements(
+              resolvedDatabaseUrl,
+              buildTimeoutAutomationExecutionStatements({
+                automationId,
+                currentRunId: activeRun.runId,
+                currentExecutionId: activeRun.executionId,
+                nextRunId: buildPiRuntimeStableUuid(
+                  'automation-run',
+                  `agent-runtime:${automationId}:run:${currentNow.toISOString()}`,
+                ),
+                nextExecutionId: buildPiRuntimeStableUuid(
+                  'execution',
+                  `agent-runtime:${automationId}:execution:${currentNow.toISOString()}`,
+                ),
+                threadId: automation.threadId,
+                commandName: automation.commandName,
+                schedulePayload: automation.schedulePayload,
+                eventId: buildPiRuntimeStableUuid(
+                  'execution-event',
+                  `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+                ),
+                activityId: buildPiRuntimeStableUuid(
+                  'activity',
+                  `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+                ),
+                now: currentNow,
+                nextRunAt,
+                leaseExpiresAt: currentNow,
+                timeoutDetail,
+              }),
+            );
+          } catch (error) {
+            if (isPostgresAffectedRowsError(error)) {
+              continue;
+            }
+            throw error;
+          }
 
           const timeoutSession = applyAutomationStatusUpdate({
             sessionStore,

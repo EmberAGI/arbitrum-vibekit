@@ -2962,6 +2962,149 @@ describe('agent-runtime integration', () => {
     }
   });
 
+  it('continues later due automations when a stale active timeout loses its row-count race', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(
+        (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+          const staleTimeoutStatement = statements.find(
+            (statement) =>
+              statement.tableName === 'pi_automation_runs' &&
+              statement.values.includes('run-automation-stale') &&
+              statement.values.includes('timed_out'),
+          );
+          if (staleTimeoutStatement) {
+            const error = new Error(
+              'Expected pi_automation_runs statement to affect 1 row, but it affected 0.',
+            );
+            error.name = 'PostgresAffectedRowsError';
+            return Promise.reject(error);
+          }
+          return Promise.resolve();
+        },
+      );
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-stale',
+            threadKey: 'thread-stale',
+            threadState: {
+              thread: {
+                id: 'thread-stale',
+              },
+              execution: {
+                id: 'execution-thread-stale',
+                status: 'completed',
+              },
+            },
+          },
+          {
+            threadId: 'thread-record-next',
+            threadKey: 'thread-next',
+            threadState: {
+              thread: {
+                id: 'thread-next',
+              },
+              execution: {
+                id: 'execution-thread-next',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-stale',
+            threadId: 'thread-record-stale',
+            commandName: 'Stale sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Stale sync',
+              instruction: 'stale should not run',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+          {
+            automationId: 'automation-next',
+            threadId: 'thread-record-next',
+            commandName: 'Next sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Next sync',
+              instruction: 'next due automation should run',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-stale',
+            runId: 'run-automation-stale',
+            executionId: 'execution-automation-stale',
+            status: 'running',
+            scheduledAt: new Date(currentTime - 20 * 60_000),
+            startedAt: new Date(currentTime - 20 * 60_000),
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-next',
+            runId: 'run-automation-next',
+            executionId: 'execution-automation-next',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            return createTextStream('Next run complete.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(() => Promise.resolve(inspectionState)),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toEqual(['next due automation should run']);
+      expect(executeStatements.mock.calls.flatMap((call) => call[1])).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: ['running', expect.any(Date), 'run-automation-next'],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('marks a same-process hung scheduled invocation timed out without waiting for the agent stream to return', async () => {
     vi.useFakeTimers();
 

@@ -108,6 +108,11 @@ Terminal completion, failure, timeout, and cancellation updates are also
 status-conditional and row-count checked. A stale scheduler cannot rewrite a
 run that another process already completed, timed out, or canceled, and it
 cannot insert a duplicate future scheduled run after losing that terminal race.
+Lost stale-active timeout races are treated the same way as lost claim and
+completion races: the current tick skips that run and continues processing
+later due automations. Cancellation also updates the linked `PiExecution` to a
+failed terminal state, so operator inspection does not display a canceled
+background invocation as successful.
 Postgres inspection loads execution-event payloads, activity payloads, and
 artifact payloads so control-plane and AG-UI activity surfaces can expose the
 persisted `automation-run-snapshot` details after restart. The same
@@ -138,8 +143,9 @@ direct user executions.
 The web app consumes those runtime-owned activity artifacts as a general
 activity stream. It may render automation run ids, statuses, summaries, and
 artifact references, and it must expose inspect/open affordances for persisted
-run snapshots and artifacts. The web UI must not treat scheduled-run prompt
-messages as a durable chat transcript.
+run snapshots and artifacts through runtime control-plane-backed links, not
+local page anchors or static identifier labels. The web UI must not treat
+scheduled-run prompt messages as a durable chat transcript.
 
 If a domain integration needs to call an external service, the domain/config
 layer may delegate to an app-local adapter that returns semantic state,

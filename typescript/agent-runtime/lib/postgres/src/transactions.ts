@@ -456,7 +456,7 @@ export function buildCancelAutomationStatements(params: {
       buildStatement(
         'pi_executions',
         'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
-        ['completed', params.now, params.now, params.currentExecutionId],
+        ['failed', params.now, params.now, params.currentExecutionId],
       ),
     );
   }
