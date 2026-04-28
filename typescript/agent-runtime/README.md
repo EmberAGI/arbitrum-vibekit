@@ -104,8 +104,17 @@ row-count checked: if another runtime process has already moved a run out of
 `scheduled`, this process rolls back the batch and skips invocation. Newly
 inserted next-run records use the future cadence timestamp for `scheduled_at`,
 matching `next_run_at`.
+Postgres inspection loads execution-event payloads, activity payloads, and
+artifact payloads so control-plane and AG-UI activity surfaces can expose the
+persisted `automation-run-snapshot` details after restart.
 Previous scheduled-run prompt context includes only concise prior result
-summary plus run-detail/activity/artifact references.
+summary plus run-detail/activity/artifact references, and that summary is read
+from the persisted scheduled-run snapshot before falling back to generic root
+status activity.
+If the same process starts a scheduled invocation that hangs, the scheduler
+races the invocation against the automation timeout, marks the run timed out,
+advances cadence, and ignores late snapshot persistence from the timed-out
+run.
 
 Runtime-owned tools invoked during scheduled execution persist their
 checkpoints against the scheduled automation `PiExecution` and the root

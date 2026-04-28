@@ -25,6 +25,7 @@ import {
   resolvePostgresBootstrapPlan,
   type PiAutomationRecord,
   type PiAutomationRunRecord,
+  type PiArtifactRecord,
   type PiExecutionEventRecord,
   type PiExecutionRecord,
   type PiOutboxRecoveryRecord,
@@ -204,6 +205,7 @@ export type PiRuntimeGatewayControlPlane = {
   listExecutions: () => Promise<unknown>;
   listAutomations: () => Promise<unknown>;
   listAutomationRuns: () => Promise<unknown>;
+  listArtifacts: () => Promise<unknown>;
   inspectScheduler: () => Promise<unknown>;
   inspectOutbox: () => Promise<unknown>;
   inspectMaintenance: () => Promise<unknown>;
@@ -240,6 +242,7 @@ export type PiRuntimeGatewayInspectionState = {
   outboxIntents: readonly PiOutboxRecoveryRecord[];
   executionEvents: readonly PiExecutionEventRecord[];
   threadActivities: readonly PiThreadActivityRecord[];
+  artifacts?: readonly PiArtifactRecord[];
 };
 
 export const DEFAULT_PI_RUNTIME_GATEWAY_RETENTION = {
@@ -2341,6 +2344,7 @@ export const createCanonicalPiRuntimeGatewayControlPlane = (params: {
     listExecutions: async () => (await loadSnapshot()).executions,
     listAutomations: async () => (await loadSnapshot()).automations,
     listAutomationRuns: async () => (await loadSnapshot()).automationRuns,
+    listArtifacts: async () => (await loadSnapshot()).artifacts,
     inspectScheduler: async () => (await loadSnapshot()).scheduler,
     inspectOutbox: async () => (await loadSnapshot()).outbox,
     inspectMaintenance: async (): Promise<PiRuntimeMaintenancePlan> =>
@@ -2365,6 +2369,7 @@ export const createPiRuntimeGatewayService = (params: {
     listExecutions: () => params.controlPlane.listExecutions(),
     listAutomations: () => params.controlPlane.listAutomations(),
     listAutomationRuns: () => params.controlPlane.listAutomationRuns(),
+    listArtifacts: () => params.controlPlane.listArtifacts(),
     inspectScheduler: () => params.controlPlane.inspectScheduler(),
     inspectOutbox: () => params.controlPlane.inspectOutbox(),
     inspectMaintenance: () => params.controlPlane.inspectMaintenance(),

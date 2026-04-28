@@ -52,10 +52,12 @@ Additional rules:
 - Generic session persistence must detect the scheduled-run context and skip `pi_threads` writes for `automation:<automationId>:run:<runId>` prompt contexts; it checkpoints the `PiExecution` against the root `PiThread` record and persists a bounded run snapshot as an execution-scoped `automation-run-snapshot` artifact/event.
 - The durable scheduled-run contract is `AutomationRun` + `PiExecution` + execution/activity events, bounded transcript snapshots, summaries, artifacts, failure/timeout detail, outbox/dedupe references, and root-thread projections.
 - Starting a scheduled run is a conditional `scheduled -> running` claim committed in the same Postgres transaction as the running event/activity writes. If another runtime process has already claimed the row, the scheduler must roll back and skip invocation rather than invoking the agent twice.
+- A same-process scheduled invocation must be bounded by the automation timeout. If the agent stream hangs after the claim commits, the scheduler marks the `AutomationRun` timed out, schedules the next run on cadence, and suppresses late snapshot persistence from that timed-out run.
 - Runtime-owned tools raised inside a scheduled run, including interrupt/outbox/signing-style boundaries, must persist against the scheduled automation `PiExecution` and root `PiThread`, not a synthetic run-thread record.
-- The root thread receives projected summaries, visible status updates, and artifacts by default.
+- Runtime inspection/control state must load artifact payloads and execution/activity payloads so persisted scheduled-run snapshots remain inspectable after restart.
+- The root thread receives projected summaries, visible status updates, and persisted run-snapshot artifacts by default.
 - Web activity views must expose inspect/open affordances for projected `AutomationRun` ids and persisted run-snapshot artifacts; static identifier labels alone are not sufficient for run-detail inspection.
-- Previous-run context included in the next scheduled prompt must be concise: prior run id/status/timestamp plus result summary and run-detail/activity/artifact references, not a replay of the old transcript.
+- Previous-run context included in the next scheduled prompt must be concise: prior run id/status/timestamp plus snapshot-derived result summary and run-detail/activity/artifact references, not a replay of the old transcript.
 - Raw internal execution/automation history is available only through explicit tools.
 - The root thread must expose one stable current-state artifact, one append-only activity artifact/log, and optional execution-specific artifacts.
 - The runtime must treat projection as a first-class subsystem rather than ad hoc adapter glue:

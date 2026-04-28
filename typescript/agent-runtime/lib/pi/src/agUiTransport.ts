@@ -133,6 +133,7 @@ export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiH
     [`${basePath}/control/executions`]: () => options.service.control.listExecutions(),
     [`${basePath}/control/automations`]: () => options.service.control.listAutomations(),
     [`${basePath}/control/automation-runs`]: () => options.service.control.listAutomationRuns(),
+    [`${basePath}/control/artifacts`]: () => options.service.control.listArtifacts(),
     [`${basePath}/control/scheduler`]: () => options.service.control.inspectScheduler(),
     [`${basePath}/control/outbox`]: () => options.service.control.inspectOutbox(),
     [`${basePath}/control/maintenance`]: () => options.service.control.inspectMaintenance(),

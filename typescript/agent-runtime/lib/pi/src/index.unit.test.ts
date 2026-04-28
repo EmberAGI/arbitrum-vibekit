@@ -72,6 +72,7 @@ describe('agent-runtime-pi package contract', () => {
       listExecutions: vi.fn(async () => ['exec-1']),
       listAutomations: vi.fn(async () => ['automation-1']),
       listAutomationRuns: vi.fn(async () => ['run-1']),
+      listArtifacts: vi.fn(async () => ['artifact-1']),
       inspectScheduler: vi.fn(async () => ({ dueAutomationIds: ['automation-1'], leases: [] })),
       inspectOutbox: vi.fn(async () => ({ dueOutboxIds: ['outbox-1'], intents: [] })),
       inspectMaintenance: vi.fn(async () => ({ recovery: {}, archival: {} })),
@@ -92,6 +93,7 @@ describe('agent-runtime-pi package contract', () => {
         listExecutions: expect.any(Function),
         listAutomations: expect.any(Function),
         listAutomationRuns: expect.any(Function),
+        listArtifacts: expect.any(Function),
         inspectScheduler: expect.any(Function),
         inspectOutbox: expect.any(Function),
         inspectMaintenance: expect.any(Function),
@@ -113,6 +115,7 @@ describe('agent-runtime-pi package contract', () => {
     await expect(service.control.listExecutions()).resolves.toEqual(['exec-1']);
     await expect(service.control.listAutomations()).resolves.toEqual(['automation-1']);
     await expect(service.control.listAutomationRuns()).resolves.toEqual(['run-1']);
+    await expect(service.control.listArtifacts()).resolves.toEqual(['artifact-1']);
     await expect(service.control.inspectScheduler()).resolves.toEqual({
       dueAutomationIds: ['automation-1'],
       leases: [],
@@ -208,6 +211,18 @@ describe('agent-runtime-pi package contract', () => {
       ],
       executionEvents: [],
       threadActivities: [],
+      artifacts: [
+        {
+          artifactId: 'artifact-1',
+          threadId: 'thread-1',
+          executionId: 'exec-queued',
+          artifactKind: 'automation-run-snapshot',
+          appendOnly: false,
+          payload: { automationRunId: 'run-1' },
+          createdAt: new Date('2026-03-20T17:45:00.000Z'),
+          updatedAt: new Date('2026-03-20T17:46:00.000Z'),
+        },
+      ],
     }));
 
     const controlPlane = createCanonicalPiRuntimeGatewayControlPlane({
@@ -240,6 +255,9 @@ describe('agent-runtime-pi package contract', () => {
     ]);
     await expect(controlPlane.listAutomationRuns()).resolves.toEqual([
       expect.objectContaining({ runId: 'run-1' }),
+    ]);
+    await expect(controlPlane.listArtifacts()).resolves.toEqual([
+      expect.objectContaining({ artifactId: 'artifact-1' }),
     ]);
     await expect(controlPlane.inspectScheduler()).resolves.toEqual({
       dueAutomationIds: ['automation-1'],

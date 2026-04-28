@@ -55,6 +55,7 @@ export {
   buildPiRuntimeMaintenancePlan,
   type PiAutomationRecord,
   type PiAutomationRunRecord,
+  type PiArtifactRecord,
   type PiExecutionEventRecord,
   type PiExecutionRecord,
   type PiRuntimeInspectionSnapshot,

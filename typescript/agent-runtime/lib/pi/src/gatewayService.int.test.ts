@@ -199,6 +199,7 @@ describe('pi gateway service integration', () => {
         listExecutions: async () => ['exec-1'],
         listAutomations: async () => ['automation-1'],
         listAutomationRuns: async () => ['run-1'],
+        listArtifacts: async () => ['artifact-1'],
         inspectScheduler: async () => ({ dueAutomationIds: ['automation-1'], leases: [] }),
         inspectOutbox: async () => ({ dueOutboxIds: ['outbox-1'], intents: [] }),
         inspectMaintenance: async () => ({
@@ -349,6 +350,7 @@ describe('pi gateway service integration', () => {
     await expect(service.control.listExecutions()).resolves.toEqual(['exec-1']);
     await expect(service.control.listAutomations()).resolves.toEqual(['automation-1']);
     await expect(service.control.listAutomationRuns()).resolves.toEqual(['run-1']);
+    await expect(service.control.listArtifacts()).resolves.toEqual(['artifact-1']);
     await expect(service.control.inspectScheduler()).resolves.toEqual({
       dueAutomationIds: ['automation-1'],
       leases: [],

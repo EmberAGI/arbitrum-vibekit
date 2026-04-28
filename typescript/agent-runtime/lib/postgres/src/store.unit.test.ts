@@ -202,6 +202,7 @@ describe('loadPiRuntimeInspectionState', () => {
             execution_id: 'exec-1',
             thread_id: 'thread-1',
             event_kind: 'outbox-intent',
+            payload: { outboxId: 'outbox-1' },
             created_at: '2026-03-20T00:08:00.000Z',
           },
         ];
@@ -214,7 +215,29 @@ describe('loadPiRuntimeInspectionState', () => {
             thread_id: 'thread-1',
             execution_id: 'exec-1',
             activity_kind: 'direct-execution',
+            payload: { artifactId: 'artifact-1' },
             created_at: '2026-03-20T00:09:00.000Z',
+          },
+        ];
+      }
+
+      if (sql.includes('from pi_artifacts')) {
+        return [
+          {
+            id: 'artifact-1',
+            thread_id: 'thread-1',
+            execution_id: 'exec-1',
+            artifact_kind: 'automation-run-snapshot',
+            append_only: false,
+            payload: {
+              automationRunId: 'run-1',
+              runThreadKey: 'automation:automation-1:run:run-1',
+              snapshot: {
+                summary: 'Synced 42 balances.',
+              },
+            },
+            created_at: '2026-03-20T00:08:30.000Z',
+            updated_at: '2026-03-20T00:08:45.000Z',
           },
         ];
       }
@@ -307,6 +330,7 @@ describe('loadPiRuntimeInspectionState', () => {
           executionId: 'exec-1',
           threadId: 'thread-1',
           eventKind: 'outbox-intent',
+          payload: { outboxId: 'outbox-1' },
           createdAt: new Date('2026-03-20T00:08:00.000Z'),
         },
       ],
@@ -316,7 +340,26 @@ describe('loadPiRuntimeInspectionState', () => {
           threadId: 'thread-1',
           executionId: 'exec-1',
           activityKind: 'direct-execution',
+          payload: { artifactId: 'artifact-1' },
           createdAt: new Date('2026-03-20T00:09:00.000Z'),
+        },
+      ],
+      artifacts: [
+        {
+          artifactId: 'artifact-1',
+          threadId: 'thread-1',
+          executionId: 'exec-1',
+          artifactKind: 'automation-run-snapshot',
+          appendOnly: false,
+          payload: {
+            automationRunId: 'run-1',
+            runThreadKey: 'automation:automation-1:run:run-1',
+            snapshot: {
+              summary: 'Synced 42 balances.',
+            },
+          },
+          createdAt: new Date('2026-03-20T00:08:30.000Z'),
+          updatedAt: new Date('2026-03-20T00:08:45.000Z'),
         },
       ],
     });

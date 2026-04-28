@@ -104,6 +104,7 @@ function createInternalPostgresHooks(
       outboxIntents: unknown[];
       executionEvents: unknown[];
       threadActivities: unknown[];
+      artifacts?: unknown[];
     }>;
     executeStatements: (
       databaseUrl: string,
@@ -140,6 +141,7 @@ function createInternalPostgresHooks(
       outboxIntents: [],
       executionEvents: [],
       threadActivities: [],
+      artifacts: [],
     }));
   const executeStatements = overrides.executeStatements ?? vi.fn(async () => undefined);
   const persistDirectExecution = overrides.persistDirectExecution ?? vi.fn(async () => undefined);
@@ -166,6 +168,7 @@ function createPersistingInternalPostgres() {
     outboxIntents: [],
     executionEvents: [],
     threadActivities: [],
+    artifacts: [],
   }));
   const persistDirectExecution = vi.fn(async (options: unknown) => {
     const params = options as InternalPersistDirectExecutionOptions;
@@ -403,6 +406,18 @@ function createTextStream(text: string) {
   });
 
   return stream;
+}
+
+function createNeverEndingStream(): AsyncIterable<never> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<never> {
+      return {
+        async next(): Promise<IteratorResult<never>> {
+          return await new Promise<IteratorResult<never>>(() => undefined);
+        },
+      };
+    },
+  };
 }
 
 async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
@@ -1590,6 +1605,7 @@ describe('agent-runtime integration', () => {
         outboxIntents: unknown[];
         executionEvents: unknown[];
         threadActivities: unknown[];
+        artifacts?: unknown[];
       };
       const internalPostgres = createInternalPostgresHooks({
         loadInspectionState: vi.fn(async () => inspectionState),
@@ -1679,7 +1695,7 @@ describe('agent-runtime integration', () => {
                       type: 'automation-status',
                       runId: 'run-automation-previous',
                       status: 'completed',
-                      detail: 'Rebalanced 120 USDC.',
+                      detail: 'Automation Sync every minute executed successfully.',
                     },
                   },
                   append: true,
@@ -1734,6 +1750,24 @@ describe('agent-runtime integration', () => {
             createdAt: new Date(currentTime - 110_000),
           },
         ],
+        artifacts: [
+          {
+            artifactId: 'artifact-previous-snapshot',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-previous',
+            artifactKind: 'automation-run-snapshot',
+            appendOnly: false,
+            payload: {
+              automationRunId: 'run-automation-previous',
+              runThreadKey: 'automation:automation-1:run:run-automation-previous',
+              snapshot: {
+                summary: 'Rebalanced 120 USDC.',
+              },
+            },
+            createdAt: new Date(currentTime - 110_000),
+            updatedAt: new Date(currentTime - 110_000),
+          },
+        ],
       };
 
       await vi.advanceTimersByTimeAsync(1_100);
@@ -1762,11 +1796,12 @@ describe('agent-runtime integration', () => {
       expect(scheduledSystemPrompt).toContain('<previous_run_status>completed</previous_run_status>');
       expect(scheduledSystemPrompt).toContain('<previous_run_id>run-automation-previous</previous_run_id>');
       expect(scheduledSystemPrompt).toContain('<previous_run_summary>Rebalanced 120 USDC.</previous_run_summary>');
+      expect(scheduledSystemPrompt).not.toContain('Automation Sync every minute executed successfully.');
       expect(scheduledSystemPrompt).toContain(
         '<previous_run_detail_ref>automation-run:run-automation-previous</previous_run_detail_ref>',
       );
       expect(scheduledSystemPrompt).toContain(
-        '<previous_run_artifact_ref>artifact:artifact-previous</previous_run_artifact_ref>',
+        '<previous_run_artifact_ref>artifact:artifact-previous-snapshot</previous_run_artifact_ref>',
       );
       expect(scheduledSystemPrompt).toContain(
         '<previous_run_activity_ref>thread-activity:activity-previous</previous_run_activity_ref>',
@@ -2440,6 +2475,117 @@ describe('agent-runtime integration', () => {
     }
   });
 
+  it('hydrates persisted scheduled-run snapshot artifacts into root activity inspection state', async () => {
+    const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+    const internalPostgres = createInternalPostgresHooks({
+      loadInspectionState: vi.fn(async () => ({
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+              activityEvents: [],
+            },
+            createdAt: new Date(currentTime - 120_000),
+            updatedAt: new Date(currentTime - 60_000),
+          },
+        ],
+        executions: [],
+        automations: [],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'completed',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: new Date(currentTime - 55_000),
+            completedAt: new Date(currentTime - 50_000),
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [
+          {
+            eventId: 'event-snapshot-1',
+            executionId: 'execution-automation-1',
+            threadId: 'thread-record-1',
+            eventKind: 'automation-run-snapshot',
+            payload: {
+              automationRunId: 'run-automation-1',
+              runThreadKey: 'automation:automation-1:run:run-automation-1',
+              snapshot: {
+                summary: 'Synced 42 balances.',
+              },
+            },
+            createdAt: new Date(currentTime - 50_000),
+          },
+        ],
+        threadActivities: [],
+        artifacts: [
+          {
+            artifactId: 'artifact-snapshot-1',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-1',
+            artifactKind: 'automation-run-snapshot',
+            appendOnly: false,
+            payload: {
+              automationRunId: 'run-automation-1',
+              runThreadKey: 'automation:automation-1:run:run-automation-1',
+              snapshot: {
+                summary: 'Synced 42 balances.',
+              },
+            },
+            createdAt: new Date(currentTime - 50_000),
+            updatedAt: new Date(currentTime - 50_000),
+          },
+        ],
+      })),
+    });
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: () => createTextStream('Idle.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const snapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-1',
+        runId: 'run-connect-snapshot-artifacts',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(snapshot?.snapshot.thread.activity?.events).toContainEqual(
+      expect.objectContaining({
+        type: 'artifact',
+        artifact: expect.objectContaining({
+          artifactId: 'artifact-snapshot-1',
+          data: expect.objectContaining({
+            type: 'automation-run-snapshot',
+            automationRunId: 'run-automation-1',
+            snapshot: expect.objectContaining({
+              summary: 'Synced 42 balances.',
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('keeps scheduled runtime-owned tool checkpoints on the automation execution and root thread', async () => {
     vi.useFakeTimers();
 
@@ -2665,6 +2811,135 @@ describe('agent-runtime integration', () => {
             'thread-record-1',
             'automation-timed-out',
             expect.stringContaining('Exceeded the 15 minute scheduled automation timeout.'),
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            new Date(currentTime + 60_000),
+            null,
+          ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks a same-process hung scheduled invocation timed out without waiting for the agent stream to return', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+              timeoutMinutes: 0.001,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage) {
+              observedScheduledUserMessages.push(
+                typeof latestUserMessage.content === 'string'
+                  ? latestUserMessage.content
+                  : JSON.stringify(latestUserMessage.content),
+              );
+            }
+
+            return createNeverEndingStream() as unknown as ReturnType<typeof createTextStream>;
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(observedScheduledUserMessages).toEqual(['sync treasury balances']);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['timed_out', expect.any(Date), expect.any(Date), 'run-automation-1'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_thread_activity',
+          text: expect.stringContaining('insert into pi_thread_activity'),
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'automation-timed-out',
+            expect.stringContaining('Exceeded the 0.001 minute scheduled automation timeout.'),
             expect.any(Date),
           ],
         }),

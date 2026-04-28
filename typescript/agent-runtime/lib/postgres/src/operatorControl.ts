@@ -60,6 +60,7 @@ export type PiExecutionEventRecord = {
   executionId: string;
   threadId: string;
   eventKind: string;
+  payload: Record<string, unknown> | null;
   createdAt: Date;
 };
 
@@ -68,7 +69,19 @@ export type PiThreadActivityRecord = {
   threadId: string;
   executionId: string | null;
   activityKind: string;
+  payload: Record<string, unknown> | null;
   createdAt: Date;
+};
+
+export type PiArtifactRecord = {
+  artifactId: string;
+  threadId: string;
+  executionId: string | null;
+  artifactKind: string;
+  appendOnly: boolean;
+  payload: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
 };
 
 export type PiRuntimeInspectionSnapshot = {
@@ -79,6 +92,7 @@ export type PiRuntimeInspectionSnapshot = {
   interrupts: readonly PiRestartInterruptRecord[];
   executionEvents: readonly PiExecutionEventRecord[];
   threadActivities: readonly PiThreadActivityRecord[];
+  artifacts: readonly PiArtifactRecord[];
   scheduler: {
     leases: readonly PiSchedulerLeaseRecord[];
     dueAutomationIds: string[];
@@ -150,6 +164,7 @@ export function buildPiRuntimeInspectionSnapshot(params: {
   outboxIntents: readonly PiOutboxRecoveryRecord[];
   executionEvents: readonly PiExecutionEventRecord[];
   threadActivities: readonly PiThreadActivityRecord[];
+  artifacts?: readonly PiArtifactRecord[];
 }): PiRuntimeInspectionSnapshot {
   const dueAutomationIds = recoverDueAutomations({
     now: params.now,
@@ -186,6 +201,9 @@ export function buildPiRuntimeInspectionSnapshot(params: {
     ),
     threadActivities: [...params.threadActivities].sort((left, right) =>
       compareDatesDescending(left.createdAt, right.createdAt),
+    ),
+    artifacts: [...(params.artifacts ?? [])].sort((left, right) =>
+      compareDatesDescending(left.updatedAt, right.updatedAt),
     ),
     scheduler: {
       leases: [...params.leases].sort((left, right) => compareDatesDescending(left.leaseExpiresAt, right.leaseExpiresAt)),

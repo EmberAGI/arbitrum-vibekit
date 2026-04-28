@@ -235,6 +235,7 @@ export interface AgentRuntimeControlPlane {
   listExecutions: () => Promise<unknown>;
   listAutomations: () => Promise<unknown>;
   listAutomationRuns: () => Promise<unknown>;
+  listArtifacts: () => Promise<unknown>;
   inspectScheduler: () => Promise<unknown>;
   inspectOutbox: () => Promise<unknown>;
   inspectMaintenance: () => Promise<unknown>;
@@ -571,6 +572,11 @@ function readPersistedSession(
 function buildScheduledAutomationRunSnapshot(
   session: PiRuntimeGatewaySession,
 ): Record<string, unknown> {
+  const resultSummary =
+    [...(session.messages ?? [])]
+      .reverse()
+      .find((message) => message.role === 'assistant' && readTrimmedString(message.content))
+      ?.content;
   const messages = (session.messages ?? []).map((message) => ({
     id: message.id,
     role: message.role,
@@ -622,6 +628,7 @@ function buildScheduledAutomationRunSnapshot(
     thread: session.thread,
     execution: session.execution,
     automation: session.automation,
+    ...(readTrimmedString(resultSummary) ? { summary: readTrimmedString(resultSummary) } : {}),
     messages,
     artifacts,
     activityEvents,
@@ -1187,11 +1194,135 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function readTrimmedString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readScheduledAutomationSnapshotSummary(payload: Record<string, unknown>): string | undefined {
+  const snapshot = isRecord(payload.snapshot) ? payload.snapshot : null;
+  const summary =
+    readTrimmedString(snapshot?.summary) ??
+    readTrimmedString(payload.summary);
+  if (summary) {
+    return summary;
+  }
+
+  const artifacts = isRecord(snapshot?.artifacts) ? snapshot.artifacts : null;
+  const currentArtifact = isRecord(artifacts?.current) ? artifacts.current : null;
+  const currentData = isRecord(currentArtifact?.data) ? currentArtifact.data : null;
+  const activityArtifact = isRecord(artifacts?.activity) ? artifacts.activity : null;
+  const activityData = isRecord(activityArtifact?.data) ? activityArtifact.data : null;
+  return (
+    readTrimmedString(currentData?.summary) ??
+    readTrimmedString(activityData?.summary) ??
+    readTrimmedString(currentData?.detail) ??
+    readTrimmedString(activityData?.detail)
+  );
+}
+
+function readScheduledAutomationSnapshotRunId(payload: Record<string, unknown>): string | undefined {
+  return readTrimmedString(payload.automationRunId) ?? readTrimmedString(payload.runId);
+}
+
+function buildScheduledAutomationSnapshotActivityEvents(params: {
+  inspectionState: PiRuntimeGatewayInspectionState;
+  threadId: string;
+  existingEvents: readonly PiRuntimeGatewayActivityEvent[];
+}): PiRuntimeGatewayActivityEvent[] {
+  const existingArtifactIds = new Set(
+    params.existingEvents.flatMap((event) =>
+      event.type === 'artifact' ? [event.artifact.artifactId] : [],
+    ),
+  );
+
+  return [...(params.inspectionState.artifacts ?? [])]
+    .filter(
+      (artifact) =>
+        artifact.threadId === params.threadId &&
+        artifact.artifactKind === 'automation-run-snapshot' &&
+        !existingArtifactIds.has(artifact.artifactId),
+    )
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime())
+    .map((artifact) => ({
+      type: 'artifact',
+      artifact: {
+        artifactId: artifact.artifactId,
+        data: {
+          type: artifact.artifactKind,
+          ...artifact.payload,
+        },
+      },
+      append: true,
+    }));
+}
+
+function appendPersistedAutomationSnapshotActivityEvents(params: {
+  session: PiRuntimeGatewaySession;
+  inspectionState: PiRuntimeGatewayInspectionState;
+  threadId: string;
+}): PiRuntimeGatewaySession {
+  const existingEvents = params.session.activityEvents ?? [];
+  const snapshotEvents = buildScheduledAutomationSnapshotActivityEvents({
+    inspectionState: params.inspectionState,
+    threadId: params.threadId,
+    existingEvents,
+  });
+  if (snapshotEvents.length === 0) {
+    return params.session;
+  }
+
+  return {
+    ...params.session,
+    activityEvents: [...existingEvents, ...snapshotEvents],
+  };
+}
+
 function readPreviousAutomationRunArtifactContext(
-  threadState: Record<string, unknown>,
-  runId: string,
+  params: {
+    inspectionState: PiRuntimeGatewayInspectionState;
+    threadState: Record<string, unknown>;
+    runId: string;
+    executionId: string | null;
+  },
 ): { summary?: string; artifactRefs: string[] } {
-  const events = threadState.activityEvents;
+  const snapshotArtifacts = [...(params.inspectionState.artifacts ?? [])]
+    .filter((artifact) => {
+      if (artifact.artifactKind !== 'automation-run-snapshot') {
+        return false;
+      }
+      const payloadRunId = readScheduledAutomationSnapshotRunId(artifact.payload);
+      return payloadRunId === params.runId ||
+        (payloadRunId === undefined && artifact.executionId === params.executionId);
+    })
+    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+  const snapshotArtifact = snapshotArtifacts[0];
+  if (snapshotArtifact) {
+    const summary = readScheduledAutomationSnapshotSummary(snapshotArtifact.payload);
+    return {
+      ...(summary ? { summary } : {}),
+      artifactRefs: [`artifact:${snapshotArtifact.artifactId}`],
+    };
+  }
+
+  const snapshotEvent = [...params.inspectionState.executionEvents]
+    .filter(
+      (event) =>
+        event.eventKind === 'automation-run-snapshot' &&
+        event.payload !== null &&
+        (readScheduledAutomationSnapshotRunId(event.payload) === params.runId ||
+          (readScheduledAutomationSnapshotRunId(event.payload) === undefined &&
+            event.executionId === params.executionId)),
+    )
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0];
+  if (snapshotEvent?.payload) {
+    const summary = readScheduledAutomationSnapshotSummary(snapshotEvent.payload);
+    return {
+      ...(summary ? { summary } : {}),
+      artifactRefs: [],
+    };
+  }
+
+  const events = params.threadState.activityEvents;
   if (!Array.isArray(events)) {
     return { artifactRefs: [] };
   }
@@ -1210,7 +1341,7 @@ function readPreviousAutomationRunArtifactContext(
           ? event.artifact.id
           : null;
     const data = event.artifact.data;
-    if (!isRecord(data) || data.runId !== runId) {
+    if (!isRecord(data) || data.runId !== params.runId) {
       continue;
     }
 
@@ -2145,6 +2276,7 @@ export async function createAgentRuntime<TState = unknown>(
   const attachedRuns = createAttachedRunRegistry();
   const executionContext = new AsyncLocalStorage<AgentRuntimeExecutionContext>();
   const scheduledAutomationContexts = new Map<string, AgentRuntimeScheduledAutomationContext>();
+  const timedOutScheduledRunThreadIds = new Set<string>();
   const persistedThreads = new Set<string>();
   const getActiveThreadId = (): string | undefined => {
     const context = executionContext.getStore();
@@ -2223,6 +2355,10 @@ export async function createAgentRuntime<TState = unknown>(
     const executionSource = session.automation?.runId ? 'automation' : 'user';
     const currentNow = new Date(now());
     if (scheduledAutomationContext) {
+      if (timedOutScheduledRunThreadIds.has(threadId)) {
+        return;
+      }
+
       await postgres.executeStatements(
         resolvedDatabaseUrl,
         [
@@ -2357,7 +2493,12 @@ export async function createAgentRuntime<TState = unknown>(
           persistedDomainState === undefined
             ? readPersistedLifecycleDomainState<TState>(persistedThread.threadState)
             : undefined;
-        const normalizedSession = materializeSessionLifecycle(persistedSession, initialLifecyclePhase);
+        const sessionWithPersistedActivity = appendPersistedAutomationSnapshotActivityEvents({
+          session: persistedSession,
+          inspectionState,
+          threadId: persistedThread.threadId,
+        });
+        const normalizedSession = materializeSessionLifecycle(sessionWithPersistedActivity, initialLifecyclePhase);
         const repairedSession = repairHydratedPendingInterruptDrift(normalizedSession);
         const hydratedSession = setSession(threadId, repairedSession);
         if (persistedDomainState !== undefined) {
@@ -3347,7 +3488,12 @@ export async function createAgentRuntime<TState = unknown>(
             return rightTime - leftTime;
           })[0];
         const previousRunArtifactContext = previousRun
-          ? readPreviousAutomationRunArtifactContext(thread.threadState, previousRun.runId)
+          ? readPreviousAutomationRunArtifactContext({
+              inspectionState,
+              threadState: thread.threadState,
+              runId: previousRun.runId,
+              executionId: previousRun.executionId,
+            })
           : undefined;
         const previousRunActivityRefs = previousRun?.executionId
           ? inspectionState.threadActivities
@@ -3397,9 +3543,13 @@ export async function createAgentRuntime<TState = unknown>(
             runId: scheduledRun.runId,
           },
         });
-        let runOutcome: 'completed' | 'failed' = 'completed';
+        const timeoutMinutes = readPositiveFiniteNumber(automation.schedulePayload.timeoutMinutes) ?? 15;
+        const timeoutMs = timeoutMinutes * 60 * 1000;
+        let runOutcome: 'completed' | 'failed' | 'timed_out' = 'completed';
         let runFailureDetail: string | null = null;
-        try {
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        let invocationSettled = false;
+        const invocation = (async () => {
           await drainAttachedEventSource(
             await runtimeWithDomain.run({
               threadId: runThreadId,
@@ -3416,8 +3566,26 @@ export async function createAgentRuntime<TState = unknown>(
               ],
             }),
           );
+          invocationSettled = true;
+        })();
+        try {
+          const invocationResult = await Promise.race([
+            invocation.then(() => 'completed' as const),
+            new Promise<'timed_out'>((resolve) => {
+              timeoutId = setTimeout(() => resolve('timed_out'), timeoutMs);
+            }),
+          ]);
+          if (invocationResult === 'timed_out') {
+            runOutcome = 'timed_out';
+            runFailureDetail = `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`;
+            timedOutScheduledRunThreadIds.add(runThreadId);
+            void invocation.catch(() => undefined).finally(() => {
+              scheduledAutomationContexts.delete(runThreadId);
+              timedOutScheduledRunThreadIds.delete(runThreadId);
+            });
+          }
           const runSession = getSession(runThreadId);
-          if (runSession.execution.status === 'failed') {
+          if (runOutcome !== 'timed_out' && runSession.execution.status === 'failed') {
             runOutcome = 'failed';
             runFailureDetail = runSession.execution.statusMessage ?? null;
           }
@@ -3425,12 +3593,46 @@ export async function createAgentRuntime<TState = unknown>(
           runOutcome = 'failed';
           runFailureDetail = error instanceof Error ? error.message : String(error);
         } finally {
-          scheduledAutomationContexts.delete(runThreadId);
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+          if (runOutcome !== 'timed_out' || invocationSettled) {
+            scheduledAutomationContexts.delete(runThreadId);
+            timedOutScheduledRunThreadIds.delete(runThreadId);
+          }
         }
 
-        await postgres.executeStatements(
-          resolvedDatabaseUrl,
-          buildCompleteAutomationExecutionStatements({
+        const completionStatements =
+          runOutcome === 'timed_out'
+            ? buildTimeoutAutomationExecutionStatements({
+                automationId,
+                currentRunId: scheduledRun.runId,
+                currentExecutionId: scheduledRun.executionId,
+                nextRunId: buildPiRuntimeStableUuid(
+                  'automation-run',
+                  `agent-runtime:${automationId}:run:${nextRunAt.toISOString()}`,
+                ),
+                nextExecutionId: buildPiRuntimeStableUuid(
+                  'execution',
+                  `agent-runtime:${automationId}:execution:${nextRunAt.toISOString()}`,
+                ),
+                threadId: automation.threadId,
+                commandName: automation.commandName,
+                schedulePayload: automation.schedulePayload,
+                eventId: buildPiRuntimeStableUuid(
+                  'execution-event',
+                  `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+                ),
+                activityId: buildPiRuntimeStableUuid(
+                  'activity',
+                  `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+                ),
+                now: currentNow,
+                nextRunAt,
+                leaseExpiresAt: currentNow,
+                timeoutDetail: runFailureDetail ?? `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`,
+              })
+            : buildCompleteAutomationExecutionStatements({
             automationId,
             currentRunId: scheduledRun.runId,
             currentExecutionId: scheduledRun.executionId,
@@ -3457,15 +3659,17 @@ export async function createAgentRuntime<TState = unknown>(
             nextRunAt,
             leaseExpiresAt: currentNow,
             status: runOutcome,
-          }),
-        );
+          });
+        await postgres.executeStatements(resolvedDatabaseUrl, completionStatements);
 
         const finalAutomationStatus: AgentRuntimeAutomationStatus =
-          runOutcome === 'completed' ? 'completed' : 'failed';
+          runOutcome === 'completed' ? 'completed' : runOutcome === 'timed_out' ? 'timed_out' : 'failed';
         const finalAutomationDetail =
           runOutcome === 'completed'
             ? `Automation ${automation.commandName} executed successfully.`
-            : `Automation ${automation.commandName} failed: ${runFailureDetail ?? 'Unknown error'}.`;
+            : runOutcome === 'timed_out'
+              ? runFailureDetail ?? `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`
+              : `Automation ${automation.commandName} failed: ${runFailureDetail ?? 'Unknown error'}.`;
         const completedSession = applyAutomationStatusUpdate({
           sessionStore,
           threadId: thread.threadKey,
