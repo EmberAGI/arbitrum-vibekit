@@ -141,6 +141,14 @@ describe('agent-runtime-pi package contract', () => {
           createdAt: new Date('2026-03-20T16:00:00.000Z'),
           updatedAt: new Date('2026-03-20T17:59:00.000Z'),
         },
+        {
+          threadId: 'thread-2',
+          threadKey: 'wallet:2',
+          status: 'active',
+          threadState: { phase: 'active' },
+          createdAt: new Date('2026-03-20T16:10:00.000Z'),
+          updatedAt: new Date('2026-03-20T17:50:00.000Z'),
+        },
       ],
       executions: [
         {
@@ -190,6 +198,16 @@ describe('agent-runtime-pi package contract', () => {
           startedAt: null,
           completedAt: null,
         },
+        {
+          runId: 'run-foreign',
+          automationId: 'automation-foreign',
+          threadId: 'thread-2',
+          executionId: 'exec-foreign',
+          status: 'completed' as const,
+          scheduledAt: new Date('2026-03-20T17:30:00.000Z'),
+          startedAt: new Date('2026-03-20T17:30:00.000Z'),
+          completedAt: new Date('2026-03-20T17:31:00.000Z'),
+        },
       ],
       interrupts: [
         {
@@ -222,6 +240,16 @@ describe('agent-runtime-pi package contract', () => {
           createdAt: new Date('2026-03-20T17:45:00.000Z'),
           updatedAt: new Date('2026-03-20T17:46:00.000Z'),
         },
+        {
+          artifactId: 'artifact-foreign',
+          threadId: 'thread-2',
+          executionId: 'exec-foreign',
+          artifactKind: 'automation-run-snapshot',
+          appendOnly: false,
+          payload: { automationRunId: 'run-foreign' },
+          createdAt: new Date('2026-03-20T17:31:00.000Z'),
+          updatedAt: new Date('2026-03-20T17:32:00.000Z'),
+        },
       ],
     }));
 
@@ -245,6 +273,7 @@ describe('agent-runtime-pi package contract', () => {
     });
     await expect(controlPlane.listThreads()).resolves.toEqual([
       expect.objectContaining({ threadId: 'thread-1' }),
+      expect.objectContaining({ threadId: 'thread-2' }),
     ]);
     await expect(controlPlane.listExecutions()).resolves.toEqual([
       expect.objectContaining({ executionId: 'exec-interrupted' }),
@@ -255,8 +284,16 @@ describe('agent-runtime-pi package contract', () => {
     ]);
     await expect(controlPlane.listAutomationRuns()).resolves.toEqual([
       expect.objectContaining({ runId: 'run-1' }),
+      expect.objectContaining({ runId: 'run-foreign' }),
     ]);
     await expect(controlPlane.listArtifacts()).resolves.toEqual([
+      expect.objectContaining({ artifactId: 'artifact-1' }),
+      expect.objectContaining({ artifactId: 'artifact-foreign' }),
+    ]);
+    await expect(controlPlane.listAutomationRuns({ threadId: 'wallet:1' })).resolves.toEqual([
+      expect.objectContaining({ runId: 'run-1' }),
+    ]);
+    await expect(controlPlane.listArtifacts({ threadId: 'wallet:1' })).resolves.toEqual([
       expect.objectContaining({ artifactId: 'artifact-1' }),
     ]);
     await expect(controlPlane.inspectScheduler()).resolves.toEqual({

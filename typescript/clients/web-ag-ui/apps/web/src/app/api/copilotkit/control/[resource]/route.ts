@@ -43,13 +43,19 @@ export async function GET(
   if (!agentId) {
     return Response.json({ ok: false, error: 'Missing agentId.' }, { status: 400 });
   }
+  const threadId = readString(url.searchParams.get('threadId'));
+  if (!threadId) {
+    return Response.json({ ok: false, error: 'Missing threadId.' }, { status: 400 });
+  }
 
   const id =
     rawResource === 'automation-runs'
       ? readString(url.searchParams.get('runId'))
       : readString(url.searchParams.get('artifactId'));
   const runtimeUrl = resolveAgentRuntimeUrl(process.env, agentId).replace(/\/$/, '');
-  const response = await fetch(`${runtimeUrl}/control/${rawResource}`, {
+  const runtimeControlUrl = new URL(`${runtimeUrl}/control/${rawResource}`);
+  runtimeControlUrl.searchParams.set('threadId', threadId);
+  const response = await fetch(runtimeControlUrl.toString(), {
     cache: 'no-store',
     headers: { accept: 'application/json' },
   });

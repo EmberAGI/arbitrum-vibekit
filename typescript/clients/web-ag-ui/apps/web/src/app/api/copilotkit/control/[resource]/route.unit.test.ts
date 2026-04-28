@@ -30,12 +30,14 @@ describe('GET /api/copilotkit/control/[resource]', () => {
     fetchMock.mockResolvedValue(
       Response.json([
         { runId: 'run-other', status: 'completed' },
-        { runId: 'run-1', status: 'canceled' },
+        { runId: 'run-1', threadId: 'thread-record-1', status: 'canceled' },
       ]),
     );
 
     const response = await GET(
-      buildRequest('/api/copilotkit/control/automation-runs?agentId=agent-portfolio-manager&runId=run-1'),
+      buildRequest(
+        '/api/copilotkit/control/automation-runs?agentId=agent-portfolio-manager&threadId=thread-1&runId=run-1',
+      ),
       { params: Promise.resolve({ resource: 'automation-runs' }) },
     );
 
@@ -44,14 +46,17 @@ describe('GET /api/copilotkit/control/[resource]', () => {
       process.env,
       'agent-portfolio-manager',
     );
-    expect(fetchMock).toHaveBeenCalledWith('http://portfolio-runtime/ag-ui/control/automation-runs', {
-      cache: 'no-store',
-      headers: { accept: 'application/json' },
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://portfolio-runtime/ag-ui/control/automation-runs?threadId=thread-1',
+      {
+        cache: 'no-store',
+        headers: { accept: 'application/json' },
+      },
+    );
     await expect(response.json()).resolves.toEqual({
       ok: true,
       resource: 'automation-runs',
-      item: { runId: 'run-1', status: 'canceled' },
+      item: { runId: 'run-1', threadId: 'thread-record-1', status: 'canceled' },
     });
   });
 
@@ -64,7 +69,9 @@ describe('GET /api/copilotkit/control/[resource]', () => {
     );
 
     const response = await GET(
-      buildRequest('/api/copilotkit/control/artifacts?agentId=agent-portfolio-manager&artifactId=artifact-1'),
+      buildRequest(
+        '/api/copilotkit/control/artifacts?agentId=agent-portfolio-manager&threadId=thread-1&artifactId=artifact-1',
+      ),
       { params: Promise.resolve({ resource: 'artifacts' }) },
     );
 
@@ -73,6 +80,20 @@ describe('GET /api/copilotkit/control/[resource]', () => {
       ok: true,
       resource: 'artifacts',
       item: { artifactId: 'artifact-1', artifactKind: 'automation-run-snapshot' },
+    });
+  });
+
+  it('rejects run or artifact opening without a root thread scope', async () => {
+    const response = await GET(
+      buildRequest('/api/copilotkit/control/automation-runs?agentId=agent-portfolio-manager&runId=run-1'),
+      { params: Promise.resolve({ resource: 'automation-runs' }) },
+    );
+
+    expect(response.status).toBe(400);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Missing threadId.',
     });
   });
 

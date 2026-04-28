@@ -102,8 +102,9 @@ deliberately skips a `pi_threads` write for the internal
 running event/activity writes commit in one Postgres transaction. The claim is
 row-count checked: if another runtime process has already moved a run out of
 `scheduled`, this process rolls back the batch and skips invocation. Newly
-inserted next-run records use the future cadence timestamp for `scheduled_at`,
-matching `next_run_at`.
+inserted scheduled-run records, including the first run created by
+`automation.schedule`, use the future cadence timestamp for `scheduled_at`,
+matching `next_run_at` instead of the definition creation time.
 Terminal completion, failure, timeout, and cancellation updates are also
 status-conditional and row-count checked. A stale scheduler cannot rewrite a
 run that another process already completed, timed out, or canceled, and it
@@ -115,7 +116,10 @@ failed terminal state, so operator inspection does not display a canceled
 background invocation as successful. Model-facing `automation.cancel` is scoped
 to the active root thread record: persisted automation, current-run lookup, run
 updates, execution updates, and scheduler-lease cleanup must not target another
-root thread just because the model has an automation id. `automation.list`
+root thread just because the model has an automation id. If a canceled
+definition has no current run or execution, the cancel transaction still
+suspends the definition and writes nullable root activity, but it does not
+insert an execution event with a null execution id. `automation.list`
 reports a suspended persisted automation as `canceled` even when cancellation has
 also cleared `next_run_at`.
 Postgres inspection loads execution-event payloads, activity payloads, and
@@ -137,6 +141,9 @@ persistence from the timed-out run. Completion, failure, and timeout
 persistence use the terminal-decision timestamp, not the tick-start timestamp,
 for `completed_at`, terminal events/activity, lease expiry, stable replacement
 ids, and the next-run cadence timestamp.
+Scheduler dispatch is guarded per automation rather than globally: the same
+automation cannot overlap with itself, but one long-running automation must not
+prevent unrelated due automations from being claimed and started.
 Canceling an automation targets the current scheduled or active run, suspends
 future cadence, deletes the scheduler lease, and asks the runtime stop path to
 abort an active same-process scheduled invocation.
@@ -153,6 +160,9 @@ artifact references, and it must expose inspect/open affordances for persisted
 run snapshots and artifacts through runtime control-plane-backed links, not
 local page anchors or static identifier labels. The web UI must not treat
 scheduled-run prompt messages as a durable chat transcript.
+Those inspection links carry the active root thread id, and the runtime control
+plane filters automation-run and artifact lists to that root-thread scope
+before the web proxy selects a requested id.
 
 If a domain integration needs to call an external service, the domain/config
 layer may delegate to an app-local adapter that returns semantic state,

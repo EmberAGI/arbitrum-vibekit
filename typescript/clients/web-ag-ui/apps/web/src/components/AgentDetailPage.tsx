@@ -446,11 +446,13 @@ function buildActivityAnchor(kind: ActivityInspectionAction['kind'], id: string)
 
 function buildActivityInspectionHref(params: {
   agentId: string;
+  threadId: string;
   kind: ActivityInspectionAction['kind'];
   id: string;
 }): string {
   const searchParams = new URLSearchParams({
     agentId: params.agentId,
+    threadId: params.threadId,
     ...(params.kind === 'run' ? { runId: params.id } : { artifactId: params.id }),
   });
   const resource = params.kind === 'run' ? 'automation-runs' : 'artifacts';
@@ -459,6 +461,7 @@ function buildActivityInspectionHref(params: {
 
 function buildActivityInspectionActions(params: {
   agentId: string;
+  threadId: string | null;
   runId: string | null;
   artifactId: string | null;
   summary?: string | null;
@@ -466,13 +469,14 @@ function buildActivityInspectionActions(params: {
 }): ActivityInspectionAction[] {
   const actions: ActivityInspectionAction[] = [];
 
-  if (params.runId) {
+  if (params.runId && params.threadId) {
     actions.push({
       kind: 'run',
       id: params.runId,
       label: `Inspect run ${params.runId}`,
       href: buildActivityInspectionHref({
         agentId: params.agentId,
+        threadId: params.threadId,
         kind: 'run',
         id: params.runId,
       }),
@@ -484,13 +488,14 @@ function buildActivityInspectionActions(params: {
     });
   }
 
-  if (params.artifactId) {
+  if (params.artifactId && params.threadId) {
     actions.push({
       kind: 'artifact',
       id: params.artifactId,
       label: `Open artifact ${params.artifactId}`,
       href: buildActivityInspectionHref({
         agentId: params.agentId,
+        threadId: params.threadId,
         kind: 'artifact',
         id: params.artifactId,
       }),
@@ -518,6 +523,7 @@ function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescr
     const command = readString(artifactData.command) ?? 'automation';
     const detail = readString(artifactData.detail) ?? 'Automation status updated.';
     const runId = readString(artifactData.runId);
+    const rootThreadId = readString(artifactData.rootThreadId);
     const details = [
       runId ? `Run ${runId}` : null,
       artifactId ? `Artifact ${artifactId}` : null,
@@ -526,7 +532,7 @@ function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescr
     return {
       body: `Automation ${status}\n${command}: ${detail}`,
       details,
-      inspections: buildActivityInspectionActions({ agentId, runId, artifactId }),
+      inspections: buildActivityInspectionActions({ agentId, threadId: rootThreadId, runId, artifactId }),
     };
   }
 
@@ -534,6 +540,7 @@ function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescr
     const snapshot = asRecord(artifactData?.snapshot);
     const runId = readString(artifactData?.automationRunId) ?? readString(artifactData?.runId);
     const runThreadKey = readString(artifactData?.runThreadKey);
+    const rootThreadId = readString(artifactData?.rootThreadId);
     const summary = readString(snapshot?.summary) ?? readString(artifactData?.summary);
     const details = [
       runId ? `Run ${runId}` : null,
@@ -544,14 +551,21 @@ function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescr
     return {
       body: summary ? `Automation run snapshot\n${summary}` : 'Automation run snapshot',
       details,
-      inspections: buildActivityInspectionActions({ agentId, runId, artifactId, summary, runThreadKey }),
+      inspections: buildActivityInspectionActions({
+        agentId,
+        threadId: rootThreadId,
+        runId,
+        artifactId,
+        summary,
+        runThreadKey,
+      }),
     };
   }
 
   return {
     body: `Artifact: ${readArtifactEventType(event)}`,
     details: artifactId ? [`Artifact ${artifactId}`] : [],
-    inspections: buildActivityInspectionActions({ agentId, runId: null, artifactId }),
+    inspections: buildActivityInspectionActions({ agentId, threadId: null, runId: null, artifactId }),
   };
 }
 

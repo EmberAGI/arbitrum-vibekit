@@ -1674,6 +1674,28 @@ describe('agent-runtime integration', () => {
         }),
       );
 
+      const initialScheduleStatements = internalPostgres.executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(initialScheduleStatements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automations',
+          values: expect.arrayContaining([new Date(currentTime + 60_000)]),
+        }),
+      );
+      expect(initialScheduleStatements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: [
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            'scheduled',
+            new Date(currentTime + 60_000),
+            null,
+          ],
+        }),
+      );
+
       inspectionState = {
         threads: [
           {
@@ -3195,6 +3217,142 @@ describe('agent-runtime integration', () => {
             new Date(currentTime + 60_000),
             null,
           ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts unrelated due automations while another automation invocation is still active', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-slow',
+            threadKey: 'thread-slow',
+            threadState: {
+              thread: {
+                id: 'thread-slow',
+              },
+              execution: {
+                id: 'execution-thread-slow',
+                status: 'completed',
+              },
+            },
+          },
+          {
+            threadId: 'thread-record-fast',
+            threadKey: 'thread-fast',
+            threadState: {
+              thread: {
+                id: 'thread-fast',
+              },
+              execution: {
+                id: 'execution-thread-fast',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-slow',
+            threadId: 'thread-record-slow',
+            commandName: 'Slow sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Slow sync',
+              instruction: 'slow due automation should keep running',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+          {
+            automationId: 'automation-fast',
+            threadId: 'thread-record-fast',
+            commandName: 'Fast sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Fast sync',
+              instruction: 'fast due automation should run too',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-slow',
+            runId: 'run-automation-slow',
+            executionId: 'execution-automation-slow',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-fast',
+            runId: 'run-automation-fast',
+            executionId: 'execution-automation-fast',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            if (latestUserMessage?.content === 'slow due automation should keep running') {
+              return createNeverEndingStream() as unknown as ReturnType<typeof createTextStream>;
+            }
+            return createTextStream('Fast run complete.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(() => Promise.resolve(inspectionState)),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toContain('fast due automation should run too');
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: ['running', expect.any(Date), 'run-automation-slow'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: ['running', expect.any(Date), 'run-automation-fast'],
         }),
       );
     } finally {

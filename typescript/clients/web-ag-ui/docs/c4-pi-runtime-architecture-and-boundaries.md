@@ -346,6 +346,7 @@ sequenceDiagram
   participant Web as web-ag-ui
 
   SCH->>RT: trigger PiAutomation
+  SCH->>RT: skip only same-automation work already in flight
   RT->>RT: transactional row-count claim: scheduled -> running + running audit writes
   RT->>RT: create or continue PiExecution after claim commit
   RT->>CTX: run saved instruction as scheduled user input
@@ -356,11 +357,13 @@ sequenceDiagram
   RT->>RT: persist runtime-owned tool checkpoints on scheduled PiExecution/root PiThread
   RT->>RT: complete, fail, time out, or cancel AutomationRun with a row-count terminal claim
   RT->>RT: scope cancellation and lease cleanup to the active root PiThread record
+  RT->>RT: skip execution-event insertion when cancellation has no current execution
   RT->>RT: skip lost stale-timeout races and continue later due automations
-  RT->>RT: schedule next AutomationRun from terminal-decision cadence time
+  RT->>RT: schedule first and next AutomationRun rows at the future cadence time
   RT-->>AG: live root activity projection includes status plus automation-run-snapshot summary/artifact/run details
   AG-->>Web: projected AG-UI state/activity from runtime-owned records
-  Web->>RT: open run/artifact detail through control-plane-backed inspection routes
+  Web->>RT: open run/artifact detail through root-thread-scoped control-plane inspection routes
+  RT-->>Web: return only run/artifact candidates in that root-thread scope
   Web->>Web: show general activity history with inspect/open controls for run snapshots and artifacts, without transcript pollution
 ```
 

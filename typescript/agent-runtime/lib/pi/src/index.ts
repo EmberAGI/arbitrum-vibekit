@@ -30,6 +30,7 @@ import {
   type PiExecutionRecord,
   type PiOutboxRecoveryRecord,
   type PiRestartInterruptRecord,
+  type PiRuntimeInspectionSnapshot,
   type PiRuntimeMaintenancePlan,
   type PiRuntimeRetentionPolicy,
   type PiSchedulerLeaseRecord,
@@ -204,11 +205,15 @@ export type PiRuntimeGatewayControlPlane = {
   listThreads: () => Promise<unknown>;
   listExecutions: () => Promise<unknown>;
   listAutomations: () => Promise<unknown>;
-  listAutomationRuns: () => Promise<unknown>;
-  listArtifacts: () => Promise<unknown>;
+  listAutomationRuns: (scope?: PiRuntimeGatewayControlScope) => Promise<unknown>;
+  listArtifacts: (scope?: PiRuntimeGatewayControlScope) => Promise<unknown>;
   inspectScheduler: () => Promise<unknown>;
   inspectOutbox: () => Promise<unknown>;
   inspectMaintenance: () => Promise<unknown>;
+};
+
+export type PiRuntimeGatewayControlScope = {
+  threadId?: string;
 };
 
 export type PiRuntimeGatewayService = {
@@ -2337,14 +2342,37 @@ export const createCanonicalPiRuntimeGatewayControlPlane = (params: {
       now: now(),
       ...(await params.loadInspectionState()),
     });
+  const findScopedThreadIds = (snapshot: PiRuntimeInspectionSnapshot, scope?: PiRuntimeGatewayControlScope) => {
+    if (!scope?.threadId) {
+      return null;
+    }
+
+    return new Set(
+      snapshot.threads
+        .filter((thread) => thread.threadId === scope.threadId || thread.threadKey === scope.threadId)
+        .map((thread) => thread.threadId),
+    );
+  };
 
   return {
     inspectHealth: async () => (await loadSnapshot()).health,
     listThreads: async () => (await loadSnapshot()).threads,
     listExecutions: async () => (await loadSnapshot()).executions,
     listAutomations: async () => (await loadSnapshot()).automations,
-    listAutomationRuns: async () => (await loadSnapshot()).automationRuns,
-    listArtifacts: async () => (await loadSnapshot()).artifacts,
+    listAutomationRuns: async (scope) => {
+      const snapshot = await loadSnapshot();
+      const scopedThreadIds = findScopedThreadIds(snapshot, scope);
+      return scopedThreadIds
+        ? snapshot.automationRuns.filter((run) => scopedThreadIds.has(run.threadId))
+        : snapshot.automationRuns;
+    },
+    listArtifacts: async (scope) => {
+      const snapshot = await loadSnapshot();
+      const scopedThreadIds = findScopedThreadIds(snapshot, scope);
+      return scopedThreadIds
+        ? snapshot.artifacts.filter((artifact) => scopedThreadIds.has(artifact.threadId))
+        : snapshot.artifacts;
+    },
     inspectScheduler: async () => (await loadSnapshot()).scheduler,
     inspectOutbox: async () => (await loadSnapshot()).outbox,
     inspectMaintenance: async (): Promise<PiRuntimeMaintenancePlan> =>

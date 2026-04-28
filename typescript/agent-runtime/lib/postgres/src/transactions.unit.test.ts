@@ -165,7 +165,7 @@ describe('transactions', () => {
       'thread-1',
       'exec-1',
       'scheduled',
-      new Date('2026-03-18T20:00:00.000Z'),
+      new Date('2026-03-18T20:05:00.000Z'),
       null,
     ]);
   });
@@ -250,6 +250,8 @@ describe('transactions', () => {
       executionId: 'exec-automation-1',
       automationRunId: 'run-automation-1',
       runThreadKey: 'automation:auto-1:run:run-automation-1',
+      rootThreadId: 'thread-1',
+      rootThreadRecordId: 'thread-record-1',
       sessionSnapshot: {
         messages: [{ role: 'assistant', content: 'Finished scheduled work.' }],
         artifacts: {
@@ -409,6 +411,39 @@ describe('transactions', () => {
     expect(statements[3]?.text).toContain('delete from pi_scheduler_leases');
     expect(statements[4]?.text).toContain('insert into pi_execution_events');
     expect(statements[5]?.text).toContain('insert into pi_thread_activity');
+  });
+
+  it('cancels a persisted automation definition without a current run without inserting a null execution event', () => {
+    const statements = buildCancelAutomationStatements({
+      automationId: 'auto-without-run',
+      currentRunId: null,
+      currentExecutionId: null,
+      threadId: 'thread-1',
+      eventId: 'event-unused',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:05:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automations',
+      'pi_scheduler_leases',
+      'pi_thread_activity',
+    ]);
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_execution_events',
+      }),
+    );
+    expect(statements[2]?.values).toEqual([
+      'activity-1',
+      'thread-1',
+      null,
+      'automation-canceled',
+      JSON.stringify({
+        automationId: 'auto-without-run',
+      }),
+      new Date('2026-03-18T20:05:00.000Z'),
+    ]);
   });
 
   it('builds interrupt checkpoint and outbox intent boundaries with the expected tables', () => {

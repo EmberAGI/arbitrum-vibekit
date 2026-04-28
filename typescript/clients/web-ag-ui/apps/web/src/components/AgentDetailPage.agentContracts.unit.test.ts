@@ -343,6 +343,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
               type: 'automation-status',
               automationId: 'automation-1',
               runId: 'run-automation-1',
+              rootThreadId: 'thread-1',
               status: 'completed',
               command: 'rebalance',
               detail: 'Automation rebalance executed successfully.',
@@ -361,10 +362,10 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Inspect run run-automation-1');
     expect(html).toContain('Open artifact automation-artifact-1');
     expect(html).toContain(
-      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;runId=run-automation-1"',
+      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;threadId=thread-1&amp;runId=run-automation-1"',
     );
     expect(html).toContain(
-      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;artifactId=automation-artifact-1"',
+      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;threadId=thread-1&amp;artifactId=automation-artifact-1"',
     );
   });
 
@@ -383,6 +384,7 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
             data: {
               automationRunId: 'run-automation-1',
               runThreadKey: 'automation:automation-1:run:run-automation-1',
+              rootThreadId: 'thread-1',
               snapshot: {
                 summary: 'Rebalanced 120 USDC.',
               },
@@ -399,10 +401,10 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('Open artifact automation-run-snapshot-artifact-1');
     expect(html).toContain('Run thread automation:automation-1:run:run-automation-1');
     expect(html).toContain(
-      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;runId=run-automation-1"',
+      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;threadId=thread-1&amp;runId=run-automation-1"',
     );
     expect(html).toContain(
-      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;artifactId=automation-run-snapshot-artifact-1"',
+      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;threadId=thread-1&amp;artifactId=automation-run-snapshot-artifact-1"',
     );
   });
 

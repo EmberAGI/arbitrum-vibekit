@@ -179,7 +179,7 @@ export function buildPersistAutomationDispatchStatements(params: {
     buildStatement(
       'pi_automation_runs',
       'insert into pi_automation_runs (id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, null)',
-      [params.runId, params.automationId, params.threadId, params.executionId, 'scheduled', params.now, null],
+      [params.runId, params.automationId, params.threadId, params.executionId, 'scheduled', params.nextRunAt, null],
     ),
     buildStatement(
       'pi_executions',
@@ -467,20 +467,28 @@ export function buildCancelAutomationStatements(params: {
       'delete from pi_scheduler_leases where automation_id = $1 and exists (select 1 from pi_automations where id = $1 and thread_id = $2)',
       [params.automationId, params.threadId],
     ),
-    buildStatement(
-      'pi_execution_events',
-      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
-      [
-        params.eventId,
-        params.currentExecutionId,
-        params.threadId,
-        'automation-canceled',
-        JSON.stringify({
-          automationId: params.automationId,
-        }),
-        params.now,
-      ],
-    ),
+  );
+
+  if (params.currentExecutionId !== null) {
+    statements.push(
+      buildStatement(
+        'pi_execution_events',
+        'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+        [
+          params.eventId,
+          params.currentExecutionId,
+          params.threadId,
+          'automation-canceled',
+          JSON.stringify({
+            automationId: params.automationId,
+          }),
+          params.now,
+        ],
+      ),
+    );
+  }
+
+  statements.push(
     buildStatement(
       'pi_thread_activity',
       'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
@@ -507,12 +515,16 @@ export function buildPersistScheduledAutomationRunSnapshotStatements(params: {
   executionId: string;
   automationRunId: string;
   runThreadKey: string;
+  rootThreadId: string;
+  rootThreadRecordId: string;
   sessionSnapshot: Record<string, unknown>;
   now: Date;
 }): PostgresStatement[] {
   const payload = {
     automationRunId: params.automationRunId,
     runThreadKey: params.runThreadKey,
+    rootThreadId: params.rootThreadId,
+    rootThreadRecordId: params.rootThreadRecordId,
     snapshot: params.sessionSnapshot,
   };
 
