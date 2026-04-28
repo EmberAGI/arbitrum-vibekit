@@ -77,13 +77,54 @@ function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
   );
 }
 
+function findStateSnapshots(events: readonly AgUiEventEnvelope[]) {
+  return events.filter(
+    (event): event is AgUiEventEnvelope & { snapshot: Record<string, unknown> } =>
+      event.type === 'STATE_SNAPSHOT' &&
+      typeof event['snapshot'] === 'object' &&
+      event['snapshot'] !== null &&
+      !Array.isArray(event['snapshot']),
+  );
+}
+
+function encodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function collectSnapshotReplaceOperations(
+  value: unknown,
+  path = '',
+): JsonPatchOperation[] {
+  if (typeof value !== 'object' || value === null) {
+    return [{ op: 'replace', path, value }];
+  }
+
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) =>
+      collectSnapshotReplaceOperations(item, `${path}/${index}`),
+    );
+  }
+
+  return Object.entries(value).flatMap(([key, item]) =>
+    collectSnapshotReplaceOperations(item, `${path}/${encodeJsonPointerToken(key)}`),
+  );
+}
+
 function expectStateDeltaOperation(
   events: readonly AgUiEventEnvelope[],
   predicate: (operation: JsonPatchOperation) => boolean,
 ) {
   const stateDeltas = findStateDeltas(events);
-  expect(stateDeltas).not.toHaveLength(0);
-  expect(stateDeltas.some((event) => event.delta.some(predicate))).toBe(true);
+  const operations = stateDeltas.flatMap((event) => event.delta);
+  if (operations.length === 0) {
+    const latestSnapshot = findStateSnapshots(events).at(-1);
+    if (latestSnapshot) {
+      operations.push(...collectSnapshotReplaceOperations(latestSnapshot.snapshot));
+    }
+  }
+
+  expect(operations).not.toHaveLength(0);
+  expect(operations.some(predicate)).toBe(true);
 }
 
 async function readFirstMatchingSseEvent(

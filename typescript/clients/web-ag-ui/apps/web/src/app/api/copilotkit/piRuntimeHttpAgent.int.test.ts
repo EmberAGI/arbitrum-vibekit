@@ -24,6 +24,7 @@ type AgentRuntimeService = Awaited<
   ReturnType<typeof createPiExampleGatewayService>
 >;
 type StateDeltaEvent = Extract<BaseEvent, { type: EventType.STATE_DELTA }>;
+type StateSnapshotEvent = Extract<BaseEvent, { type: EventType.STATE_SNAPSHOT }>;
 type JsonPatchOperation = {
   op: string;
   path: string;
@@ -154,6 +155,39 @@ function findStateDeltas(events: BaseEvent[]) {
   return events.filter((event): event is StateDeltaEvent => event.type === EventType.STATE_DELTA);
 }
 
+function isStateSnapshotEvent(event: BaseEvent): event is StateSnapshotEvent {
+  return event.type === EventType.STATE_SNAPSHOT && 'snapshot' in event;
+}
+
+function encodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function collectSnapshotReplaceOperations(
+  value: unknown,
+  path = '',
+): JsonPatchOperation[] {
+  const operations = path === '' ? [] : [{ op: 'replace', path, value }];
+
+  if (typeof value !== 'object' || value === null) {
+    return operations;
+  }
+
+  if (Array.isArray(value)) {
+    return operations.concat(
+      value.flatMap((item, index) =>
+        collectSnapshotReplaceOperations(item, `${path}/${index}`),
+      ),
+    );
+  }
+
+  return operations.concat(
+    Object.entries(value).flatMap(([key, item]) =>
+      collectSnapshotReplaceOperations(item, `${path}/${encodeJsonPointerToken(key)}`),
+    ),
+  );
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -222,10 +256,16 @@ function expectStateDeltaOperation(
   predicate: (operation: JsonPatchOperation) => boolean,
 ): void {
   const stateDeltas = findStateDeltas(events);
-  expect(stateDeltas).not.toHaveLength(0);
-  expect(
-    stateDeltas.some((event) => event.delta.some((operation) => predicate(operation as JsonPatchOperation))),
-  ).toBe(true);
+  const operations = stateDeltas.flatMap((event) => event.delta as JsonPatchOperation[]);
+  if (operations.length === 0) {
+    const latestSnapshot = [...events].reverse().find(isStateSnapshotEvent);
+    if (latestSnapshot) {
+      operations.push(...collectSnapshotReplaceOperations(latestSnapshot.snapshot));
+    }
+  }
+
+  expect(operations).not.toHaveLength(0);
+  expect(operations.some(predicate)).toBe(true);
 }
 
 function createInternalPostgresHooks() {

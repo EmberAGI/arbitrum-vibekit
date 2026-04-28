@@ -222,16 +222,23 @@ function projectStateSnapshot(input: {
   baseline?: AgUiEventEnvelope;
   events: readonly AgUiEventEnvelope[];
 }) {
-  const projectedSnapshot = cloneJson(
+  let projectedSnapshot = cloneJson(
     (input.baseline && 'snapshot' in input.baseline ? input.baseline.snapshot : { thread: {} }) as Record<
       string,
       unknown
     >,
   );
 
-  for (const event of findStateDeltas(input.events)) {
-    for (const operation of event.delta) {
-      applyJsonPatchOperation(projectedSnapshot, operation);
+  for (const event of input.events) {
+    if (event.type === 'STATE_SNAPSHOT' && 'snapshot' in event) {
+      projectedSnapshot = cloneJson(event.snapshot as Record<string, unknown>);
+      continue;
+    }
+
+    if (event.type === 'STATE_DELTA' && Array.isArray(event.delta)) {
+      for (const operation of event.delta as JsonPatchOperation[]) {
+        applyJsonPatchOperation(projectedSnapshot, operation);
+      }
     }
   }
 
