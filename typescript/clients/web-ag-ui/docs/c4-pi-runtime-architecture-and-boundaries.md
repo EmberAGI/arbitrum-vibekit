@@ -363,6 +363,7 @@ sequenceDiagram
   RT-->>AG: live root activity projection includes status plus automation-run-snapshot summary/artifact/run details
   AG-->>Web: projected AG-UI state/activity from runtime-owned records
   Web->>RT: open run/artifact detail through root-thread-scoped control-plane inspection routes
+  RT->>RT: AG-UI gateway service forwards root-thread scope to canonical control reads
   RT-->>Web: return only run/artifact candidates in that root-thread scope
   Web->>Web: show general activity history with inspect/open controls for run snapshots and artifacts, without transcript pollution
 ```

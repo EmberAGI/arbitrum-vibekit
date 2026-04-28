@@ -116,6 +116,10 @@ describe('agent-runtime-pi package contract', () => {
     await expect(service.control.listAutomations()).resolves.toEqual(['automation-1']);
     await expect(service.control.listAutomationRuns()).resolves.toEqual(['run-1']);
     await expect(service.control.listArtifacts()).resolves.toEqual(['artifact-1']);
+    await expect(service.control.listAutomationRuns({ threadId: 'thread-1' })).resolves.toEqual(['run-1']);
+    await expect(service.control.listArtifacts({ threadId: 'thread-1' })).resolves.toEqual(['artifact-1']);
+    expect(controlPlane.listAutomationRuns).toHaveBeenCalledWith({ threadId: 'thread-1' });
+    expect(controlPlane.listArtifacts).toHaveBeenCalledWith({ threadId: 'thread-1' });
     await expect(service.control.inspectScheduler()).resolves.toEqual({
       dueAutomationIds: ['automation-1'],
       leases: [],

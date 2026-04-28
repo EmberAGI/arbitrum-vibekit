@@ -83,6 +83,25 @@ describe('GET /api/copilotkit/control/[resource]', () => {
     });
   });
 
+  it('returns 404 when a requested run is not present in the scoped runtime response', async () => {
+    fetchMock.mockResolvedValue(
+      Response.json([{ runId: 'run-thread-1', threadId: 'thread-1', status: 'completed' }]),
+    );
+
+    const response = await GET(
+      buildRequest(
+        '/api/copilotkit/control/automation-runs?agentId=agent-portfolio-manager&threadId=thread-1&runId=run-foreign',
+      ),
+      { params: Promise.resolve({ resource: 'automation-runs' }) },
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Control item not found.',
+    });
+  });
+
   it('rejects run or artifact opening without a root thread scope', async () => {
     const response = await GET(
       buildRequest('/api/copilotkit/control/automation-runs?agentId=agent-portfolio-manager&runId=run-1'),

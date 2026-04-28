@@ -162,7 +162,9 @@ local page anchors or static identifier labels. The web UI must not treat
 scheduled-run prompt messages as a durable chat transcript.
 Those inspection links carry the active root thread id, and the runtime control
 plane filters automation-run and artifact lists to that root-thread scope
-before the web proxy selects a requested id.
+before the web proxy selects a requested id. The AG-UI gateway service wrapper
+must preserve that optional scope when it delegates to the canonical control
+plane; otherwise a scoped HTTP route can receive runtime-wide candidates.
 
 If a domain integration needs to call an external service, the domain/config
 layer may delegate to an app-local adapter that returns semantic state,
