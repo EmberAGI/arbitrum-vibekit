@@ -357,7 +357,7 @@ sequenceDiagram
   RT->>RT: schedule next AutomationRun at future cadence time
   RT-->>AG: root activity projection, summary, artifact refs, and run details available
   AG-->>Web: projected AG-UI state/activity from runtime-owned records
-  Web->>Web: show general activity history and automation run details without transcript pollution
+  Web->>Web: show general activity history with inspect/open controls for run snapshots and artifacts, without transcript pollution
 ```
 
 ## 9. Automation inspection/control boundary

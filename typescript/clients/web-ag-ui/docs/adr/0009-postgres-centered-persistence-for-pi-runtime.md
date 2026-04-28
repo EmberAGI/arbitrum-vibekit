@@ -65,7 +65,7 @@ Rules:
 - The scheduler claims due work with a row-count-checked `scheduled -> running` update in the same Postgres transaction as the running event/activity writes. A zero-row claim or later write failure rolls back the batch, so this process must not invoke the agent unless the claim and audit writes commit together.
 - Rescheduled `AutomationRun.scheduled_at` values must use the future cadence timestamp, matching `PiAutomation.next_run_at`, not the prior completion timestamp.
 - Runtime-owned tool checkpoints created inside scheduled execution must use the scheduled automation `PiExecution` and root `PiThread` so identity, signing, interrupt, outbox, and dedupe paths stay on the same fail-closed boundary as direct execution.
-- Web-facing run inspection is a projection of that runtime-owned activity/artifact state. The web may render run ids, statuses, summaries, and artifact references, but it must not infer automation truth from chat transcript messages.
+- Web-facing run inspection is a projection of that runtime-owned activity/artifact state. The web may render run ids, statuses, summaries, and artifact references, and must provide inspect/open affordances for persisted run snapshots/artifacts. It must not infer automation truth from chat transcript messages.
 - Exactly-once-ish risky side effects use a durable outbox plus unique wallet/account + action-fingerprint constraints in Postgres.
 - Redis is not part of the initial persistence architecture.
 - SQLite is not the default backend, including for `npx` startup flows.

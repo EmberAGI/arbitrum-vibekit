@@ -54,6 +54,7 @@ Additional rules:
 - Starting a scheduled run is a conditional `scheduled -> running` claim committed in the same Postgres transaction as the running event/activity writes. If another runtime process has already claimed the row, the scheduler must roll back and skip invocation rather than invoking the agent twice.
 - Runtime-owned tools raised inside a scheduled run, including interrupt/outbox/signing-style boundaries, must persist against the scheduled automation `PiExecution` and root `PiThread`, not a synthetic run-thread record.
 - The root thread receives projected summaries, visible status updates, and artifacts by default.
+- Web activity views must expose inspect/open affordances for projected `AutomationRun` ids and persisted run-snapshot artifacts; static identifier labels alone are not sufficient for run-detail inspection.
 - Previous-run context included in the next scheduled prompt must be concise: prior run id/status/timestamp plus result summary and run-detail/activity/artifact references, not a replay of the old transcript.
 - Raw internal execution/automation history is available only through explicit tools.
 - The root thread must expose one stable current-state artifact, one append-only activity artifact/log, and optional execution-specific artifacts.

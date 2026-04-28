@@ -115,8 +115,9 @@ direct user executions.
 
 The web app consumes those runtime-owned activity artifacts as a general
 activity stream. It may render automation run ids, statuses, summaries, and
-artifact references, but it must not treat scheduled-run prompt messages as a
-durable chat transcript.
+artifact references, and it must expose inspect/open affordances for persisted
+run snapshots and artifacts. The web UI must not treat scheduled-run prompt
+messages as a durable chat transcript.
 
 If a domain integration needs to call an external service, the domain/config
 layer may delegate to an app-local adapter that returns semantic state,

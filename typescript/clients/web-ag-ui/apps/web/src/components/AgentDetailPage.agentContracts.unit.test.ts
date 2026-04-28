@@ -358,6 +358,42 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     expect(html).toContain('rebalance: Automation rebalance executed successfully.');
     expect(html).toContain('Run run-automation-1');
     expect(html).toContain('Artifact automation-artifact-1');
+    expect(html).toContain('Inspect run run-automation-1');
+    expect(html).toContain('Open artifact automation-artifact-1');
+    expect(html).toContain('href="#automation-run-run-automation-1"');
+    expect(html).toContain('href="#automation-artifact-automation-artifact-1"');
+  });
+
+  it('renders persisted automation run snapshots with inline inspection affordances', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-clmm',
+      agentName: 'Camelot CLMM',
+      isHired: true,
+      initialTab: 'transactions',
+      events: [
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'automation-run-snapshot-artifact-1',
+            type: 'automation-run-snapshot',
+            data: {
+              automationRunId: 'run-automation-1',
+              runThreadKey: 'automation:automation-1:run:run-automation-1',
+              snapshot: {
+                summary: 'Rebalanced 120 USDC.',
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Automation run snapshot');
+    expect(html).toContain('Rebalanced 120 USDC.');
+    expect(html).toContain('Inspect run run-automation-1');
+    expect(html).toContain('Open artifact automation-run-snapshot-artifact-1');
+    expect(html).toContain('Run thread automation:automation-1:run:run-automation-1');
   });
 
   it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {

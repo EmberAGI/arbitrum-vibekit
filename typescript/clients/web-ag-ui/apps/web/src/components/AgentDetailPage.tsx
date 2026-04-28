@@ -11,6 +11,8 @@ import {
   Minus,
   Check,
   RefreshCw,
+  Search,
+  ExternalLink,
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
 import Link from 'next/link';
@@ -420,33 +422,114 @@ function readArtifactEventType(event: ClmmEvent): string {
   );
 }
 
-function describeActivityEvent(event: ClmmEvent): { body: string; details: string[] } {
+type ActivityInspectionAction = {
+  kind: 'run' | 'artifact';
+  id: string;
+  label: string;
+  href: string;
+  detailLines: string[];
+};
+
+type ActivityDescription = {
+  body: string;
+  details: string[];
+  inspections: ActivityInspectionAction[];
+};
+
+function buildActivityElementId(kind: ActivityInspectionAction['kind'], id: string): string {
+  return `automation-${kind}-${encodeURIComponent(id)}`;
+}
+
+function buildActivityAnchor(kind: ActivityInspectionAction['kind'], id: string): string {
+  return `#${buildActivityElementId(kind, id)}`;
+}
+
+function buildActivityInspectionActions(params: {
+  runId: string | null;
+  artifactId: string | null;
+  summary?: string | null;
+  runThreadKey?: string | null;
+}): ActivityInspectionAction[] {
+  const actions: ActivityInspectionAction[] = [];
+
+  if (params.runId) {
+    actions.push({
+      kind: 'run',
+      id: params.runId,
+      label: `Inspect run ${params.runId}`,
+      href: buildActivityAnchor('run', params.runId),
+      detailLines: [
+        `Run ${params.runId}`,
+        params.summary ? `Summary ${params.summary}` : null,
+        params.runThreadKey ? `Run thread ${params.runThreadKey}` : null,
+      ].filter((line): line is string => line !== null),
+    });
+  }
+
+  if (params.artifactId) {
+    actions.push({
+      kind: 'artifact',
+      id: params.artifactId,
+      label: `Open artifact ${params.artifactId}`,
+      href: buildActivityAnchor('artifact', params.artifactId),
+      detailLines: [`Artifact ${params.artifactId}`],
+    });
+  }
+
+  return actions;
+}
+
+function describeActivityEvent(event: ClmmEvent): ActivityDescription {
   if (event.type === 'status') {
-    return { body: event.message, details: [] };
+    return { body: event.message, details: [], inspections: [] };
   }
 
   if (event.type === 'dispatch-response') {
-    return { body: `Response with ${event.parts?.length ?? 0} parts`, details: [] };
+    return { body: `Response with ${event.parts?.length ?? 0} parts`, details: [], inspections: [] };
   }
 
   const artifactData = asRecord(event.artifact?.data);
-  if (artifactData?.type !== 'automation-status') {
-    return { body: `Artifact: ${readArtifactEventType(event)}`, details: [] };
+  const artifactId = readString(event.artifact?.artifactId) ?? readString(event.artifact?.id);
+
+  if (artifactData?.type === 'automation-status') {
+    const status = readString(artifactData.status) ?? 'unknown';
+    const command = readString(artifactData.command) ?? 'automation';
+    const detail = readString(artifactData.detail) ?? 'Automation status updated.';
+    const runId = readString(artifactData.runId);
+    const details = [
+      runId ? `Run ${runId}` : null,
+      artifactId ? `Artifact ${artifactId}` : null,
+    ].filter((value): value is string => value !== null);
+
+    return {
+      body: `Automation ${status}\n${command}: ${detail}`,
+      details,
+      inspections: buildActivityInspectionActions({ runId, artifactId }),
+    };
   }
 
-  const status = readString(artifactData.status) ?? 'unknown';
-  const command = readString(artifactData.command) ?? 'automation';
-  const detail = readString(artifactData.detail) ?? 'Automation status updated.';
-  const runId = readString(artifactData.runId);
-  const artifactId = readString(event.artifact?.artifactId) ?? readString(event.artifact?.id);
-  const details = [
-    runId ? `Run ${runId}` : null,
-    artifactId ? `Artifact ${artifactId}` : null,
-  ].filter((value): value is string => value !== null);
+  if (readArtifactEventType(event) === 'automation-run-snapshot') {
+    const snapshot = asRecord(artifactData?.snapshot);
+    const runId = readString(artifactData?.automationRunId) ?? readString(artifactData?.runId);
+    const runThreadKey = readString(artifactData?.runThreadKey);
+    const summary = readString(snapshot?.summary) ?? readString(artifactData?.summary);
+    const details = [
+      runId ? `Run ${runId}` : null,
+      artifactId ? `Artifact ${artifactId}` : null,
+      runThreadKey ? `Run thread ${runThreadKey}` : null,
+    ].filter((value): value is string => value !== null);
+
+    return {
+      body: summary ? `Automation run snapshot\n${summary}` : 'Automation run snapshot',
+      details,
+      inspections: buildActivityInspectionActions({ runId, artifactId, summary, runThreadKey }),
+    };
+  }
 
   return {
-    body: `Automation ${status}\n${command}: ${detail}`,
-    details,
+    body: `Artifact: ${readArtifactEventType(event)}`,
+    details: artifactId ? [`Artifact ${artifactId}`] : [],
+    inspections: buildActivityInspectionActions({ runId: null, artifactId }),
   };
 }
 
@@ -2461,6 +2544,50 @@ function TransactionHistoryTab({
                             {detail}
                           </span>
                         ))}
+                      </div>
+                    )}
+                    {activityDescription.inspections.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {activityDescription.inspections.map((inspection) => {
+                          if (inspection.kind === 'run') {
+                            return (
+                              <details
+                                key={`${inspection.kind}-${inspection.id}`}
+                                id={buildActivityElementId('run', inspection.id)}
+                                className="rounded-md border border-[#eadac7] bg-white/80 px-3 py-2 text-xs text-[#503826]"
+                              >
+                                <summary className="flex cursor-pointer items-center gap-2 font-medium text-[#261a12]">
+                                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {inspection.label}
+                                </summary>
+                                <div className="mt-2 space-y-1 text-[#6f5a4c]">
+                                  {inspection.detailLines.map((line) => (
+                                    <div key={line}>{line}</div>
+                                  ))}
+                                  <a
+                                    href={inspection.href}
+                                    className="inline-flex items-center gap-1 font-medium text-[#7b4c2f] hover:text-[#3a2417]"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Open run {inspection.id}
+                                  </a>
+                                </div>
+                              </details>
+                            );
+                          }
+
+                          return (
+                            <a
+                              key={`${inspection.kind}-${inspection.id}`}
+                              id={buildActivityElementId('artifact', inspection.id)}
+                              href={inspection.href}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#eadac7] bg-white/80 px-3 py-2 text-xs font-medium text-[#503826] hover:bg-[#fff7ef]"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                              {inspection.label}
+                            </a>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
