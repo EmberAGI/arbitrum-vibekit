@@ -302,6 +302,21 @@ function getMessageText(message: Message): string {
       .trim();
   }
 
+  if (message.role === 'activity') {
+    const content = asRecord(message.content);
+    if (!content) {
+      return '';
+    }
+
+    return [
+      readString(content.title),
+      readString(content.text) ?? readString(content.detail) ?? readString(content.summary),
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join('\n')
+      .trim();
+  }
+
   return '';
 }
 
@@ -309,6 +324,7 @@ function getMessageRoleLabel(message: Message): string {
   if (message.role === 'assistant') return 'Agent';
   if (message.role === 'reasoning') return 'Reasoning';
   if (message.role === 'tool') return 'Tool';
+  if (message.role === 'activity' && message.activityType === 'artifact') return 'Artifact';
   if (message.role === 'activity') return 'Activity';
   return 'You';
 }

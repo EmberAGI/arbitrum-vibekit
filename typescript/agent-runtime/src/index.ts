@@ -876,6 +876,50 @@ function buildAutomationA2Ui(params: {
   };
 }
 
+function buildAutomationScheduledArtifactMessage(params: {
+  artifactId: string;
+  automationId: string;
+  runId: string;
+  rootThreadId: string;
+  command: string;
+  minutes: number;
+  detail: string;
+}): AgUiMessage {
+  return {
+    id: buildPiRuntimeStableUuid(
+      'message',
+      `agent-runtime:${params.rootThreadId}:automation:${params.automationId}:scheduled-artifact`,
+    ),
+    role: 'activity',
+    activityType: 'artifact',
+    content: {
+      type: 'automation-status',
+      status: 'scheduled',
+      title: 'Automation scheduled',
+      text: params.detail,
+      automationId: params.automationId,
+      runId: params.runId,
+      rootThreadId: params.rootThreadId,
+      artifactId: params.artifactId,
+      command: params.command,
+      cadenceMinutes: params.minutes,
+    },
+  };
+}
+
+function upsertAgUiMessage(
+  messages: readonly AgUiMessage[] | undefined,
+  nextMessage: AgUiMessage,
+): AgUiMessage[] {
+  const baseMessages = messages ?? [];
+  const existingIndex = baseMessages.findIndex((message) => message.id === nextMessage.id);
+  if (existingIndex === -1) {
+    return [...baseMessages, nextMessage];
+  }
+
+  return baseMessages.map((message, index) => (index === existingIndex ? nextMessage : message));
+}
+
 function buildOperatorInterruptArtifact(params: {
   artifactId: string;
   message: string;
@@ -1554,10 +1598,25 @@ function applyAutomationStatusUpdate(params: {
       minutes: params.minutes,
       detail: params.detail,
     });
+    const scheduledArtifactMessage =
+      params.status === 'scheduled'
+        ? buildAutomationScheduledArtifactMessage({
+            artifactId: params.artifactId,
+            automationId: params.automationId,
+            runId: params.activityRunId,
+            rootThreadId: params.threadId,
+            command: params.command,
+            minutes: params.minutes,
+            detail: params.detail,
+          })
+        : null;
 
     return appendSessionActivityEvents(
       {
         ...session,
+        ...(scheduledArtifactMessage
+          ? { messages: upsertAgUiMessage(session.messages, scheduledArtifactMessage) }
+          : {}),
         execution: {
           ...session.execution,
           id: executionId,

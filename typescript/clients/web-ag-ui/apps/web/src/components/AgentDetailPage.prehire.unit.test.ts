@@ -240,6 +240,52 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Analyzing the request before answering.');
   });
 
+  it('renders message-plane artifact activity in the chat transcript', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-ember-lending',
+        agentName: 'Ember Lending',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        lifecycleState: {
+          phase: 'active',
+        } as never,
+        messages: [
+          {
+            id: 'automation-scheduled-artifact',
+            role: 'activity',
+            activityType: 'artifact',
+            content: {
+              title: 'Automation scheduled',
+              text: 'Every 5 minutes, run the lending health check.',
+            },
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        onSendChatMessage: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Artifact');
+    expect(html).toContain('Automation scheduled');
+    expect(html).toContain('Every 5 minutes, run the lending health check.');
+  });
+
   it('renders linked reasoning in the order supplied by the runtime transcript', () => {
     const messages: Message[] = [
       {

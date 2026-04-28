@@ -1842,6 +1842,36 @@ describe('agent-runtime integration', () => {
           content: 'sync treasury balances',
         }),
       );
+      expect(rootMessages?.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'artifact',
+          content: expect.objectContaining({
+            type: 'automation-status',
+            status: 'scheduled',
+            title: 'Automation scheduled',
+            text: 'Scheduled sync every 1 minutes.',
+          }),
+        }),
+      );
+      expect(rootMessages?.messages).not.toContainEqual(
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'artifact',
+          content: expect.objectContaining({
+            status: 'running',
+          }),
+        }),
+      );
+      expect(rootMessages?.messages).not.toContainEqual(
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'artifact',
+          content: expect.objectContaining({
+            status: 'completed',
+          }),
+        }),
+      );
       const statements = internalPostgres.executeStatements.mock.calls.flatMap((call) => call[1]);
       expect(statements).not.toContainEqual(
         expect.objectContaining({
