@@ -778,19 +778,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
     if (event.type === 'artifact') {
       const artifactData = asRecord(event.artifact?.data);
       if (artifactData?.type === 'automation-status') {
-        const status = typeof artifactData.status === 'string' ? artifactData.status : 'unknown';
-        const command = typeof artifactData.command === 'string' ? artifactData.command : 'refresh';
-        const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
-        return [
-          {
-            id: `artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
-            label: 'Artifact',
-            view: buildPiExampleStatusA2UiView({
-              title: `Automation ${status}`,
-              body: `${command}: ${detail}`,
-            }),
-          },
-        ];
+        return [];
       }
 
       if (artifactData?.type === 'lifecycle-status') {
@@ -848,24 +836,7 @@ function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
       }
 
       if (payloadEnvelope.kind === 'automation-status') {
-        const payload = asRecord(payloadEnvelope.payload);
-        if (!payload) {
-          return [];
-        }
-
-        const status = typeof payload.status === 'string' ? payload.status : 'unknown';
-        const command = typeof payload.command === 'string' ? payload.command : 'refresh';
-        const detail = typeof payload.detail === 'string' ? payload.detail : 'Automation status updated.';
-        return [
-          {
-            id: `automation-a2ui-${index}-${partIndex}`,
-            label: 'A2UI',
-            view: buildPiExampleStatusA2UiView({
-              title: `Automation ${status}`,
-              body: `${command}: ${detail}`,
-            }),
-          },
-        ];
+        return [];
       }
 
       if (payloadEnvelope.kind === 'interrupt') {

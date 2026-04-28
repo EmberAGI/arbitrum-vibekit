@@ -85,7 +85,7 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
     container.remove();
   });
 
-  it('renders automation status cards through the A2UI renderer', () => {
+  it('keeps automation status events out of the chat transcript', () => {
     const root = renderChatFirstPage(container, {
       events: [
         {
@@ -121,9 +121,9 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
       ] as never,
     });
 
-    expect(container.querySelector('.a2ui-card')).not.toBeNull();
-    expect(container.textContent).toContain('Automation scheduled');
-    expect(container.textContent).toContain('Scheduled refresh every 5 minutes.');
+    expect(container.querySelector('.a2ui-card')).toBeNull();
+    expect(container.textContent).not.toContain('Automation scheduled');
+    expect(container.textContent).not.toContain('Scheduled refresh every 5 minutes.');
 
     act(() => {
       root.unmount();
@@ -195,7 +195,7 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
     });
   });
 
-  it('renders repeated automation artifact history without duplicate React child keys', () => {
+  it('keeps repeated automation artifact history out of chat without duplicate React child keys', () => {
     const root = renderChatFirstPage(container, {
       events: [
         {
@@ -225,8 +225,8 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
       ] as never,
     });
 
-    expect(container.textContent).toContain('Running automation refresh.');
-    expect(container.textContent).toContain('Automation refresh executed successfully.');
+    expect(container.textContent).not.toContain('Running automation refresh.');
+    expect(container.textContent).not.toContain('Automation refresh executed successfully.');
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Encountered two children with the same key'),
     );

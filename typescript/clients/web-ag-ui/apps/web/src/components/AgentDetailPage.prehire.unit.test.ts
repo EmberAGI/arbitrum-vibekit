@@ -329,7 +329,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).not.toContain('*confirmation*');
   });
 
-  it('renders automation status artifacts and A2UI cards in the Ember Portfolio Agent chat transcript', () => {
+  it('keeps automation status artifacts and A2UI cards out of the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-portfolio-manager',
@@ -387,9 +387,11 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toContain('Artifact');
-    expect(html).toContain('A2UI');
-    expect(html).toContain('pi-example-a2ui-view');
+    expect(html).not.toContain('Artifact');
+    expect(html).not.toContain('A2UI');
+    expect(html).not.toContain('Automation scheduled');
+    expect(html).not.toContain('Scheduled refresh every 5 minutes.');
+    expect(html).not.toContain('pi-example-a2ui-view');
   });
 
   it('renders interrupt A2UI controls in the Ember Portfolio Agent chat transcript', () => {
