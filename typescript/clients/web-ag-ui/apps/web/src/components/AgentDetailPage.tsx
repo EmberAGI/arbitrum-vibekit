@@ -97,12 +97,6 @@ import {
   readManagedLendingCollateralPolicies,
 } from '../utils/managedMandate';
 import { ManagedMandateWorkbenchCard } from './ManagedMandateWorkbenchCard';
-import {
-  buildPiExampleInterruptA2UiView,
-  buildPiExampleStatusA2UiView,
-  PiExampleA2UiCard,
-  type PiExampleA2UiView,
-} from './piExampleA2ui';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -766,111 +760,6 @@ function PortfolioManagerMandateWorkbenchShell(props: {
   );
 }
 
-type PiExampleChatCard = {
-  id: string;
-  label: 'Artifact' | 'A2UI';
-  view: PiExampleA2UiView;
-  actionKind?: 'submit-operator-note';
-};
-
-function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
-  return events.flatMap((event, index): PiExampleChatCard[] => {
-    if (event.type === 'artifact') {
-      const artifactData = asRecord(event.artifact?.data);
-      if (artifactData?.type === 'automation-status') {
-        return [];
-      }
-
-      if (artifactData?.type === 'lifecycle-status') {
-        const phase = typeof artifactData.phase === 'string' ? artifactData.phase : 'unknown';
-        const onboardingStep =
-          typeof artifactData.onboardingStep === 'string' ? artifactData.onboardingStep : null;
-        const operatorNote =
-          typeof artifactData.operatorNote === 'string' ? artifactData.operatorNote : null;
-        const detailLines = [
-          onboardingStep ? `Step: ${onboardingStep}` : null,
-          operatorNote ? `Operator note: ${operatorNote}` : null,
-        ].filter((line): line is string => line !== null);
-
-        return [
-          {
-            id: `lifecycle-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
-            label: 'Artifact',
-            view: buildPiExampleStatusA2UiView({
-              title: `Lifecycle ${phase}`,
-              body: detailLines.length > 0 ? detailLines.join('\n') : 'Lifecycle state updated.',
-            }),
-          },
-        ];
-      }
-
-      if (artifactData?.type === 'interrupt-status') {
-        const message = typeof artifactData.message === 'string' ? artifactData.message : 'Awaiting operator input.';
-        return [
-          {
-            id: `interrupt-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
-            label: 'Artifact',
-            view: buildPiExampleStatusA2UiView({
-              title: 'Interrupt checkpoint',
-              body: message,
-            }),
-          },
-        ];
-      }
-
-      return [];
-    }
-
-    if (event.type !== 'dispatch-response') {
-      return [];
-    }
-
-    return event.parts.flatMap((part, partIndex): PiExampleChatCard[] => {
-      if (part.kind !== 'a2ui') {
-        return [];
-      }
-
-      const payloadEnvelope = asRecord(asRecord(part.data)?.payload);
-      if (!payloadEnvelope) {
-        return [];
-      }
-
-      if (payloadEnvelope.kind === 'automation-status') {
-        return [];
-      }
-
-      if (payloadEnvelope.kind === 'interrupt') {
-        const payload = asRecord(payloadEnvelope.payload);
-        if (!payload) {
-          return [];
-        }
-
-        return [
-          {
-            id: `interrupt-a2ui-${index}-${partIndex}`,
-            label: 'A2UI',
-            actionKind: 'submit-operator-note',
-            view: buildPiExampleInterruptA2UiView({
-              title: 'Operator input required',
-              message:
-                typeof payload.message === 'string'
-                  ? payload.message
-                  : 'Provide a short operator note to continue.',
-              inputLabel:
-                typeof payload.inputLabel === 'string' ? payload.inputLabel : 'Operator note',
-              submitLabel:
-                typeof payload.submitLabel === 'string' ? payload.submitLabel : 'Continue agent loop',
-              artifactId: typeof payload.artifactId === 'string' ? payload.artifactId : undefined,
-            }),
-          },
-        ];
-      }
-
-      return [];
-    });
-  });
-}
-
 function FloatingErrorToast(props: {
   title: string;
   message: string;
@@ -1319,14 +1208,12 @@ export function AgentDetailPage({
       isHired={isHired}
       isHiring={isHiring}
       messages={messages}
-      activityEvents={events}
       chatDraft={chatDraft}
       onChatDraftChange={setChatDraft}
       onSubmit={handleChatSubmit}
       onChatKeyDown={handleChatKeyDown}
       isComposerEnabled={chatEnabled && typeof onSendChatMessage === 'function'}
       onSendChatMessage={onSendChatMessage}
-      onInterruptSubmit={onInterruptSubmit}
     />
   ) : null;
   const managedAgentContextCards = visibleManagedMandateEditorView ? (
@@ -2209,14 +2096,12 @@ function AgentChatTab(props: {
   isHired: boolean;
   isHiring: boolean;
   messages: Message[];
-  activityEvents: ClmmEvent[];
   chatDraft: string;
   onChatDraftChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onChatKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   isComposerEnabled: boolean;
   onSendChatMessage?: (content: string) => void;
-  onInterruptSubmit?: (input: PiOperatorNoteInput) => void;
 }) {
   const visibleMessages = useMemo(() => {
     return props.messages
@@ -2230,7 +2115,6 @@ function AgentChatTab(props: {
       )
       .filter((message) => message.text.length > 0);
   }, [props.messages]);
-  const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (
     <div className="space-y-4">
@@ -2264,38 +2148,6 @@ function AgentChatTab(props: {
             </div>
           ))
         )}
-
-        {activityCards.map((card) => (
-          <div key={card.id} className={`${DETAIL_PANEL_CLASS} px-4 py-4`}>
-            <div className="text-[11px] uppercase tracking-[0.14em] text-[#907764]">
-              {card.label}
-            </div>
-            <div className="mt-2">
-              <PiExampleA2UiCard
-                view={card.view}
-                onAction={(action) => {
-                  if (
-                    card.actionKind !== 'submit-operator-note' ||
-                    action.actionName !== 'submitOperatorNote' ||
-                    !props.onInterruptSubmit
-                  ) {
-                    return;
-                  }
-
-                  const note =
-                    typeof action.context?.operatorNote === 'string'
-                      ? action.context.operatorNote.trim()
-                      : '';
-                  if (note.length === 0) {
-                    return;
-                  }
-
-                  props.onInterruptSubmit({ operatorNote: note });
-                }}
-              />
-            </div>
-          </div>
-        ))}
       </div>
 
       <form onSubmit={props.onSubmit} className="border-t border-[#eadac7] pt-4">
