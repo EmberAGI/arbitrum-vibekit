@@ -289,6 +289,7 @@ type AgentRuntimeScheduledAutomationContext = {
 };
 
 const AGENT_RUNTIME_PERSISTED_DOMAIN_STATE_KEY = '__agentRuntimeDomainState';
+const AGENT_RUNTIME_PREVIOUS_RUN_SUMMARY_MAX_CHARS = 512;
 
 type AgentRuntimeSessionStore = {
   hasSession: (threadId: string) => boolean;
@@ -428,13 +429,16 @@ function buildScheduledAutomationSystemContextLines(
   ];
 
   if (context.previousRun) {
+    const previousRunSummary =
+      compactScheduledAutomationSummary(context.previousRun.summary) ??
+      'No prior result summary recorded.';
     lines.push(
       '<previous_run>',
       `<previous_run_id>${escapeSystemContextXml(context.previousRun.runId)}</previous_run_id>`,
       `<previous_run_execution_id>${escapeSystemContextXml(context.previousRun.executionId ?? '')}</previous_run_execution_id>`,
       `<previous_run_status>${escapeSystemContextXml(context.previousRun.status)}</previous_run_status>`,
       `<previous_run_completed_at>${context.previousRun.completedAt?.toISOString() ?? ''}</previous_run_completed_at>`,
-      `<previous_run_summary>${escapeSystemContextXml(context.previousRun.summary ?? 'No prior result summary recorded.')}</previous_run_summary>`,
+      `<previous_run_summary>${escapeSystemContextXml(previousRunSummary)}</previous_run_summary>`,
       `<previous_run_detail_ref>${escapeSystemContextXml(context.previousRun.runDetailRef)}</previous_run_detail_ref>`,
       ...context.previousRun.artifactRefs.map(
         (ref) => `<previous_run_artifact_ref>${escapeSystemContextXml(ref)}</previous_run_artifact_ref>`,
@@ -573,10 +577,12 @@ function buildScheduledAutomationRunSnapshot(
   session: PiRuntimeGatewaySession,
 ): Record<string, unknown> {
   const resultSummary =
-    [...(session.messages ?? [])]
+    compactScheduledAutomationSummary(
+      [...(session.messages ?? [])]
       .reverse()
       .find((message) => message.role === 'assistant' && readTrimmedString(message.content))
-      ?.content;
+        ?.content,
+    );
   const messages = (session.messages ?? []).map((message) => ({
     id: message.id,
     role: message.role,
@@ -628,7 +634,7 @@ function buildScheduledAutomationRunSnapshot(
     thread: session.thread,
     execution: session.execution,
     automation: session.automation,
-    ...(readTrimmedString(resultSummary) ? { summary: readTrimmedString(resultSummary) } : {}),
+    ...(resultSummary ? { summary: resultSummary } : {}),
     messages,
     artifacts,
     activityEvents,
@@ -1198,11 +1204,24 @@ function readTrimmedString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
+function compactScheduledAutomationSummary(value: unknown): string | undefined {
+  const summary = readTrimmedString(value)?.replace(/\s+/g, ' ');
+  if (!summary) {
+    return undefined;
+  }
+
+  if (summary.length <= AGENT_RUNTIME_PREVIOUS_RUN_SUMMARY_MAX_CHARS) {
+    return summary;
+  }
+
+  return `${summary.slice(0, AGENT_RUNTIME_PREVIOUS_RUN_SUMMARY_MAX_CHARS - 3).trimEnd()}...`;
+}
+
 function readScheduledAutomationSnapshotSummary(payload: Record<string, unknown>): string | undefined {
   const snapshot = isRecord(payload.snapshot) ? payload.snapshot : null;
   const summary =
-    readTrimmedString(snapshot?.summary) ??
-    readTrimmedString(payload.summary);
+    compactScheduledAutomationSummary(snapshot?.summary) ??
+    compactScheduledAutomationSummary(payload.summary);
   if (summary) {
     return summary;
   }
@@ -1213,10 +1232,10 @@ function readScheduledAutomationSnapshotSummary(payload: Record<string, unknown>
   const activityArtifact = isRecord(artifacts?.activity) ? artifacts.activity : null;
   const activityData = isRecord(activityArtifact?.data) ? activityArtifact.data : null;
   return (
-    readTrimmedString(currentData?.summary) ??
-    readTrimmedString(activityData?.summary) ??
-    readTrimmedString(currentData?.detail) ??
-    readTrimmedString(activityData?.detail)
+    compactScheduledAutomationSummary(currentData?.summary) ??
+    compactScheduledAutomationSummary(activityData?.summary) ??
+    compactScheduledAutomationSummary(currentData?.detail) ??
+    compactScheduledAutomationSummary(activityData?.detail)
   );
 }
 
@@ -2914,7 +2933,7 @@ export async function createAgentRuntime<TState = unknown>(
                 typeof automation.schedulePayload.title === 'string'
                   ? automation.schedulePayload.title
                   : automation.commandName,
-              status: automation.nextRunAt === null ? 'completed' : automation.suspended ? 'canceled' : 'active',
+              status: automation.suspended ? 'canceled' : automation.nextRunAt === null ? 'completed' : 'active',
               schedule: coerceSchedule(automation.schedulePayload.schedule, {
                 kind: 'every',
                 intervalMinutes: automation.schedulePayload.minutes ?? 5,
@@ -2967,14 +2986,22 @@ export async function createAgentRuntime<TState = unknown>(
           automationId: string;
         };
         const threadId = readCurrentThreadId();
-        const currentRecord = automationRegistry.getById(toolArgs.automationId);
+        const currentRecordCandidate = automationRegistry.getById(toolArgs.automationId);
+        const currentRecord =
+          currentRecordCandidate?.threadId === threadId ? currentRecordCandidate : undefined;
 
         const inspectionState = await loadInspectionState();
         const threadRecordId = resolveCurrentPersistenceContext(threadId).threadRecordId;
+        const persistedAutomation = inspectionState.automations.find(
+          (automation) =>
+            automation.automationId === toolArgs.automationId &&
+            automation.threadId === threadRecordId,
+        );
         const currentRun = [...inspectionState.automationRuns]
           .filter(
             (run) =>
               run.automationId === toolArgs.automationId &&
+              run.threadId === threadRecordId &&
               (run.status === 'running' || run.status === 'started' || run.status === 'scheduled'),
           )
           .sort((left, right) => {
@@ -2982,18 +3009,20 @@ export async function createAgentRuntime<TState = unknown>(
             const rightRank = right.status === 'running' || right.status === 'started' ? 1 : 0;
             return rightRank - leftRank || right.scheduledAt.getTime() - left.scheduledAt.getTime();
           })[0];
-        await postgres.executeStatements(
-          resolvedDatabaseUrl,
-          buildCancelAutomationStatements({
-            automationId: toolArgs.automationId,
-            currentRunId: currentRun?.runId ?? null,
-            currentExecutionId: currentRun?.executionId ?? null,
-            threadId: threadRecordId,
-            eventId: randomUUID(),
-            activityId: randomUUID(),
-            now: new Date(now()),
-          }),
-        );
+        if (persistedAutomation) {
+          await postgres.executeStatements(
+            resolvedDatabaseUrl,
+            buildCancelAutomationStatements({
+              automationId: toolArgs.automationId,
+              currentRunId: currentRun?.runId ?? null,
+              currentExecutionId: currentRun?.executionId ?? null,
+              threadId: threadRecordId,
+              eventId: randomUUID(),
+              activityId: randomUUID(),
+              now: new Date(now()),
+            }),
+          );
+        }
         if (
           currentRun?.executionId &&
           (currentRun.status === 'running' || currentRun.status === 'started')
@@ -3004,28 +3033,42 @@ export async function createAgentRuntime<TState = unknown>(
           });
         }
 
-        const record =
-          currentRecord ??
-          automationRegistry.upsert({
-            automationId: toolArgs.automationId,
-            threadId,
-            title: buildAutomationTitle({
-              command: 'sync',
-              schedule: { kind: 'every', intervalMinutes: 5 },
-            }),
-            instruction: 'sync',
-            command: 'sync',
-            schedule: { kind: 'every', intervalMinutes: 5 },
-            runId: `run:${threadId}`,
-            executionId: getSession(threadId).execution.id,
-            artifactId:
-              getSession(threadId).artifacts?.current?.artifactId ??
-              `artifact:${threadId}:automation`,
-            nextRunAt: null,
-            status: 'active',
-            lastRunAt: null,
-            lastRunStatus: null,
-          });
+        const record = currentRecord ?? (persistedAutomation
+          ? automationRegistry.upsert({
+              automationId: persistedAutomation.automationId,
+              threadId,
+              title:
+                typeof persistedAutomation.schedulePayload.title === 'string'
+                  ? persistedAutomation.schedulePayload.title
+                  : persistedAutomation.commandName,
+              instruction:
+                typeof persistedAutomation.schedulePayload.instruction === 'string'
+                  ? persistedAutomation.schedulePayload.instruction
+                  : persistedAutomation.commandName,
+              command: persistedAutomation.commandName,
+              schedule: coerceSchedule(persistedAutomation.schedulePayload.schedule, {
+                kind: 'every',
+                intervalMinutes: persistedAutomation.schedulePayload.minutes ?? 5,
+              }),
+              runId: currentRun?.runId ?? `run:${threadId}`,
+              executionId: currentRun?.executionId ?? getSession(threadId).execution.id,
+              artifactId:
+                getSession(threadId).artifacts?.current?.artifactId ??
+                `artifact:${threadId}:automation`,
+              nextRunAt: persistedAutomation.nextRunAt?.toISOString() ?? null,
+              status: persistedAutomation.suspended ? 'canceled' : 'active',
+              lastRunAt: currentRun?.completedAt?.toISOString() ?? null,
+              lastRunStatus: currentRun?.status ?? null,
+            })
+          : undefined);
+        if (!record) {
+          return {
+            content: [{ type: 'text' as const, text: 'No saved automation found for the active thread.' }],
+            details: {
+              automation: null,
+            },
+          };
+        }
         const minutes = getScheduleMinutes(record.schedule);
         const title = record.title;
         const detail = describeCanceledAutomation(title);

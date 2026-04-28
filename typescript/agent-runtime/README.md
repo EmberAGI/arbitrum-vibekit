@@ -112,7 +112,12 @@ Lost stale-active timeout races are treated the same way as lost claim and
 completion races: the current tick skips that run and continues processing
 later due automations. Cancellation also updates the linked `PiExecution` to a
 failed terminal state, so operator inspection does not display a canceled
-background invocation as successful.
+background invocation as successful. Model-facing `automation.cancel` is scoped
+to the active root thread record: persisted automation, current-run lookup, run
+updates, execution updates, and scheduler-lease cleanup must not target another
+root thread just because the model has an automation id. `automation.list`
+reports a suspended persisted automation as `canceled` even when cancellation has
+also cleared `next_run_at`.
 Postgres inspection loads execution-event payloads, activity payloads, and
 artifact payloads so control-plane and AG-UI activity surfaces can expose the
 persisted `automation-run-snapshot` details after restart. The same
@@ -122,7 +127,9 @@ summary/details without requiring a reconnect or process restart.
 Previous scheduled-run prompt context includes only concise prior result
 summary plus run-detail/activity/artifact references, and that summary is read
 from the persisted scheduled-run snapshot before falling back to generic root
-status activity.
+status activity. Snapshot summaries and `<previous_run_summary>` prompt content
+are compacted to a bounded single-line summary instead of carrying the full
+assistant response forward.
 If the same process starts a scheduled invocation that hangs, the scheduler
 races the invocation against the automation timeout, aborts the active runtime
 run, marks the run timed out, advances cadence, and ignores late snapshot

@@ -435,8 +435,8 @@ export function buildCancelAutomationStatements(params: {
   const statements: PostgresStatement[] = [
     buildStatement(
       'pi_automations',
-      'update pi_automations set suspended = $1, next_run_at = $2, updated_at = $3 where id = $4',
-      [true, null, params.now, params.automationId],
+      'update pi_automations set suspended = $1, next_run_at = $2, updated_at = $3 where id = $4 and thread_id = $5',
+      [true, null, params.now, params.automationId, params.threadId],
     ),
   ];
 
@@ -444,8 +444,8 @@ export function buildCancelAutomationStatements(params: {
     statements.push(
       buildStatement(
         'pi_automation_runs',
-        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and status in ('scheduled', 'running', 'started')",
-        ['canceled', params.now, params.currentRunId],
+        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and automation_id = $4 and thread_id = $5 and status in ('scheduled', 'running', 'started')",
+        ['canceled', params.now, params.currentRunId, params.automationId, params.threadId],
         { requiredAffectedRows: 1 },
       ),
     );
@@ -455,8 +455,8 @@ export function buildCancelAutomationStatements(params: {
     statements.push(
       buildStatement(
         'pi_executions',
-        'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
-        ['failed', params.now, params.now, params.currentExecutionId],
+        'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4 and thread_id = $5',
+        ['failed', params.now, params.now, params.currentExecutionId, params.threadId],
       ),
     );
   }
@@ -464,8 +464,8 @@ export function buildCancelAutomationStatements(params: {
   statements.push(
     buildStatement(
       'pi_scheduler_leases',
-      'delete from pi_scheduler_leases where automation_id = $1',
-      [params.automationId],
+      'delete from pi_scheduler_leases where automation_id = $1 and exists (select 1 from pi_automations where id = $1 and thread_id = $2)',
+      [params.automationId, params.threadId],
     ),
     buildStatement(
       'pi_execution_events',

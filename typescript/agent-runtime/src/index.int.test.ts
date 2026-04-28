@@ -2186,7 +2186,7 @@ describe('agent-runtime integration', () => {
       automations: [
         {
           automationId: 'automation-1',
-          threadId: 'thread-record-1',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
           commandName: 'Sync every minute',
           nextRunAt: new Date(currentTime + 60_000),
           suspended: false,
@@ -2200,6 +2200,7 @@ describe('agent-runtime integration', () => {
       automationRuns: [
         {
           automationId: 'automation-1',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
           runId: 'run-automation-active',
           executionId: 'execution-automation-active',
           status: 'running',
@@ -2261,8 +2262,123 @@ describe('agent-runtime integration', () => {
       expect.objectContaining({
         tableName: 'pi_automation_runs',
         text: expect.stringContaining("status in ('scheduled', 'running', 'started')"),
-        values: ['canceled', new Date(currentTime), 'run-automation-active'],
+        values: [
+          'canceled',
+          new Date(currentTime),
+          'run-automation-active',
+          'automation-1',
+          'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+        ],
         requiredAffectedRows: 1,
+      }),
+    );
+  });
+
+  it('does not cancel an automation run owned by another root thread', async () => {
+    const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+    const executeStatements = vi.fn(async () => undefined);
+    const inspectionState = {
+      threads: [
+        {
+          threadId: 'thread-record-1',
+          threadKey: 'thread-1',
+          threadState: {
+            thread: {
+              id: 'thread-1',
+            },
+            execution: {
+              id: 'execution-thread-1',
+              status: 'completed',
+            },
+          },
+        },
+      ],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-foreign',
+          threadId: 'thread-record-foreign',
+          commandName: 'Foreign automation',
+          nextRunAt: new Date(currentTime + 60_000),
+          suspended: false,
+          schedulePayload: {
+            title: 'Foreign automation',
+            instruction: 'sync another thread',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-foreign',
+          threadId: 'thread-record-foreign',
+          runId: 'run-automation-foreign',
+          executionId: 'execution-automation-foreign',
+          status: 'running',
+          scheduledAt: new Date(currentTime - 60_000),
+          startedAt: new Date(currentTime - 55_000),
+          completedAt: null,
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            return createTextStream('Automation canceled.');
+          }
+
+          return createToolStream({
+            toolName: AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
+            toolCallId: 'tool-automation-cancel-foreign',
+            args: {
+              automationId: 'automation-foreign',
+            },
+          });
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      }),
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-cancel-foreign',
+        messages: [
+          {
+            id: 'message-cancel-foreign',
+            role: 'user',
+            content: 'Cancel that automation.',
+          },
+        ],
+      }),
+    );
+
+    const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_automation_runs',
+        values: expect.arrayContaining(['run-automation-foreign']),
+      }),
+    );
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_automations',
+        values: expect.arrayContaining(['automation-foreign']),
       }),
     );
   });
@@ -2597,6 +2713,130 @@ describe('agent-runtime integration', () => {
           }),
         }),
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds previous-run summaries before injecting scheduled automation context', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const longPreviousSummary = [
+        'Rebalanced 120 USDC.',
+        ...Array.from({ length: 100 }, (_value, index) => `tail-marker-${index}`),
+      ].join(' ');
+      const observedScheduledSystemPrompts: string[] = [];
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            runId: 'run-automation-previous',
+            executionId: 'execution-automation-previous',
+            status: 'completed',
+            scheduledAt: new Date(currentTime - 120_000),
+            startedAt: new Date(currentTime - 119_000),
+            completedAt: new Date(currentTime - 110_000),
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+        artifacts: [
+          {
+            artifactId: 'artifact-previous-snapshot',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-previous',
+            artifactKind: 'automation-run-snapshot',
+            appendOnly: false,
+            payload: {
+              automationRunId: 'run-automation-previous',
+              runThreadKey: 'automation:automation-1:run:run-automation-previous',
+              snapshot: {
+                summary: longPreviousSummary,
+              },
+            },
+            createdAt: new Date(currentTime - 110_000),
+            updatedAt: new Date(currentTime - 110_000),
+          },
+        ],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              observedScheduledSystemPrompts.push(context.systemPrompt);
+              return createTextStream('Scheduled run summarized 42 balances.');
+            }
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements: vi.fn(async () => undefined),
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const scheduledSystemPrompt = observedScheduledSystemPrompts.join('\n');
+      const previousRunSummary = scheduledSystemPrompt.match(
+        /<previous_run_summary>(?<summary>[\s\S]*?)<\/previous_run_summary>/,
+      )?.groups?.summary;
+      expect(previousRunSummary).toBeDefined();
+      expect(previousRunSummary!.length).toBeLessThanOrEqual(512);
+      expect(previousRunSummary).not.toContain('tail-marker-99');
     } finally {
       vi.useRealTimers();
     }
@@ -3465,6 +3705,93 @@ describe('agent-runtime integration', () => {
     expect(toolResultText).toContain('lastRunStatus');
     expect(toolResultText).toContain('completed');
     expect(toolResultText).toContain('2026-03-20T00:18:10.000Z');
+  });
+
+  it('reports persisted suspended automations with no next run as canceled in automation.list', async () => {
+    const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+    const observedToolResults: string[] = [];
+    const inspectionState = {
+      threads: [],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-canceled',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+          commandName: 'Sync every minute',
+          nextRunAt: null,
+          suspended: true,
+          schedulePayload: {
+            title: 'Sync every minute',
+            instruction: 'sync treasury balances',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-canceled',
+          runId: 'run-automation-canceled',
+          executionId: 'execution-automation-canceled',
+          status: 'canceled',
+          scheduledAt: new Date(currentTime - 120_000),
+          startedAt: new Date(currentTime - 119_000),
+          completedAt: new Date(currentTime - 110_000),
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const internalPostgres = createInternalPostgresHooks({
+      loadInspectionState: vi.fn(async () => inspectionState),
+    });
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            observedToolResults.push(JSON.stringify(latestToolResult));
+            return createTextStream('Listed automations.');
+          }
+
+          return createToolStream({
+            toolName: 'automation_list',
+            toolCallId: 'tool-automation-list-canceled',
+            args: {
+              state: 'all',
+              limit: 20,
+            },
+          });
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-list-canceled',
+        messages: [
+          {
+            id: 'message-list-canceled',
+            role: 'user',
+            content: 'List my automations.',
+          },
+        ],
+      }),
+    );
+
+    const toolResultText = observedToolResults.join('\n');
+    expect(toolResultText).toContain('"status":"canceled"');
+    expect(toolResultText).not.toContain('"status":"completed"');
   });
 
   it('rehydrates persisted transcript before reconnect snapshots after process restart', async () => {
