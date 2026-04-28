@@ -2158,6 +2158,16 @@ async function drainAttachedEventSource(source: AgentRuntimeAttachedEventSource)
   }
 }
 
+async function stopAttachedEventSource(
+  runtime: PiRuntimeGatewayRuntime,
+  request: {
+    threadId: string;
+    runId: string;
+  },
+): Promise<void> {
+  await drainAttachedEventSource(await runtime.stop(request));
+}
+
 function mapSessionExecutionStatusToPersistedStatus(
   status: AgentRuntimeExecutionStatus,
 ): PersistedExecutionCheckpointStatus {
@@ -3579,6 +3589,10 @@ export async function createAgentRuntime<TState = unknown>(
             runOutcome = 'timed_out';
             runFailureDetail = `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`;
             timedOutScheduledRunThreadIds.add(runThreadId);
+            await stopAttachedEventSource(runtimeWithDomain, {
+              threadId: runThreadId,
+              runId: scheduledRun.runId,
+            });
             void invocation.catch(() => undefined).finally(() => {
               scheduledAutomationContexts.delete(runThreadId);
               timedOutScheduledRunThreadIds.delete(runThreadId);
@@ -3602,6 +3616,8 @@ export async function createAgentRuntime<TState = unknown>(
           }
         }
 
+        const terminalNow = new Date(now());
+        const terminalNextRunAt = new Date(terminalNow.getTime() + minutes * 60 * 1000);
         const completionStatements =
           runOutcome === 'timed_out'
             ? buildTimeoutAutomationExecutionStatements({
@@ -3610,26 +3626,26 @@ export async function createAgentRuntime<TState = unknown>(
                 currentExecutionId: scheduledRun.executionId,
                 nextRunId: buildPiRuntimeStableUuid(
                   'automation-run',
-                  `agent-runtime:${automationId}:run:${nextRunAt.toISOString()}`,
+                  `agent-runtime:${automationId}:run:${terminalNextRunAt.toISOString()}`,
                 ),
                 nextExecutionId: buildPiRuntimeStableUuid(
                   'execution',
-                  `agent-runtime:${automationId}:execution:${nextRunAt.toISOString()}`,
+                  `agent-runtime:${automationId}:execution:${terminalNextRunAt.toISOString()}`,
                 ),
                 threadId: automation.threadId,
                 commandName: automation.commandName,
                 schedulePayload: automation.schedulePayload,
                 eventId: buildPiRuntimeStableUuid(
                   'execution-event',
-                  `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+                  `agent-runtime:${automationId}:timeout:${terminalNow.toISOString()}`,
                 ),
                 activityId: buildPiRuntimeStableUuid(
                   'activity',
-                  `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
+                  `agent-runtime:${automationId}:timeout:${terminalNow.toISOString()}`,
                 ),
-                now: currentNow,
-                nextRunAt,
-                leaseExpiresAt: currentNow,
+                now: terminalNow,
+                nextRunAt: terminalNextRunAt,
+                leaseExpiresAt: terminalNow,
                 timeoutDetail: runFailureDetail ?? `Exceeded the ${timeoutMinutes} minute scheduled automation timeout.`,
               })
             : buildCompleteAutomationExecutionStatements({
@@ -3638,26 +3654,26 @@ export async function createAgentRuntime<TState = unknown>(
             currentExecutionId: scheduledRun.executionId,
             nextRunId: buildPiRuntimeStableUuid(
               'automation-run',
-              `agent-runtime:${automationId}:run:${nextRunAt.toISOString()}`,
+              `agent-runtime:${automationId}:run:${terminalNextRunAt.toISOString()}`,
             ),
             nextExecutionId: buildPiRuntimeStableUuid(
               'execution',
-              `agent-runtime:${automationId}:execution:${nextRunAt.toISOString()}`,
+              `agent-runtime:${automationId}:execution:${terminalNextRunAt.toISOString()}`,
             ),
             threadId: automation.threadId,
             commandName: automation.commandName,
             schedulePayload: automation.schedulePayload,
             eventId: buildPiRuntimeStableUuid(
               'execution-event',
-              `agent-runtime:${automationId}:event:${currentNow.toISOString()}`,
+              `agent-runtime:${automationId}:event:${terminalNow.toISOString()}`,
             ),
             activityId: buildPiRuntimeStableUuid(
               'activity',
-              `agent-runtime:${automationId}:activity:${currentNow.toISOString()}`,
+              `agent-runtime:${automationId}:activity:${terminalNow.toISOString()}`,
             ),
-            now: currentNow,
-            nextRunAt,
-            leaseExpiresAt: currentNow,
+            now: terminalNow,
+            nextRunAt: terminalNextRunAt,
+            leaseExpiresAt: terminalNow,
             status: runOutcome,
           });
         await postgres.executeStatements(resolvedDatabaseUrl, completionStatements);

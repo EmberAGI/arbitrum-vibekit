@@ -112,9 +112,12 @@ summary plus run-detail/activity/artifact references, and that summary is read
 from the persisted scheduled-run snapshot before falling back to generic root
 status activity.
 If the same process starts a scheduled invocation that hangs, the scheduler
-races the invocation against the automation timeout, marks the run timed out,
-advances cadence, and ignores late snapshot persistence from the timed-out
-run.
+races the invocation against the automation timeout, aborts the active runtime
+run, marks the run timed out, advances cadence, and ignores late snapshot
+persistence from the timed-out run. Completion, failure, and timeout
+persistence use the terminal-decision timestamp, not the tick-start timestamp,
+for `completed_at`, terminal events/activity, lease expiry, stable replacement
+ids, and the next-run cadence timestamp.
 
 Runtime-owned tools invoked during scheduled execution persist their
 checkpoints against the scheduled automation `PiExecution` and the root

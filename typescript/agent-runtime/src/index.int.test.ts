@@ -2839,8 +2839,10 @@ describe('agent-runtime integration', () => {
     vi.useFakeTimers();
 
     try {
-      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      let currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const terminalTime = Date.parse('2026-03-20T00:22:00.000Z');
       const observedScheduledUserMessages: string[] = [];
+      let invocationAbortObserved = false;
       const executeStatements = vi.fn(async () => undefined);
       const inspectionState = {
         threads: [
@@ -2901,16 +2903,25 @@ describe('agent-runtime integration', () => {
         systemPrompt: 'You are an automation agent.',
         now: () => currentTime,
         agentOptions: {
-          streamFn: (_model, context) => {
+          streamFn: (_model, context, streamOptions) => {
             const latestUserMessage = [...context.messages]
               .reverse()
               .find((message: Message) => message.role === 'user');
             if (latestUserMessage) {
-              observedScheduledUserMessages.push(
+              const content =
                 typeof latestUserMessage.content === 'string'
                   ? latestUserMessage.content
-                  : JSON.stringify(latestUserMessage.content),
-              );
+                  : JSON.stringify(latestUserMessage.content);
+              observedScheduledUserMessages.push(content);
+              currentTime = terminalTime;
+            }
+
+            if (streamOptions?.signal?.aborted) {
+              invocationAbortObserved = true;
+            } else {
+              streamOptions?.signal?.addEventListener('abort', () => {
+                invocationAbortObserved = true;
+              }, { once: true });
             }
 
             return createNeverEndingStream() as unknown as ReturnType<typeof createTextStream>;
@@ -2923,11 +2934,12 @@ describe('agent-runtime integration', () => {
 
       const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
       expect(observedScheduledUserMessages).toEqual(['sync treasury balances']);
+      expect(invocationAbortObserved).toBe(true);
       expect(statements).toContainEqual(
         expect.objectContaining({
           tableName: 'pi_automation_runs',
           text: expect.stringContaining('update pi_automation_runs'),
-          values: ['timed_out', expect.any(Date), expect.any(Date), 'run-automation-1'],
+          values: ['timed_out', new Date(terminalTime), new Date(terminalTime), 'run-automation-1'],
         }),
       );
       expect(statements).toContainEqual(
@@ -2940,7 +2952,7 @@ describe('agent-runtime integration', () => {
             'execution-automation-1',
             'automation-timed-out',
             expect.stringContaining('Exceeded the 0.001 minute scheduled automation timeout.'),
-            expect.any(Date),
+            new Date(terminalTime),
           ],
         }),
       );
@@ -2954,8 +2966,132 @@ describe('agent-runtime integration', () => {
             'thread-record-1',
             expect.any(String),
             'scheduled',
-            new Date(currentTime + 60_000),
+            new Date(terminalTime + 60_000),
             null,
+          ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses terminal decision time for completed scheduled automation persistence and cadence', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const terminalTime = Date.parse('2026-03-20T00:22:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              currentTime = terminalTime;
+            }
+
+            return createTextStream('Scheduled run complete.');
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['completed', new Date(terminalTime), new Date(terminalTime), 'run-automation-1'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            new Date(terminalTime + 60_000),
+            null,
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_thread_activity',
+          text: expect.stringContaining('insert into pi_thread_activity'),
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'automation-executed',
+            expect.stringContaining('2026-03-20T00:23:00.000Z'),
+            new Date(terminalTime),
           ],
         }),
       );
