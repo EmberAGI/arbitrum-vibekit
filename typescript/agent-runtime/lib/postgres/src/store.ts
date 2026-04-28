@@ -153,18 +153,25 @@ export const executePostgresStatements: ExecutePostgresStatements = async (datab
 
   try {
     await client.connect();
-    for (const statement of statements) {
-      const result = await client.query(statement.text, [...statement.values]);
-      if (
-        statement.requiredAffectedRows !== undefined &&
-        result.rowCount !== statement.requiredAffectedRows
-      ) {
-        throw new PostgresAffectedRowsError({
-          tableName: statement.tableName,
-          expectedRows: statement.requiredAffectedRows,
-          affectedRows: result.rowCount ?? 0,
-        });
+    await client.query('begin');
+    try {
+      for (const statement of statements) {
+        const result = await client.query(statement.text, [...statement.values]);
+        if (
+          statement.requiredAffectedRows !== undefined &&
+          result.rowCount !== statement.requiredAffectedRows
+        ) {
+          throw new PostgresAffectedRowsError({
+            tableName: statement.tableName,
+            expectedRows: statement.requiredAffectedRows,
+            affectedRows: result.rowCount ?? 0,
+          });
+        }
       }
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
     }
   } finally {
     await client.end().catch(() => undefined);

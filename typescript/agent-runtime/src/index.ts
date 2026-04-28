@@ -3235,7 +3235,7 @@ export async function createAgentRuntime<TState = unknown>(
                 `agent-runtime:${automationId}:timeout:${currentNow.toISOString()}`,
               ),
               now: currentNow,
-              nextRunAt: currentNow,
+              nextRunAt,
               leaseExpiresAt: currentNow,
               timeoutDetail,
             }),

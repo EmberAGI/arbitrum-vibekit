@@ -346,8 +346,8 @@ sequenceDiagram
   participant Web as web-ag-ui
 
   SCH->>RT: trigger PiAutomation
-  RT->>RT: row-count-checked claim: scheduled -> running
-  RT->>RT: create or continue PiExecution
+  RT->>RT: transactional row-count claim: scheduled -> running + running audit writes
+  RT->>RT: create or continue PiExecution after claim commit
   RT->>CTX: run saved instruction as scheduled user input
   RT->>RT: checkpoint PiExecution + bounded run snapshot against root PiThread without persisting CTX as PiThread
   CTX->>DM: apply normalized domain operation handling

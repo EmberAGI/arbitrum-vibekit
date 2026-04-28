@@ -329,7 +329,7 @@ describe('transactions', () => {
       eventId: 'event-1',
       activityId: 'activity-1',
       now: new Date('2026-03-18T20:20:00.000Z'),
-      nextRunAt: new Date('2026-03-18T20:20:00.000Z'),
+      nextRunAt: new Date('2026-03-18T20:25:00.000Z'),
       leaseExpiresAt: new Date('2026-03-18T20:20:00.000Z'),
       timeoutDetail: 'Exceeded the 15 minute scheduled automation timeout.',
     });
@@ -347,6 +347,7 @@ describe('transactions', () => {
     expect(statements[0]?.values[0]).toBe('timed_out');
     expect(statements[1]?.values[0]).toBe('failed');
     expect(statements[3]?.values[4]).toBe('scheduled');
+    expect(statements[3]?.values[5]).toEqual(new Date('2026-03-18T20:25:00.000Z'));
     expect(statements[6]?.values[3]).toBe('automation-timed-out');
     expect(statements[7]?.values[3]).toBe('automation-timed-out');
   });

@@ -2669,6 +2669,21 @@ describe('agent-runtime integration', () => {
           ],
         }),
       );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            new Date(currentTime + 60_000),
+            null,
+          ],
+        }),
+      );
     } finally {
       vi.useRealTimers();
     }

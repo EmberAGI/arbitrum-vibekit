@@ -98,10 +98,12 @@ When the Pi loop snapshots the scheduled context, `agent-runtime` checkpoints
 the `PiExecution` against the root thread record, writes a bounded
 `automation-run-snapshot` artifact/event for run-detail inspection, and
 deliberately skips a `pi_threads` write for the internal
-`automation:<automationId>:run:<runId>` context. Scheduler claiming is
+`automation:<automationId>:run:<runId>` context. Scheduler claiming and its
+running event/activity writes commit in one Postgres transaction. The claim is
 row-count checked: if another runtime process has already moved a run out of
-`scheduled`, this process skips invocation. Newly inserted next-run records use
-the future cadence timestamp for `scheduled_at`, matching `next_run_at`.
+`scheduled`, this process rolls back the batch and skips invocation. Newly
+inserted next-run records use the future cadence timestamp for `scheduled_at`,
+matching `next_run_at`.
 Previous scheduled-run prompt context includes only concise prior result
 summary plus run-detail/activity/artifact references.
 
