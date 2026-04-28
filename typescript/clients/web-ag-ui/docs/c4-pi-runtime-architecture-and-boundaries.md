@@ -47,22 +47,23 @@ Related docs:
 4. `PiExecution` is the canonical execution-loop record.
 5. A2A `Task` and `web-ag-ui` `thread.task` are projections of `PiExecution`.
 6. AG-UI `run` is a transport/control-plane action, not a durable business record.
-7. `PiAutomation` is a saved recurring definition, and `AutomationRun` is an automation firing record, not the execution loop itself.
-8. Agent-family lifecycle flows live in pluggable Pi-owned domain modules above the core runtime model, not in the AG-UI adapter and not in the foundational execution model itself.
-9. Pi must expose a formal projection subsystem from canonical runtime records to AG-UI, A2A, and future channel views.
-10. Model-facing automation tools and operator/runtime control surfaces are separate architectural planes.
-11. Runtime maintenance, retention, and archival policy are first-class concerns.
-12. `@mariozechner/pi-web-ui` is not the adopted frontend boundary for this initiative.
-13. The web boundary follows ADR 0003 strictly:
+7. `PiAutomation` is a saved recurring definition, and `AutomationRun` is an automation firing/audit record, not the execution loop itself.
+8. Scheduled-run prompts execute in ephemeral runtime context; the durable contract is `AutomationRun` + `PiExecution` + root activity/projection + bounded `automation-run-snapshot` artifacts/events loaded with their payloads for inspection, not a persisted user-visible `PiThread` and not a `pi_threads` row for `automation:<automationId>:run:<runId>`.
+9. Agent-family lifecycle flows live in pluggable Pi-owned domain modules above the core runtime model, not in the AG-UI adapter and not in the foundational execution model itself.
+10. Pi must expose a formal projection subsystem from canonical runtime records to AG-UI, A2A, and future channel views.
+11. Model-facing automation tools and operator/runtime control surfaces are separate architectural planes.
+12. Runtime maintenance, retention, and archival policy are first-class concerns.
+13. `@mariozechner/pi-web-ui` is not the adopted frontend boundary for this initiative.
+14. The web boundary follows ADR 0003 strictly:
    - Pi emits domain `ThreadState`
    - web derives `UiState`
    - React views consume only `UiState`
-14. React/view code must contain zero agent business logic and zero agent-side invariant enforcement.
-15. Client-side invariants are limited to projection/view-model concerns such as authority selection, stale-event rejection, ordering guards, and local transient UI state.
-16. Reusable Pi AG-UI HTTP adapter logic belongs in the `agent-runtime` package family, not in bespoke per-agent app code.
-17. Any Pi-capable `HttpAgent` transport helper required to consume the Pi AG-UI surface also belongs in the `agent-runtime` package family, not in `apps/web`.
-18. Concrete Pi-backed agent apps should primarily assemble agent/domain behavior and runtime configuration; they should not re-implement generic AG-UI route parsing, SSE framing, or HTTP request adaptation.
-19. The CopilotKit route may instantiate runtime-owned transport helpers, but it must remain protocol routing only and must not own Pi-specific transport behavior.
+15. React/view code must contain zero agent business logic and zero agent-side invariant enforcement.
+16. Client-side invariants are limited to projection/view-model concerns such as authority selection, stale-event rejection, ordering guards, and local transient UI state.
+17. Reusable Pi AG-UI HTTP adapter logic belongs in the `agent-runtime` package family, not in bespoke per-agent app code.
+18. Any Pi-capable `HttpAgent` transport helper required to consume the Pi AG-UI surface also belongs in the `agent-runtime` package family, not in `apps/web`.
+19. Concrete Pi-backed agent apps should primarily assemble agent/domain behavior and runtime configuration; they should not re-implement generic AG-UI route parsing, SSE framing, or HTTP request adaptation.
+20. The CopilotKit route may instantiate runtime-owned transport helpers, but it must remain protocol routing only and must not own Pi-specific transport behavior.
 
 ## 3. System context
 
@@ -215,10 +216,14 @@ flowchart LR
   E[PiExecution]
   A[PiAutomation]
   R[AutomationRun]
+  C[Ephemeral Scheduled Context]
   D[Agent Domain Module]
 
   A -->|schedules| R
   R -->|creates or references| E
+  R -->|runs saved instruction in| C
+  C -->|drives| E
+  E -->|projects activity and summaries to| T
   T -->|hosts visible state and projections for| E
   D -->|defines lifecycle semantics for| T
   D -->|drives domain behavior for| E
@@ -235,6 +240,9 @@ Definitions:
   - saved recurring/triggered automation definition
 - `AutomationRun`
   - one firing/audit record of an automation
+- `Ephemeral Scheduled Context`
+  - in-memory execution context for the saved scheduled instruction
+  - not a durable `PiThread` and not a primary user-visible chat thread
 - `Agent Domain Module`
   - pluggable Pi-owned layer for agent-family-specific lifecycle, commands, interrupts, dynamic system context, and adapter-neutral domain outputs
 
@@ -332,17 +340,32 @@ sequenceDiagram
 sequenceDiagram
   participant SCH as Scheduler
   participant RT as Pi Runtime
+  participant CTX as Ephemeral Scheduled Context
   participant DM as Agent Domain Module
   participant AG as Pi AG-UI Service
   participant Web as web-ag-ui
 
   SCH->>RT: trigger PiAutomation
-  RT->>RT: create AutomationRun
-  RT->>RT: create PiExecution
-  RT->>DM: apply normalized domain operation handling
-  RT-->>AG: execution state/artifacts available
-  AG-->>Web: projected AG-UI state on attach/connect
-  Web->>Web: show thread.task + artifacts + activity history
+  SCH->>RT: skip only same-automation work already in flight
+  RT->>RT: transactional row-count claim: scheduled -> running + running audit writes
+  RT->>RT: create or continue PiExecution after claim commit
+  RT->>CTX: run saved instruction as scheduled user input
+  RT->>RT: checkpoint PiExecution + bounded run snapshot against root PiThread without persisting CTX as PiThread
+  RT->>RT: enforce same-process invocation timeout and abort active run if CTX hangs
+  CTX->>DM: apply normalized domain operation handling
+  DM-->>RT: outputs, artifacts, summary/failure/interrupts
+  RT->>RT: persist runtime-owned tool checkpoints on scheduled PiExecution/root PiThread
+  RT->>RT: complete, fail, time out, or cancel AutomationRun with a row-count terminal claim
+  RT->>RT: scope cancellation and lease cleanup to the active root PiThread record
+  RT->>RT: skip execution-event insertion when cancellation has no current execution
+  RT->>RT: skip lost stale-timeout races and continue later due automations
+  RT->>RT: schedule first and next AutomationRun rows at the future cadence time
+  RT-->>AG: live root activity projection includes status plus automation-run-snapshot summary/artifact/run details
+  AG-->>Web: projected AG-UI state/activity from runtime-owned records
+  Web->>RT: open run/artifact detail through root-thread-scoped control-plane inspection routes
+  RT->>RT: AG-UI gateway service forwards root-thread scope to canonical control reads
+  RT-->>Web: return only run/artifact candidates in that root-thread scope
+  Web->>Web: show general activity history with inspect/open controls for run snapshots and artifacts, without transcript pollution
 ```
 
 ## 9. Automation inspection/control boundary

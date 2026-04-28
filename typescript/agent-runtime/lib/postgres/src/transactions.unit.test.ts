@@ -8,6 +8,9 @@ import {
   buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
+  buildPersistScheduledAutomationRunSnapshotStatements,
+  buildStartAutomationExecutionStatements,
+  buildTimeoutAutomationExecutionStatements,
 } from './index.js';
 
 describe('transactions', () => {
@@ -162,7 +165,7 @@ describe('transactions', () => {
       'thread-1',
       'exec-1',
       'scheduled',
-      new Date('2026-03-18T20:00:00.000Z'),
+      new Date('2026-03-18T20:05:00.000Z'),
       null,
     ]);
   });
@@ -196,6 +199,8 @@ describe('transactions', () => {
     ]);
     expect(statements[0]?.text).toContain('update pi_automation_runs');
     expect(statements[0]?.text).toContain('status = $1');
+    expect(statements[0]?.text).toContain("where id = $4 and status = 'running'");
+    expect(statements[0]?.requiredAffectedRows).toBe(1);
     expect(statements[1]?.text).toContain('update pi_executions');
     expect(statements[2]?.text).toContain('update pi_automations');
     expect(statements[3]?.text).toContain('insert into pi_automation_runs');
@@ -203,6 +208,154 @@ describe('transactions', () => {
     expect(statements[5]?.text).toContain('insert into pi_scheduler_leases');
     expect(statements[6]?.text).toContain('insert into pi_execution_events');
     expect(statements[7]?.text).toContain('insert into pi_thread_activity');
+  });
+
+  it('builds a durable automation running transition before invocation starts', () => {
+    const statements = buildStartAutomationExecutionStatements({
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      threadId: 'thread-1',
+      automationId: 'auto-1',
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:04:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_execution_events',
+      'pi_thread_activity',
+    ]);
+    expect(statements[0]?.values).toEqual([
+      'running',
+      new Date('2026-03-18T20:04:00.000Z'),
+      'run-1',
+    ]);
+    expect(statements[1]?.values).toEqual([
+      'working',
+      new Date('2026-03-18T20:04:00.000Z'),
+      'exec-1',
+    ]);
+    expect(statements[2]?.values[3]).toBe('automation-running');
+    expect(statements[3]?.values[3]).toBe('automation-running');
+    expect(statements[0]?.requiredAffectedRows).toBe(1);
+  });
+
+  it('builds scheduled-run snapshot persistence under the root thread and automation execution', () => {
+    const statements = buildPersistScheduledAutomationRunSnapshotStatements({
+      artifactId: 'artifact-run-snapshot',
+      eventId: 'event-run-snapshot',
+      threadId: 'thread-record-1',
+      executionId: 'exec-automation-1',
+      automationRunId: 'run-automation-1',
+      runThreadKey: 'automation:auto-1:run:run-automation-1',
+      rootThreadId: 'thread-1',
+      rootThreadRecordId: 'thread-record-1',
+      sessionSnapshot: {
+        messages: [{ role: 'assistant', content: 'Finished scheduled work.' }],
+        artifacts: {
+          current: {
+            artifactId: 'artifact-output',
+            data: {
+              type: 'scheduled-output',
+            },
+          },
+        },
+        execution: {
+          status: 'completed',
+          statusMessage: 'Finished scheduled work.',
+        },
+      },
+      now: new Date('2026-03-18T20:04:30.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_artifacts',
+      'pi_execution_events',
+    ]);
+    expect(statements[0]?.values).toEqual([
+      'artifact-run-snapshot',
+      'thread-record-1',
+      'exec-automation-1',
+      'automation-run-snapshot',
+      false,
+      expect.stringContaining('"automationRunId":"run-automation-1"'),
+      new Date('2026-03-18T20:04:30.000Z'),
+      new Date('2026-03-18T20:04:30.000Z'),
+    ]);
+    expect(statements[1]?.values).toEqual([
+      'event-run-snapshot',
+      'exec-automation-1',
+      'thread-record-1',
+      'automation-run-snapshot',
+      expect.stringContaining('"runThreadKey":"automation:auto-1:run:run-automation-1"'),
+      new Date('2026-03-18T20:04:30.000Z'),
+    ]);
+  });
+
+  it('builds failed automation execution boundaries while still scheduling the next run', () => {
+    const statements = buildCompleteAutomationExecutionStatements({
+      automationId: 'auto-1',
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      nextRunId: 'run-2',
+      nextExecutionId: 'exec-2',
+      threadId: 'thread-1',
+      commandName: 'sync',
+      schedulePayload: { command: 'sync', minutes: 5 },
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:05:00.000Z'),
+      nextRunAt: new Date('2026-03-18T20:10:00.000Z'),
+      leaseExpiresAt: new Date('2026-03-18T20:05:00.000Z'),
+      status: 'failed',
+    });
+
+    expect(statements[0]?.values[0]).toBe('failed');
+    expect(statements[1]?.values[0]).toBe('failed');
+    expect(statements[3]?.values[4]).toBe('scheduled');
+    expect(statements[3]?.values[5]).toEqual(new Date('2026-03-18T20:10:00.000Z'));
+    expect(statements[6]?.values[3]).toBe('automation-failed');
+    expect(statements[7]?.values[3]).toBe('automation-failed');
+  });
+
+  it('builds timed-out automation execution boundaries while still scheduling the next run', () => {
+    const statements = buildTimeoutAutomationExecutionStatements({
+      automationId: 'auto-1',
+      currentRunId: 'run-1',
+      currentExecutionId: 'exec-1',
+      nextRunId: 'run-2',
+      nextExecutionId: 'exec-2',
+      threadId: 'thread-1',
+      commandName: 'sync',
+      schedulePayload: { command: 'sync', minutes: 5 },
+      eventId: 'event-1',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:20:00.000Z'),
+      nextRunAt: new Date('2026-03-18T20:25:00.000Z'),
+      leaseExpiresAt: new Date('2026-03-18T20:20:00.000Z'),
+      timeoutDetail: 'Exceeded the 15 minute scheduled automation timeout.',
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_automations',
+      'pi_automation_runs',
+      'pi_executions',
+      'pi_scheduler_leases',
+      'pi_execution_events',
+      'pi_thread_activity',
+    ]);
+    expect(statements[0]?.values[0]).toBe('timed_out');
+    expect(statements[0]?.text).toContain("where id = $4 and status = 'running'");
+    expect(statements[0]?.requiredAffectedRows).toBe(1);
+    expect(statements[1]?.values[0]).toBe('failed');
+    expect(statements[3]?.values[4]).toBe('scheduled');
+    expect(statements[3]?.values[5]).toEqual(new Date('2026-03-18T20:25:00.000Z'));
+    expect(statements[6]?.values[3]).toBe('automation-timed-out');
+    expect(statements[7]?.values[3]).toBe('automation-timed-out');
   });
 
   it('builds the automation cancellation boundary across automation, run, execution, lease, event, and activity tables', () => {
@@ -226,12 +379,71 @@ describe('transactions', () => {
     ]);
     expect(statements[0]?.text).toContain('update pi_automations');
     expect(statements[0]?.text).toContain('suspended = $1');
+    expect(statements[0]?.text).toContain('thread_id = $5');
+    expect(statements[0]?.values).toEqual([
+      true,
+      null,
+      new Date('2026-03-18T20:05:00.000Z'),
+      'auto-1',
+      'thread-1',
+    ]);
     expect(statements[1]?.text).toContain('update pi_automation_runs');
-    expect(statements[1]?.text).toContain("status = 'scheduled'");
+    expect(statements[1]?.text).toContain('automation_id = $4');
+    expect(statements[1]?.text).toContain('thread_id = $5');
+    expect(statements[1]?.text).toContain("status in ('scheduled', 'running', 'started')");
+    expect(statements[1]?.values).toEqual([
+      'canceled',
+      new Date('2026-03-18T20:05:00.000Z'),
+      'run-1',
+      'auto-1',
+      'thread-1',
+    ]);
+    expect(statements[1]?.requiredAffectedRows).toBe(1);
     expect(statements[2]?.text).toContain('update pi_executions');
+    expect(statements[2]?.text).toContain('thread_id = $5');
+    expect(statements[2]?.values).toEqual([
+      'failed',
+      new Date('2026-03-18T20:05:00.000Z'),
+      new Date('2026-03-18T20:05:00.000Z'),
+      'exec-1',
+      'thread-1',
+    ]);
     expect(statements[3]?.text).toContain('delete from pi_scheduler_leases');
     expect(statements[4]?.text).toContain('insert into pi_execution_events');
     expect(statements[5]?.text).toContain('insert into pi_thread_activity');
+  });
+
+  it('cancels a persisted automation definition without a current run without inserting a null execution event', () => {
+    const statements = buildCancelAutomationStatements({
+      automationId: 'auto-without-run',
+      currentRunId: null,
+      currentExecutionId: null,
+      threadId: 'thread-1',
+      eventId: 'event-unused',
+      activityId: 'activity-1',
+      now: new Date('2026-03-18T20:05:00.000Z'),
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_automations',
+      'pi_scheduler_leases',
+      'pi_thread_activity',
+    ]);
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_execution_events',
+      }),
+    );
+    expect(statements[2]?.values).toEqual([
+      'activity-1',
+      'thread-1',
+      null,
+      'automation-canceled',
+      JSON.stringify({
+        automationId: 'auto-without-run',
+      }),
+      new Date('2026-03-18T20:05:00.000Z'),
+    ]);
   });
 
   it('builds interrupt checkpoint and outbox intent boundaries with the expected tables', () => {
@@ -269,5 +481,57 @@ describe('transactions', () => {
       'pi_execution_events',
     ]);
     expect(outboxStatements[1]?.text).toContain('on conflict (wallet_address, action_fingerprint) do update');
+  });
+
+  it('builds scheduled execution outbox and dedupe boundaries on the scheduled execution identity', () => {
+    const statements = buildPersistOutboxIntentStatements({
+      outboxId: 'outbox-scheduled-1',
+      executionId: 'exec-scheduled-1',
+      threadId: 'thread-root-1',
+      walletAddress: '0x00000000000000000000000000000000000000aa',
+      actionKind: 'evm-transaction',
+      actionFingerprint: 'scheduled-fingerprint-1',
+      eventId: 'event-scheduled-outbox-1',
+      now: new Date('2026-03-18T20:06:00.000Z'),
+      availableAt: new Date('2026-03-18T20:06:30.000Z'),
+      intentPayload: {
+        automationRunId: 'run-scheduled-1',
+        signerRef: 'managed-agent',
+      },
+    });
+
+    expect(statements.map((statement) => statement.tableName)).toEqual([
+      'pi_outbox',
+      'pi_action_fingerprints',
+      'pi_execution_events',
+    ]);
+    expect(statements[0]?.values).toEqual([
+      'outbox-scheduled-1',
+      'exec-scheduled-1',
+      'thread-root-1',
+      '0x00000000000000000000000000000000000000aa',
+      'evm-transaction',
+      'scheduled-fingerprint-1',
+      'pending',
+      expect.stringContaining('"automationRunId":"run-scheduled-1"'),
+      new Date('2026-03-18T20:06:30.000Z'),
+      new Date('2026-03-18T20:06:00.000Z'),
+    ]);
+    expect(statements[1]?.values).toEqual([
+      '0x00000000000000000000000000000000000000aa',
+      'evm-transaction',
+      'scheduled-fingerprint-1',
+      'exec-scheduled-1',
+      new Date('2026-03-18T20:06:00.000Z'),
+      new Date('2026-03-18T20:06:00.000Z'),
+    ]);
+    expect(statements[2]?.values).toEqual([
+      'event-scheduled-outbox-1',
+      'exec-scheduled-1',
+      'thread-root-1',
+      'outbox-intent',
+      expect.stringContaining('"signerRef":"managed-agent"'),
+      new Date('2026-03-18T20:06:00.000Z'),
+    ]);
   });
 });

@@ -19,6 +19,7 @@ function createInternalPostgresHooks() {
       outboxIntents: [],
       executionEvents: [],
       threadActivities: [],
+      artifacts: [],
     })),
     executeStatements: vi.fn(async () => undefined),
     persistDirectExecution: vi.fn(async () => undefined),
@@ -52,6 +53,7 @@ function createStubService() {
       listExecutions: async () => [],
       listAutomations: async () => [{ automationId: 'automation-1' }],
       listAutomationRuns: async () => [{ runId: 'run-1' }],
+      listArtifacts: async () => [],
       inspectScheduler: async () => ({ dueAutomationIds: [], leases: [] }),
       inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
       inspectMaintenance: async () => ({ recovery: {}, archival: {} }),
@@ -206,6 +208,7 @@ describe('createPiExampleAgUiHandler', () => {
             op?: string;
             path?: string;
             value?: {
+              data?: { type?: string; status?: string };
               current?: {
                 data?: { type?: string; status?: string };
               };
@@ -213,14 +216,39 @@ describe('createPiExampleAgUiHandler', () => {
           }>;
         }
       | undefined;
+    const stateSnapshot = runEvents.find(
+      (event) =>
+        typeof event === 'object' &&
+        event !== null &&
+        'type' in event &&
+        event.type === 'STATE_SNAPSHOT' &&
+        typeof (event as { snapshot?: unknown }).snapshot === 'object',
+    ) as
+      | {
+          snapshot?: {
+            thread?: {
+              artifacts?: {
+                current?: {
+                  data?: { type?: string; status?: string };
+                };
+              };
+            };
+          };
+        }
+      | undefined;
 
     const artifactsDelta = stateDelta?.delta?.find(
       (operation) =>
         operation.op === 'add' &&
-        operation.path === '/thread/artifacts',
+        (operation.path === '/thread/artifacts' ||
+          operation.path === '/thread/artifacts/current'),
     );
 
-    expect(artifactsDelta?.value?.current?.data).toMatchObject({
+    expect(
+      artifactsDelta?.value?.current?.data ??
+        artifactsDelta?.value?.data ??
+        stateSnapshot?.snapshot?.thread?.artifacts?.current?.data,
+    ).toMatchObject({
       type: 'automation-status',
       status: 'scheduled',
     });

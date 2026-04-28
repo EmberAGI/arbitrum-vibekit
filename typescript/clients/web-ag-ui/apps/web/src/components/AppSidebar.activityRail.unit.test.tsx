@@ -294,4 +294,57 @@ describe('AppSidebar activity rail', () => {
       root.unmount();
     });
   });
+
+  it('derives the portfolio card holdings tooltip from the cached portfolio projection', () => {
+    getAuthoritativeSnapshotMock.mockReturnValue({
+      thread: {
+        domainProjection: {
+          portfolioProjectionInput: {
+            benchmarkAsset: 'USD',
+            walletContents: [
+              { asset: 'USDC', network: 'arbitrum', quantity: '1000', valueUsd: 500 },
+              { asset: 'WETH', network: 'arbitrum', quantity: '0.05', valueUsd: 200 },
+              { asset: 'WBTC', network: 'arbitrum', quantity: '0.0012', valueUsd: 150 },
+              { asset: 'ARB', network: 'arbitrum', quantity: '80', valueUsd: 100 },
+              { asset: 'GMX', network: 'arbitrum', quantity: '4', valueUsd: 40 },
+              { asset: 'DAI', network: 'arbitrum', quantity: '10', valueUsd: 10 },
+            ],
+            ownedUnits: [],
+            reservations: [],
+            activePositionScopes: [],
+          },
+        },
+      },
+    });
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(React.createElement(AppSidebar));
+    });
+
+    const portfolioCard = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Ember Portfolio Agent'),
+    );
+
+    expect(portfolioCard).not.toBeUndefined();
+
+    act(() => {
+      portfolioCard?.dispatchEvent(
+        new MouseEvent('mouseover', { bubbles: true, clientX: 24, clientY: 24 }),
+      );
+    });
+
+    const pageText = document.body.textContent ?? '';
+    expect(pageText).toContain('Top holdings');
+    expect(pageText).toContain('USDC');
+    expect(pageText).toContain('1,000');
+    expect(pageText).toContain('50%');
+    expect(pageText).toContain('$500');
+    expect(pageText).toContain('GMX');
+    expect(pageText).not.toContain('DAI');
+
+    act(() => {
+      root.unmount();
+    });
+  });
 });

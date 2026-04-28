@@ -11,6 +11,8 @@ import {
   Minus,
   Check,
   RefreshCw,
+  Search,
+  ExternalLink,
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
 import Link from 'next/link';
@@ -71,6 +73,7 @@ import { AgentSurfaceTag } from './ui/AgentSurfaceTag';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
+import { SimpleMarkdownText } from './ui/SimpleMarkdownText';
 import {
   formatDelegationSigningError,
   signDelegationWithFallback,
@@ -417,6 +420,153 @@ function readArtifactEventType(event: ClmmEvent): string {
     readString(asRecord(event.artifact?.data)?.['type']) ??
     'unknown'
   );
+}
+
+type ActivityInspectionAction = {
+  kind: 'run' | 'artifact';
+  id: string;
+  label: string;
+  href: string;
+  detailLines: string[];
+};
+
+type ActivityDescription = {
+  body: string;
+  details: string[];
+  inspections: ActivityInspectionAction[];
+};
+
+function buildActivityElementId(kind: ActivityInspectionAction['kind'], id: string): string {
+  return `automation-${kind}-${encodeURIComponent(id)}`;
+}
+
+function buildActivityAnchor(kind: ActivityInspectionAction['kind'], id: string): string {
+  return `#${buildActivityElementId(kind, id)}`;
+}
+
+function buildActivityInspectionHref(params: {
+  agentId: string;
+  threadId: string;
+  kind: ActivityInspectionAction['kind'];
+  id: string;
+}): string {
+  const searchParams = new URLSearchParams({
+    agentId: params.agentId,
+    threadId: params.threadId,
+    ...(params.kind === 'run' ? { runId: params.id } : { artifactId: params.id }),
+  });
+  const resource = params.kind === 'run' ? 'automation-runs' : 'artifacts';
+  return `/api/copilotkit/control/${resource}?${searchParams.toString()}`;
+}
+
+function buildActivityInspectionActions(params: {
+  agentId: string;
+  threadId: string | null;
+  runId: string | null;
+  artifactId: string | null;
+  summary?: string | null;
+  runThreadKey?: string | null;
+}): ActivityInspectionAction[] {
+  const actions: ActivityInspectionAction[] = [];
+
+  if (params.runId && params.threadId) {
+    actions.push({
+      kind: 'run',
+      id: params.runId,
+      label: `Inspect run ${params.runId}`,
+      href: buildActivityInspectionHref({
+        agentId: params.agentId,
+        threadId: params.threadId,
+        kind: 'run',
+        id: params.runId,
+      }),
+      detailLines: [
+        `Run ${params.runId}`,
+        params.summary ? `Summary ${params.summary}` : null,
+        params.runThreadKey ? `Run thread ${params.runThreadKey}` : null,
+      ].filter((line): line is string => line !== null),
+    });
+  }
+
+  if (params.artifactId && params.threadId) {
+    actions.push({
+      kind: 'artifact',
+      id: params.artifactId,
+      label: `Open artifact ${params.artifactId}`,
+      href: buildActivityInspectionHref({
+        agentId: params.agentId,
+        threadId: params.threadId,
+        kind: 'artifact',
+        id: params.artifactId,
+      }),
+      detailLines: [`Artifact ${params.artifactId}`],
+    });
+  }
+
+  return actions;
+}
+
+function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescription {
+  if (event.type === 'status') {
+    return { body: event.message, details: [], inspections: [] };
+  }
+
+  if (event.type === 'dispatch-response') {
+    return { body: `Response with ${event.parts?.length ?? 0} parts`, details: [], inspections: [] };
+  }
+
+  const artifactData = asRecord(event.artifact?.data);
+  const artifactId = readString(event.artifact?.artifactId) ?? readString(event.artifact?.id);
+
+  if (artifactData?.type === 'automation-status') {
+    const status = readString(artifactData.status) ?? 'unknown';
+    const command = readString(artifactData.command) ?? 'automation';
+    const detail = readString(artifactData.detail) ?? 'Automation status updated.';
+    const runId = readString(artifactData.runId);
+    const rootThreadId = readString(artifactData.rootThreadId);
+    const details = [
+      runId ? `Run ${runId}` : null,
+      artifactId ? `Artifact ${artifactId}` : null,
+    ].filter((value): value is string => value !== null);
+
+    return {
+      body: `Automation ${status}\n${command}: ${detail}`,
+      details,
+      inspections: buildActivityInspectionActions({ agentId, threadId: rootThreadId, runId, artifactId }),
+    };
+  }
+
+  if (readArtifactEventType(event) === 'automation-run-snapshot') {
+    const snapshot = asRecord(artifactData?.snapshot);
+    const runId = readString(artifactData?.automationRunId) ?? readString(artifactData?.runId);
+    const runThreadKey = readString(artifactData?.runThreadKey);
+    const rootThreadId = readString(artifactData?.rootThreadId);
+    const summary = readString(snapshot?.summary) ?? readString(artifactData?.summary);
+    const details = [
+      runId ? `Run ${runId}` : null,
+      artifactId ? `Artifact ${artifactId}` : null,
+      runThreadKey ? `Run thread ${runThreadKey}` : null,
+    ].filter((value): value is string => value !== null);
+
+    return {
+      body: summary ? `Automation run snapshot\n${summary}` : 'Automation run snapshot',
+      details,
+      inspections: buildActivityInspectionActions({
+        agentId,
+        threadId: rootThreadId,
+        runId,
+        artifactId,
+        summary,
+        runThreadKey,
+      }),
+    };
+  }
+
+  return {
+    body: `Artifact: ${readArtifactEventType(event)}`,
+    details: artifactId ? [`Artifact ${artifactId}`] : [],
+    inspections: buildActivityInspectionActions({ agentId, threadId: null, runId: null, artifactId }),
+  };
 }
 
 type ManagedMandateEditorView = {
@@ -1426,6 +1576,7 @@ export function AgentDetailPage({
 
         {resolvedTab === 'transactions' && (
           <TransactionHistoryTab
+            agentId={agentId}
             transactions={transactions}
             taskId={taskId}
             taskStatus={taskStatus}
@@ -2136,7 +2287,9 @@ function AgentChatTab(props: {
               <div className="text-[11px] uppercase tracking-[0.14em] text-[#907764]">
                 {message.label}
               </div>
-              <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.text}</div>
+              <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                <SimpleMarkdownText text={message.text} />
+              </div>
             </div>
           ))
         )}
@@ -2205,6 +2358,7 @@ function AgentChatTab(props: {
 
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
+  agentId: string;
   transactions: Transaction[];
   taskId?: string;
   taskStatus?: string;
@@ -2216,6 +2370,7 @@ interface TransactionHistoryTabProps {
 }
 
 function TransactionHistoryTab({
+  agentId,
   transactions,
   taskId,
   taskStatus,
@@ -2400,27 +2555,84 @@ function TransactionHistoryTab({
         <div className={`${DETAIL_PANEL_CLASS} p-6`}>
           <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
-                  <div className="mt-1 text-sm text-[#261a12]">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${readArtifactEventType(event)}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+            {events.slice(-10).reverse().map((event, i) => {
+              const activityDescription = describeActivityEvent(event, agentId);
+              return (
+                <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
+                  <div
+                    className={`w-2 h-2 rounded-full mt-2 ${
+                      event.type === 'status'
+                        ? 'bg-blue-400'
+                        : event.type === 'artifact'
+                          ? 'bg-purple-400'
+                          : 'bg-gray-400'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
+                    <div className="mt-1 whitespace-pre-line text-sm text-[#261a12]">
+                      {activityDescription.body}
+                    </div>
+                    {activityDescription.details.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {activityDescription.details.map((detail) => (
+                          <span
+                            key={detail}
+                            className="rounded-md border border-[#eadac7] bg-white/70 px-2 py-1 text-[11px] text-[#6f5a4c]"
+                          >
+                            {detail}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {activityDescription.inspections.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {activityDescription.inspections.map((inspection) => {
+                          if (inspection.kind === 'run') {
+                            return (
+                              <details
+                                key={`${inspection.kind}-${inspection.id}`}
+                                id={buildActivityElementId('run', inspection.id)}
+                                className="rounded-md border border-[#eadac7] bg-white/80 px-3 py-2 text-xs text-[#503826]"
+                              >
+                                <summary className="flex cursor-pointer items-center gap-2 font-medium text-[#261a12]">
+                                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {inspection.label}
+                                </summary>
+                                <div className="mt-2 space-y-1 text-[#6f5a4c]">
+                                  {inspection.detailLines.map((line) => (
+                                    <div key={line}>{line}</div>
+                                  ))}
+                                  <a
+                                    href={inspection.href}
+                                    className="inline-flex items-center gap-1 font-medium text-[#7b4c2f] hover:text-[#3a2417]"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Open run {inspection.id}
+                                  </a>
+                                </div>
+                              </details>
+                            );
+                          }
+
+                          return (
+                            <a
+                              key={`${inspection.kind}-${inspection.id}`}
+                              id={buildActivityElementId('artifact', inspection.id)}
+                              href={inspection.href}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#eadac7] bg-white/80 px-3 py-2 text-xs font-medium text-[#503826] hover:bg-[#fff7ef]"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                              {inspection.label}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

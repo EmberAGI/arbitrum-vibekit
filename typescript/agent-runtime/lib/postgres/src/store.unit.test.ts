@@ -1,6 +1,102 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { loadPiRuntimeInspectionState, persistPiRuntimeDirectExecution } from './index.js';
+const pgMock = vi.hoisted(() => {
+  const client = {
+    connect: vi.fn(),
+    end: vi.fn(),
+    query: vi.fn(),
+  };
+
+  return {
+    client,
+    Client: vi.fn(function Client() {
+      return client;
+    }),
+  };
+});
+
+vi.mock('pg', () => ({
+  Client: pgMock.Client,
+}));
+
+import {
+  executePostgresStatements,
+  loadPiRuntimeInspectionState,
+  persistPiRuntimeDirectExecution,
+} from './index.js';
+
+afterEach(() => {
+  pgMock.Client.mockClear();
+  pgMock.client.connect.mockReset();
+  pgMock.client.end.mockReset();
+  pgMock.client.query.mockReset();
+});
+
+beforeEach(() => {
+  pgMock.client.connect.mockResolvedValue(undefined);
+  pgMock.client.end.mockResolvedValue(undefined);
+});
+
+describe('executePostgresStatements', () => {
+  it('commits a statement batch as a single transaction', async () => {
+    pgMock.client.query.mockResolvedValue({ rowCount: 1, rows: [] });
+
+    await executePostgresStatements('postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime', [
+      {
+        tableName: 'pi_automation_runs',
+        text: 'update pi_automation_runs set status = $1 where id = $2',
+        values: ['running', 'run-1'],
+        requiredAffectedRows: 1,
+      },
+      {
+        tableName: 'pi_execution_events',
+        text: 'insert into pi_execution_events (id) values ($1)',
+        values: ['event-1'],
+      },
+    ]);
+
+    expect(pgMock.client.connect).toHaveBeenCalledTimes(1);
+    expect(pgMock.client.query.mock.calls.map((call) => String(call[0]))).toEqual([
+      'begin',
+      'update pi_automation_runs set status = $1 where id = $2',
+      'insert into pi_execution_events (id) values ($1)',
+      'commit',
+    ]);
+    expect(pgMock.client.end).toHaveBeenCalledTimes(1);
+  });
+
+  it('rolls back the full batch when a later statement fails', async () => {
+    pgMock.client.query
+      .mockResolvedValueOnce({ rowCount: null, rows: [] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] })
+      .mockRejectedValueOnce(new Error('activity insert failed'))
+      .mockResolvedValueOnce({ rowCount: null, rows: [] });
+
+    await expect(
+      executePostgresStatements('postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime', [
+        {
+          tableName: 'pi_automation_runs',
+          text: 'update pi_automation_runs set status = $1 where id = $2',
+          values: ['running', 'run-1'],
+          requiredAffectedRows: 1,
+        },
+        {
+          tableName: 'pi_thread_activity',
+          text: 'insert into pi_thread_activity (id) values ($1)',
+          values: ['activity-1'],
+        },
+      ]),
+    ).rejects.toThrow('activity insert failed');
+
+    expect(pgMock.client.query.mock.calls.map((call) => String(call[0]))).toEqual([
+      'begin',
+      'update pi_automation_runs set status = $1 where id = $2',
+      'insert into pi_thread_activity (id) values ($1)',
+      'rollback',
+    ]);
+    expect(pgMock.client.end).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('loadPiRuntimeInspectionState', () => {
   it('loads canonical runtime inspection records from Postgres rows', async () => {
@@ -106,6 +202,7 @@ describe('loadPiRuntimeInspectionState', () => {
             execution_id: 'exec-1',
             thread_id: 'thread-1',
             event_kind: 'outbox-intent',
+            payload: { outboxId: 'outbox-1' },
             created_at: '2026-03-20T00:08:00.000Z',
           },
         ];
@@ -118,7 +215,29 @@ describe('loadPiRuntimeInspectionState', () => {
             thread_id: 'thread-1',
             execution_id: 'exec-1',
             activity_kind: 'direct-execution',
+            payload: { artifactId: 'artifact-1' },
             created_at: '2026-03-20T00:09:00.000Z',
+          },
+        ];
+      }
+
+      if (sql.includes('from pi_artifacts')) {
+        return [
+          {
+            id: 'artifact-1',
+            thread_id: 'thread-1',
+            execution_id: 'exec-1',
+            artifact_kind: 'automation-run-snapshot',
+            append_only: false,
+            payload: {
+              automationRunId: 'run-1',
+              runThreadKey: 'automation:automation-1:run:run-1',
+              snapshot: {
+                summary: 'Synced 42 balances.',
+              },
+            },
+            created_at: '2026-03-20T00:08:30.000Z',
+            updated_at: '2026-03-20T00:08:45.000Z',
           },
         ];
       }
@@ -211,6 +330,7 @@ describe('loadPiRuntimeInspectionState', () => {
           executionId: 'exec-1',
           threadId: 'thread-1',
           eventKind: 'outbox-intent',
+          payload: { outboxId: 'outbox-1' },
           createdAt: new Date('2026-03-20T00:08:00.000Z'),
         },
       ],
@@ -220,7 +340,26 @@ describe('loadPiRuntimeInspectionState', () => {
           threadId: 'thread-1',
           executionId: 'exec-1',
           activityKind: 'direct-execution',
+          payload: { artifactId: 'artifact-1' },
           createdAt: new Date('2026-03-20T00:09:00.000Z'),
+        },
+      ],
+      artifacts: [
+        {
+          artifactId: 'artifact-1',
+          threadId: 'thread-1',
+          executionId: 'exec-1',
+          artifactKind: 'automation-run-snapshot',
+          appendOnly: false,
+          payload: {
+            automationRunId: 'run-1',
+            runThreadKey: 'automation:automation-1:run:run-1',
+            snapshot: {
+              summary: 'Synced 42 balances.',
+            },
+          },
+          createdAt: new Date('2026-03-20T00:08:30.000Z'),
+          updatedAt: new Date('2026-03-20T00:08:45.000Z'),
         },
       ],
     });

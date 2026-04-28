@@ -1,4 +1,5 @@
 import type { PortfolioManagerSharedEmberProtocolHost } from './sharedEmberAdapter.js';
+import { buildTokenDisplayQuantity } from './tokenQuantityDisplay.js';
 
 export const PORTFOLIO_MANAGER_SHARED_EMBER_NETWORK = 'arbitrum';
 export const PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID = 'ember-lending';
@@ -89,6 +90,7 @@ export type PortfolioManagerWalletAccountingDetails = {
     unitId: string;
     asset: string;
     quantity: string;
+    displayQuantity?: string;
     status: string;
     controlPath: string;
     reservationId: string | null;
@@ -103,6 +105,7 @@ export type PortfolioManagerWalletAccountingDetails = {
       unitId: string;
       asset: string;
       quantity: string;
+      displayQuantity?: string;
     }>;
   }>;
 };
@@ -190,25 +193,42 @@ export function buildPortfolioManagerWalletAccountingDetails(input: {
   const unitsById = new Map(
     (input.onboardingState.owned_units ?? []).map((ownedUnit) => [ownedUnit.unit_id, ownedUnit] as const),
   );
-  const assets = (input.onboardingState.owned_units ?? []).map((ownedUnit) => ({
-    unitId: ownedUnit.unit_id,
-    asset: ownedUnit.root_asset,
-    quantity: ownedUnit.quantity,
-    status: ownedUnit.status,
-    controlPath: ownedUnit.control_path,
-    reservationId: ownedUnit.reservation_id,
-  }));
+  const assets = (input.onboardingState.owned_units ?? []).map((ownedUnit) => {
+    const displayQuantity = buildTokenDisplayQuantity({
+      asset: ownedUnit.root_asset,
+      quantity: ownedUnit.quantity,
+    });
+
+    return {
+      unitId: ownedUnit.unit_id,
+      asset: ownedUnit.root_asset,
+      quantity: ownedUnit.quantity,
+      ...(displayQuantity !== undefined ? { displayQuantity } : {}),
+      status: ownedUnit.status,
+      controlPath: ownedUnit.control_path,
+      reservationId: ownedUnit.reservation_id,
+    };
+  });
   const reservations = (input.onboardingState.reservations ?? []).map((reservation) => ({
     reservationId: reservation.reservation_id,
     agentId: reservation.agent_id,
     purpose: reservation.purpose,
     status: reservation.status,
     controlPath: reservation.control_path,
-    allocations: reservation.unit_allocations.map((allocation) => ({
-      unitId: allocation.unit_id,
-      asset: unitsById.get(allocation.unit_id)?.root_asset ?? 'unknown',
-      quantity: allocation.quantity,
-    })),
+    allocations: reservation.unit_allocations.map((allocation) => {
+      const asset = unitsById.get(allocation.unit_id)?.root_asset ?? 'unknown';
+      const displayQuantity = buildTokenDisplayQuantity({
+        asset,
+        quantity: allocation.quantity,
+      });
+
+      return {
+        unitId: allocation.unit_id,
+        asset,
+        quantity: allocation.quantity,
+        ...(displayQuantity !== undefined ? { displayQuantity } : {}),
+      };
+    }),
   }));
 
   return {
@@ -274,6 +294,9 @@ export function buildSharedEmberAccountingContextXml(input:
     );
     lines.push(`      <root_asset>${escapeXml(asset.asset)}</root_asset>`);
     lines.push(`      <quantity>${escapeXml(asset.quantity)}</quantity>`);
+    if (asset.displayQuantity) {
+      lines.push(`      <display_quantity>${escapeXml(asset.displayQuantity)}</display_quantity>`);
+    }
     lines.push(`      <status>${escapeXml(asset.status)}</status>`);
     lines.push(`      <control_path>${escapeXml(asset.controlPath)}</control_path>`);
     lines.push('    </asset>');
@@ -292,6 +315,11 @@ export function buildSharedEmberAccountingContextXml(input:
       lines.push(`        <allocation unit_id="${escapeXml(allocation.unitId)}">`);
       lines.push(`          <asset>${escapeXml(allocation.asset)}</asset>`);
       lines.push(`          <quantity>${escapeXml(allocation.quantity)}</quantity>`);
+      if (allocation.displayQuantity) {
+        lines.push(
+          `          <display_quantity>${escapeXml(allocation.displayQuantity)}</display_quantity>`,
+        );
+      }
       lines.push('        </allocation>');
     }
     lines.push('      </allocations>');

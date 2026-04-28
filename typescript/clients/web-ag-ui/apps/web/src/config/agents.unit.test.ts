@@ -72,7 +72,10 @@ describe('agents config', () => {
     const visibleAgentIds = getVisibleAgents().map((agent) => agent.id);
 
     expect(allAgentIds).not.toContain('agent-pi-example');
+    expect(allAgentIds).not.toContain('agent-oca-executor');
     expect(visibleAgentIds).not.toContain('agent-pi-example');
+    expect(visibleAgentIds).not.toContain('agent-oca-executor');
+    expect(isRegisteredAgentId('agent-oca-executor')).toBe(false);
     expect(visibleAgentIds).toContain('agent-portfolio-manager');
     expect(visibleAgentIds).toContain('agent-ember-lending');
     expect(visibleAgentIds).toEqual(allAgentIds);

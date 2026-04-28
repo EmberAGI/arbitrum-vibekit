@@ -18,6 +18,15 @@ export type SidebarActivityCardTokenSlice = {
   fallbackIconSymbol?: string;
 };
 
+export type SidebarActivityCardTokenHolding = {
+  asset: string;
+  amount: number;
+  share: number;
+  valueUsd: number;
+  iconUri?: string | null;
+  fallbackIconSymbol?: string;
+};
+
 export type SidebarActivityCardControlSlice = {
   id: string;
   label: string;
@@ -41,6 +50,7 @@ export type SidebarActivityCardView = {
   metricBadge?: string;
   thirtyDayPnlPct?: number;
   tokenBreakdown: SidebarActivityCardTokenSlice[];
+  tokenHoldings?: SidebarActivityCardTokenHolding[];
   controlBreakdown?: SidebarActivityCardControlSlice[];
 };
 
@@ -313,6 +323,133 @@ function CursorTokenTooltip(props: {
   );
 }
 
+function PortfolioHoldingsTooltip(props: {
+  holdings: SidebarActivityCardTokenHolding[];
+  children: React.ReactNode;
+}) {
+  const tooltipId = useId();
+  const [isOpen, setIsOpen] = useState(false);
+  const [pos, setPos] = useState<CursorPos>({ x: 0, y: 0 });
+  const visibleHoldings = useMemo(
+    () =>
+      [...props.holdings]
+        .filter(
+          (holding) =>
+            holding.asset.trim().length > 0 &&
+            Number.isFinite(holding.amount) &&
+            holding.amount > 0 &&
+            Number.isFinite(holding.valueUsd) &&
+            holding.valueUsd > 0,
+        )
+        .sort((left, right) => right.valueUsd - left.valueUsd)
+        .slice(0, 5),
+    [props.holdings],
+  );
+
+  const updatePointerPosition = useCallback((event: React.MouseEvent) => {
+    const padding = 12;
+    const maxWidth = 312;
+    const maxHeight = 260;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const nextX = clamp(event.clientX + padding, padding, Math.max(padding, vw - maxWidth - padding));
+    const nextY = clamp(event.clientY + padding, padding, Math.max(padding, vh - maxHeight - padding));
+
+    setPos({ x: nextX, y: nextY });
+  }, []);
+
+  const updateFocusPosition = useCallback((event: React.FocusEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const padding = 12;
+    const maxWidth = 312;
+    const maxHeight = 260;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const nextX = clamp(rect.right + padding, padding, Math.max(padding, vw - maxWidth - padding));
+    const nextY = clamp(rect.top, padding, Math.max(padding, vh - maxHeight - padding));
+
+    setPos({ x: nextX, y: nextY });
+  }, []);
+
+  if (visibleHoldings.length === 0) {
+    return <>{props.children}</>;
+  }
+
+  return (
+    <div
+      className="relative"
+      onMouseEnter={(event) => {
+        setIsOpen(true);
+        updatePointerPosition(event);
+      }}
+      onMouseMove={updatePointerPosition}
+      onMouseLeave={() => setIsOpen(false)}
+      onFocus={(event) => {
+        setIsOpen(true);
+        updateFocusPosition(event);
+      }}
+      onBlur={() => setIsOpen(false)}
+      aria-describedby={isOpen ? tooltipId : undefined}
+    >
+      {props.children}
+      {isOpen ? (
+        <div
+          id={tooltipId}
+          role="tooltip"
+          className="pointer-events-none fixed z-[100] w-[min(312px,calc(100vw-24px))] rounded-xl border border-[#E7DBD0] bg-[#FFFDF9]/96 shadow-[0_18px_60px_rgba(28,18,10,0.2)] backdrop-blur-md"
+          style={{ left: pos.x, top: pos.y }}
+        >
+          <div className="p-2.5">
+            <div className="mb-1.5 font-mono text-[9px] uppercase tracking-[0.16em] text-[#8C7F72]">
+              Top holdings
+            </div>
+            <div className="space-y-1">
+              {visibleHoldings.map((holding) => (
+                <div
+                  key={holding.asset}
+                  className="grid grid-cols-[18px_minmax(0,1fr)_42px_54px] items-center gap-2 rounded-lg bg-[#F7F1EA] px-2 py-1.5 text-[#221A13] ring-1 ring-[#E7DBD0]"
+                >
+                  {holding.iconUri ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={proxyIconUri(holding.iconUri)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-[18px] w-[18px] rounded-full bg-[#FCF8F3] object-contain ring-1 ring-[#E7DBD0]"
+                    />
+                  ) : (
+                    <span
+                      className="inline-flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#FCF8F3] font-mono text-[7px] font-semibold text-[#8C7F72] ring-1 ring-[#E7DBD0]"
+                      aria-hidden="true"
+                    >
+                      {iconMonogram(holding.fallbackIconSymbol ?? holding.asset)}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <div className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.08em] text-[#221A13]">
+                      {holding.asset}
+                    </div>
+                    <div className="truncate font-mono text-[10px] leading-none text-[#8C7F72]">
+                      {formatHoldingAmount(holding.amount)}
+                    </div>
+                  </div>
+                  <div className="font-mono text-[10px] text-[#6D5B4C]">
+                    {formatPrecisePercent(holding.share)}
+                  </div>
+                  <div className="text-right font-mono text-[10px] font-semibold text-[#221A13]">
+                    {formatCompactUsd(holding.valueUsd)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function TokenCluster(props: {
   slices: SidebarActivityCardTokenSlice[];
   active?: boolean;
@@ -412,9 +549,25 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function formatPrecisePercent(value: number): string {
+  return `${formatNumber(value * 100)}%`;
+}
+
 function formatSignedPercent(value: number): string {
   const sign = value >= 0 ? '+' : '-';
   return `${sign}${formatNumber(Math.abs(value) * 100)}%`;
+}
+
+function formatHoldingAmount(value: number): string {
+  const maximumFractionDigits = value >= 100
+    ? 0
+    : value >= 1
+      ? 2
+      : 6;
+
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits,
+  }).format(value);
 }
 
 function statusToneClassName(statusTone: SidebarActivityCardView['statusTone']): string {
@@ -467,7 +620,7 @@ export function SidebarActivityCard(props: {
         : 'text-[#B23A32]'
       : statusToneClassName(props.card.statusTone);
 
-  return (
+  const button = (
     <button
       type="button"
       onClick={props.onClick}
@@ -548,4 +701,14 @@ export function SidebarActivityCard(props: {
       </div>
     </button>
   );
+
+  if (props.card.id === 'agent-portfolio-manager' && props.card.tokenHoldings?.length) {
+    return (
+      <PortfolioHoldingsTooltip holdings={props.card.tokenHoldings}>
+        {button}
+      </PortfolioHoldingsTooltip>
+    );
+  }
+
+  return button;
 }

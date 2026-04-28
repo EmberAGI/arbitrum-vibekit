@@ -199,6 +199,7 @@ describe('pi gateway service integration', () => {
         listExecutions: async () => ['exec-1'],
         listAutomations: async () => ['automation-1'],
         listAutomationRuns: async () => ['run-1'],
+        listArtifacts: async () => ['artifact-1'],
         inspectScheduler: async () => ({ dueAutomationIds: ['automation-1'], leases: [] }),
         inspectOutbox: async () => ({ dueOutboxIds: ['outbox-1'], intents: [] }),
         inspectMaintenance: async () => ({
@@ -349,6 +350,7 @@ describe('pi gateway service integration', () => {
     await expect(service.control.listExecutions()).resolves.toEqual(['exec-1']);
     await expect(service.control.listAutomations()).resolves.toEqual(['automation-1']);
     await expect(service.control.listAutomationRuns()).resolves.toEqual(['run-1']);
+    await expect(service.control.listArtifacts()).resolves.toEqual(['artifact-1']);
     await expect(service.control.inspectScheduler()).resolves.toEqual({
       dueAutomationIds: ['automation-1'],
       leases: [],
@@ -1466,20 +1468,21 @@ describe('pi gateway service integration', () => {
         status: 'failed',
       },
     });
+    expect(runEvents.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
     expect(runEvents).toContainEqual({
-      type: EventType.STATE_DELTA,
-      delta: expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/state',
-          value: 'failed',
-        },
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/message/content',
-          value: 'Key limit exceeded (monthly limit).',
-        },
-      ]),
+      type: EventType.STATE_SNAPSHOT,
+      snapshot: expect.objectContaining({
+        thread: expect.objectContaining({
+          task: expect.objectContaining({
+            taskStatus: {
+              state: 'failed',
+              message: {
+                content: 'Key limit exceeded (monthly limit).',
+              },
+            },
+          }),
+        }),
+      }),
     });
     expect(runEvents).toContainEqual({
       type: EventType.MESSAGES_SNAPSHOT,

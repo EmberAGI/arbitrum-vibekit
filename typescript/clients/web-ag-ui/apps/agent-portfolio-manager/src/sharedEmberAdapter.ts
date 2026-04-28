@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
 
+import { getDeleGatorEnvironment, ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
+import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
 import type { AgentRuntimeDomainConfig } from 'agent-runtime';
 import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 import { signPreparedDelegation } from 'agent-runtime/internal';
-import { getDeleGatorEnvironment, ROOT_AUTHORITY } from '@metamask/delegation-toolkit';
-import { getDelegationHashOffchain } from '@metamask/delegation-toolkit/utils';
-import { formatUnits, keccak256, toHex } from 'viem';
+import { keccak256, toHex } from 'viem';
+import type {
+  HiddenOcaReservationConflictHandling,
+  HiddenOcaSpotSwapInput,
+  HiddenOcaSpotSwapResult,
+} from './hiddenOcaSwapExecutor.js';
 import {
   buildPortfolioManagerWalletAccountingDetails,
   buildSharedEmberAccountingContextXml,
@@ -13,6 +18,7 @@ import {
   readManagedAgentAccountingState,
   type OnboardingState as SharedEmberOnboardingState,
 } from './sharedEmberOnboardingState.js';
+import { buildTokenDisplayQuantity } from './tokenQuantityDisplay.js';
 
 export type PortfolioManagerSharedEmberProtocolHost = {
   handleJsonRpc: (input: unknown) => Promise<unknown>;
@@ -33,6 +39,12 @@ export type PortfolioManagerLifecycleState = {
   activeWalletAddress: `0x${string}` | null;
   pendingOnboardingWalletAddress: `0x${string}` | null;
   pendingApprovedSetup?: PortfolioManagerApprovedSetup | null;
+  pendingSpotSwapConflict?: PortfolioManagerPendingSpotSwapConflict | null;
+};
+
+type PortfolioManagerPendingSpotSwapConflict = {
+  dispatch: HiddenOcaSpotSwapInput;
+  conflict: NonNullable<HiddenOcaSpotSwapResult['conflict']>;
 };
 
 type CreatePortfolioManagerDomainOptions = {
@@ -42,6 +54,13 @@ type CreatePortfolioManagerDomainOptions = {
   controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
+  hiddenOcaSpotSwapExecutor?: {
+    executeSpotSwap(input: {
+      threadId: string;
+      currentRevision?: number | null;
+      input: HiddenOcaSpotSwapInput;
+    }): Promise<HiddenOcaSpotSwapResult>;
+  };
 };
 
 type SharedEmberRevisionResponse = {
@@ -108,6 +127,7 @@ function buildDefaultLifecycleState(): PortfolioManagerLifecycleState {
     activeWalletAddress: null,
     pendingOnboardingWalletAddress: null,
     pendingApprovedSetup: null,
+    pendingSpotSwapConflict: null,
   };
 }
 
@@ -347,6 +367,10 @@ function readCommittedEvent(value: unknown): SharedEmberCommittedEvent | null {
 function readNextReadyForRedelegationWork(
   events: unknown[],
   acknowledgedThroughSequence: number,
+  expected?: {
+    requestId?: string;
+    transactionPlanId?: string;
+  },
 ): SharedEmberRedelegationWork | null {
   let latestWork: SharedEmberRedelegationWork | null = null;
 
@@ -372,7 +396,9 @@ function readNextReadyForRedelegationWork(
       requestId === null ||
       transactionPlanId === null ||
       phase !== 'ready_for_redelegation' ||
-      redelegationSigningPackage === null
+      redelegationSigningPackage === null ||
+      (expected?.requestId !== undefined && requestId !== expected.requestId) ||
+      (expected?.transactionPlanId !== undefined && transactionPlanId !== expected.transactionPlanId)
     ) {
       continue;
     }
@@ -519,6 +545,190 @@ async function runSharedEmberCommandWithResolvedRevision<T>(input: {
   }
 }
 
+export async function refreshPortfolioManagerRedelegationWork(input: {
+  protocolHost: PortfolioManagerSharedEmberProtocolHost;
+  threadId: string;
+  agentId?: string;
+  currentRevision?: number | null;
+  runtimeSigning?: AgentRuntimeSigningService;
+  runtimeSignerRef?: string;
+  controllerWalletAddress?: `0x${string}`;
+  controllerSignerAddress?: `0x${string}`;
+  expectedRequestId?: string;
+  expectedTransactionPlanId?: string;
+}): Promise<{
+  status: 'completed' | 'empty' | 'failed';
+  revision: number | null;
+  statusMessage: string;
+  artifact?: Record<string, unknown>;
+}> {
+  const outboxPage = await input.protocolHost.readCommittedEventOutbox({
+    protocol_version: 'v1',
+    consumer_id: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
+    after_sequence: 0,
+    limit: 100,
+  });
+  const outboxRecord = isRecord(outboxPage) ? outboxPage : {};
+  const revision = readInt(outboxRecord['revision']) ?? input.currentRevision ?? null;
+  const redelegationWork = readNextReadyForRedelegationWork(
+    Array.isArray(outboxRecord['events']) ? outboxRecord['events'] : [],
+    readInt(outboxRecord['acknowledged_through_sequence']) ?? 0,
+    {
+      ...(input.expectedRequestId ? { requestId: input.expectedRequestId } : {}),
+      ...(input.expectedTransactionPlanId
+        ? { transactionPlanId: input.expectedTransactionPlanId }
+        : {}),
+    },
+  );
+
+  if (redelegationWork === null) {
+    return {
+      status: 'empty',
+      revision,
+      statusMessage: 'No redelegation work is currently pending in the Shared Ember outbox.',
+    };
+  }
+
+  if (!input.runtimeSigning) {
+    return {
+      status: 'failed',
+      revision,
+      statusMessage:
+        'Runtime-owned signing service is not configured for portfolio-manager redelegation signing.',
+    };
+  }
+
+  if (!input.controllerWalletAddress) {
+    return {
+      status: 'failed',
+      revision,
+      statusMessage:
+        'Portfolio-manager redelegation signing is blocked because the controller smart-account address is not configured.',
+    };
+  }
+
+  if (!input.controllerSignerAddress) {
+    return {
+      status: 'failed',
+      revision,
+      statusMessage:
+        'Portfolio-manager redelegation signing is blocked because the controller signer address is not configured.',
+    };
+  }
+
+  let unsignedRedelegation: PortfolioManagerUnsignedDelegation;
+  try {
+    unsignedRedelegation = buildRuntimeRedelegationUnsignedDelegation({
+      redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
+      delegatorAddress: input.controllerWalletAddress,
+    });
+  } catch {
+    return {
+      status: 'failed',
+      revision,
+      statusMessage:
+        'Portfolio-manager redelegation signing could not continue because the canonical signing package was incomplete.',
+    };
+  }
+
+  const redelegationNetwork = readString(redelegationWork.redelegationSigningPackage['network']);
+  if (!redelegationNetwork) {
+    return {
+      status: 'failed',
+      revision,
+      statusMessage:
+        'Portfolio-manager redelegation signing could not continue because the canonical signing package was incomplete.',
+    };
+  }
+
+  const signedRedelegation = await signPreparedDelegation({
+    signing: input.runtimeSigning,
+    signerRef: input.runtimeSignerRef ?? DEFAULT_RUNTIME_SIGNER_REF,
+    expectedAddress: input.controllerSignerAddress,
+    chain: OWS_SIGNING_CHAIN,
+    chainId: resolveRuntimeRedelegationChainId(redelegationNetwork),
+    delegationManager: PORTFOLIO_MANAGER_DELEGATION_MANAGER,
+    delegation: unsignedRedelegation,
+  });
+
+  let signedRedelegationRecord: Record<string, unknown>;
+  try {
+    signedRedelegationRecord = buildRuntimeSignedRedelegationRecord({
+      redelegationSigningPackage: redelegationWork.redelegationSigningPackage,
+      artifactRef: signedRedelegation.artifactRef,
+    });
+  } catch {
+    return {
+      status: 'failed',
+      revision,
+      statusMessage:
+        'Portfolio-manager redelegation signing could not continue because the canonical signing package was incomplete.',
+    };
+  }
+
+  const registrationResponse = await runSharedEmberCommandWithResolvedRevision<{
+    result?: {
+      revision?: number;
+      committed_event_ids?: string[];
+      execution_result?: unknown;
+    };
+  }>({
+    protocolHost: input.protocolHost,
+    threadId: input.threadId,
+    agentId: input.agentId ?? PORTFOLIO_MANAGER_SHARED_EMBER_AGENT_ID,
+    currentRevision: revision,
+    buildRequest: (expectedRevision) => ({
+      jsonrpc: '2.0',
+      id: `shared-ember-${input.threadId}-register-signed-redelegation`,
+      method: 'orchestrator.registerSignedRedelegation.v1',
+      params: {
+        idempotency_key: `idem-refresh-redelegation-work-${input.threadId}:register-redelegation:${redelegationWork.requestId}`,
+        expected_revision: expectedRevision,
+        transaction_plan_id: redelegationWork.transactionPlanId,
+        signed_redelegation: signedRedelegationRecord,
+      },
+    }),
+  });
+
+  const acknowledgeResponse = await input.protocolHost.acknowledgeCommittedEventOutbox({
+    protocol_version: 'v1',
+    consumer_id: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
+    delivered_through_sequence: redelegationWork.sequence,
+  });
+  const acknowledgeErrorMessage = readOutboxErrorMessage(acknowledgeResponse);
+  if (acknowledgeErrorMessage !== null) {
+    throw new Error(
+      `Shared Ember committed outbox acknowledgement failed: ${acknowledgeErrorMessage}`,
+    );
+  }
+
+  const registeredRevision = readInt(registrationResponse.result?.revision) ?? revision;
+  const acknowledgedRevision =
+    readInt(isRecord(acknowledgeResponse) ? acknowledgeResponse['revision'] : null) ??
+    registeredRevision;
+  const acknowledgedThroughSequence =
+    readInt(
+      isRecord(acknowledgeResponse) ? acknowledgeResponse['acknowledged_through_sequence'] : null,
+    ) ?? redelegationWork.sequence;
+
+  return {
+    status: 'completed',
+    revision: acknowledgedRevision,
+    statusMessage: 'Redelegation signed, registered, and acknowledged through Shared Ember.',
+    artifact: {
+      type: 'shared-ember-redelegation-registration',
+      revision: acknowledgedRevision,
+      consumerId: PORTFOLIO_MANAGER_REDELEGATION_OUTBOX_CONSUMER_ID,
+      eventId: redelegationWork.eventId,
+      sequence: redelegationWork.sequence,
+      requestId: redelegationWork.requestId,
+      transactionPlanId: redelegationWork.transactionPlanId,
+      committedEventIds: registrationResponse.result?.committed_event_ids ?? [],
+      acknowledgedThroughSequence,
+    },
+  };
+}
+
 async function readSharedEmberAgentServiceIdentity(input: {
   protocolHost: PortfolioManagerSharedEmberProtocolHost;
   agentId: string;
@@ -608,6 +818,42 @@ const PORTFOLIO_MANAGER_SETUP_MESSAGE =
 const PORTFOLIO_MANAGER_SIGNING_INTERRUPT_TYPE = 'portfolio-manager-delegation-signing-request';
 const PORTFOLIO_MANAGER_SIGNING_MESSAGE =
   'Review and sign the delegation needed to activate your portfolio manager.';
+const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND = 'dispatch_spot_swap';
+const PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND = 'confirm_spot_swap_reserved_capital';
+const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
+  'Dispatch a structured spot swap through the portfolio-manager owned hidden Onchain Actions executor.',
+  'When using this command, put a JSON object string in inputJson with required fields walletAddress, amount, amountType, fromChain, toChain, fromToken, and toToken.',
+  'Optional fields are slippageTolerance, expiration, idempotencyKey, rootedWalletContextId, and capitalPool.',
+  'amount should be a base-unit integer string; decimal token-unit strings are accepted only when token decimals are known.',
+  'amountType must be "exactIn" or "exactOut"; for requests like "half my WETH" or "$3 of WETH", infer the token amount from current portfolio state when possible before dispatching.',
+  'capitalPool may be "unassigned_only", "reserved_or_assigned", or "all"; use reserved_or_assigned when the user explicitly asks to use reserved or assigned units, and use all when the selected asset pool should include both free and reserved units.',
+  'Never suggest releasing or adjusting a reservation for spot swaps; dispatch with capitalPool instead and let the reserved-capital confirmation interrupt ask the user to proceed or retry with unassigned capital only.',
+  `If ${PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND} returns a reserved-capital confirmation, stop the current assistant turn and wait for the user's next reply before calling ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND}.`,
+  'Do not set reservationConflictHandling in inputJson; it is supplied only by the portfolio-manager conflict confirmation retry.',
+  'Example inputJson: {"walletAddress":"0x...","amount":"894102247158860","amountType":"exactIn","fromChain":"arbitrum","toChain":"arbitrum","fromToken":"WETH","toToken":"USDC","capitalPool":"reserved_or_assigned"}.',
+].join(' ');
+const PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND_DESCRIPTION = [
+  'Resolve the exact pending reserved-capital spot swap confirmation through the tool-callable command path.',
+  'Use this command when pending_spot_swap_conflict is present and the user replies yes, confirm, proceed, use reserved funds, use unassigned only, or cancel.',
+  'Required inputJson field: outcome.',
+  'For yes, confirm, proceed, or use reserved funds, set outcome to "allow_reserved_for_other_agent".',
+  'For unassigned/free capital only, set outcome to "unassigned_only".',
+  'For cancel/stop, set outcome to "cancel".',
+  'Do not call dispatch_spot_swap again for the same pending reserved-capital confirmation.',
+  'Example inputJson: {"outcome":"allow_reserved_for_other_agent"}.',
+].join(' ');
+const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
+  'portfolio-manager-swap-reservation-conflict-request';
+const PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE =
+  'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.';
+const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_DESCRIPTION = [
+  'Ask whether a spot swap may touch capital reserved for another agent or should retry with unassigned capital only.',
+  `In normal chat, use the ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND} command because lifecycle interrupts are not model tool-callable.`,
+  'When a client forwards an interrupt resume directly and the user says yes, confirm, proceed, or equivalent, resume with inputJson {"outcome":"allow_reserved_for_other_agent"}.',
+  'When the user asks for unassigned/free capital only, resume with inputJson {"outcome":"unassigned_only"}.',
+  'When the user cancels, resume with inputJson {"outcome":"cancel"}.',
+  'Do not repeat dispatch_spot_swap for a pending reserved-capital confirmation.',
+].join(' ');
 const PORTFOLIO_MANAGER_ROOT_AUTHORITY = ROOT_AUTHORITY;
 const PORTFOLIO_MANAGER_DELEGATION_SALT =
   '0x1111111111111111111111111111111111111111111111111111111111111111';
@@ -971,46 +1217,6 @@ function readNumberLike(value: unknown): number | null {
 
   const parsed = Number(value.trim());
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-const TOKEN_DECIMALS_BY_ASSET = new Map<string, number>([
-  ['ETH', 18],
-  ['WETH', 18],
-  ['USDC', 6],
-  ['USDCN', 6],
-  ['USDT', 6],
-  ['WBTC', 8],
-]);
-
-function normalizeAssetForDisplayDecimals(asset: string): string {
-  const upperAsset = asset.toUpperCase();
-  if (upperAsset.startsWith('AARB')) {
-    return upperAsset.slice('AARB'.length);
-  }
-  if (upperAsset.startsWith('VARIABLEDEBT')) {
-    return upperAsset.slice('VARIABLEDEBT'.length);
-  }
-  if (upperAsset.startsWith('STABLEDEBT')) {
-    return upperAsset.slice('STABLEDEBT'.length);
-  }
-  return upperAsset;
-}
-
-function buildTokenDisplayQuantity(input: {
-  asset: string;
-  quantity: string;
-  explicitDisplayQuantity?: string | null;
-}): string | undefined {
-  if (input.explicitDisplayQuantity) {
-    return input.explicitDisplayQuantity;
-  }
-
-  if (!/^\d+$/.test(input.quantity)) {
-    return input.quantity;
-  }
-
-  const decimals = TOKEN_DECIMALS_BY_ASSET.get(normalizeAssetForDisplayDecimals(input.asset));
-  return decimals === undefined ? undefined : formatUnits(BigInt(input.quantity), decimals);
 }
 
 function readEconomicExposureInputs(value: unknown): PortfolioProjectionEconomicExposureInput[] {
@@ -1588,6 +1794,312 @@ function parseManagedMandateUpdateInput(input: unknown): ManagedMandateUpdateInp
   return {
     targetAgentId: FIRST_MANAGED_AGENT_TYPE,
     managedMandate,
+  };
+}
+
+function readSpotSwapAmountType(value: unknown): HiddenOcaSpotSwapInput['amountType'] | null {
+  return value === 'exactIn' || value === 'exactOut' ? value : null;
+}
+
+function readSpotSwapReservationConflictHandling(
+  value: unknown,
+): HiddenOcaSpotSwapInput['reservationConflictHandling'] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const kind = readString(value['kind']);
+  if (kind !== 'allow_reserved_for_other_agent' && kind !== 'unassigned_only') {
+    return null;
+  }
+
+  return { kind };
+}
+
+function readSpotSwapCapitalPool(value: unknown): HiddenOcaSpotSwapInput['capitalPool'] | null {
+  return value === 'unassigned_only' || value === 'reserved_or_assigned' || value === 'all'
+    ? value
+    : null;
+}
+
+function parseSpotSwapDispatchInput(input: unknown): HiddenOcaSpotSwapInput | null {
+  if (!isRecord(input)) {
+    return null;
+  }
+
+  const walletAddress = readHexAddress(input['walletAddress']);
+  const amount = readString(input['amount']);
+  const amountType = readSpotSwapAmountType(input['amountType']);
+  const fromChain = readString(input['fromChain']);
+  const toChain = readString(input['toChain']);
+  const fromToken = readString(input['fromToken']);
+  const toToken = readString(input['toToken']);
+
+  if (
+    walletAddress === null ||
+    amount === null ||
+    amountType === null ||
+    fromChain === null ||
+    toChain === null ||
+    fromToken === null ||
+    toToken === null
+  ) {
+    return null;
+  }
+
+  const reservationConflictHandling = readSpotSwapReservationConflictHandling(
+    input['reservationConflictHandling'],
+  );
+  const capitalPool = readSpotSwapCapitalPool(input['capitalPool']);
+
+  return {
+    walletAddress,
+    amount,
+    amountType,
+    fromChain,
+    toChain,
+    fromToken,
+    toToken,
+    ...(readString(input['slippageTolerance'])
+      ? { slippageTolerance: readString(input['slippageTolerance'])! }
+      : {}),
+    ...(readString(input['expiration']) ? { expiration: readString(input['expiration'])! } : {}),
+    ...(readString(input['idempotencyKey'])
+      ? { idempotencyKey: readString(input['idempotencyKey'])! }
+      : {}),
+    ...(readString(input['rootedWalletContextId'])
+      ? { rootedWalletContextId: readString(input['rootedWalletContextId'])! }
+      : {}),
+    ...(capitalPool ? { capitalPool } : {}),
+    ...(reservationConflictHandling ? { reservationConflictHandling } : {}),
+  };
+}
+
+function buildSpotSwapDispatchInput(input: {
+  operationInput: unknown;
+  currentState: PortfolioManagerLifecycleState;
+}): HiddenOcaSpotSwapInput | null {
+  const dispatch = parseSpotSwapDispatchInput(input.operationInput);
+  if (!dispatch) {
+    return null;
+  }
+
+  return {
+    ...dispatch,
+    ...(dispatch.rootedWalletContextId
+      ? {}
+      : input.currentState.lastRootedWalletContextId
+        ? { rootedWalletContextId: input.currentState.lastRootedWalletContextId }
+        : {}),
+  };
+}
+
+function buildSpotSwapArtifact(result: HiddenOcaSpotSwapResult): Record<string, unknown> {
+  return {
+    type: 'hidden-oca-spot-swap',
+    status: result.status,
+    ...(result.idempotencyKey ? { idempotencyKey: result.idempotencyKey } : {}),
+    swapSummary: result.swapSummary,
+    transactionPlanId: result.transactionPlanId,
+    requestId: result.requestId,
+    committedEventIds: result.committedEventIds,
+    ...(result.transactionHash ? { transactionHash: result.transactionHash } : {}),
+    ...(result.conflict ? { conflict: result.conflict } : {}),
+    ...(result.failureReason ? { failureReason: result.failureReason } : {}),
+  };
+}
+
+function buildSpotSwapCompletionMessage(status: HiddenOcaSpotSwapResult['status']): string {
+  switch (status) {
+    case 'completed':
+      return 'Spot swap completed through the portfolio manager.';
+    case 'submitted':
+      return 'Spot swap submitted through the portfolio manager.';
+    case 'awaiting_redelegation':
+      return 'Spot swap execution is waiting for Shared Ember redelegation readiness.';
+    default:
+      return 'Spot swap execution finished through the portfolio manager.';
+  }
+}
+
+function shouldConfirmSpotSwapReservedCapital(dispatch: HiddenOcaSpotSwapInput): boolean {
+  return dispatch.capitalPool === 'reserved_or_assigned' || dispatch.capitalPool === 'all';
+}
+
+function buildSpotSwapDispatchSummary(
+  dispatch: HiddenOcaSpotSwapInput,
+): HiddenOcaSpotSwapResult['swapSummary'] {
+  return {
+    fromToken: dispatch.fromToken,
+    toToken: dispatch.toToken,
+    amount: dispatch.amount,
+    amountType: dispatch.amountType,
+    displayFromAmount: '',
+    displayToAmount: '',
+  };
+}
+
+function buildSpotSwapReservedCapitalConfirmationResult(input: {
+  currentState: PortfolioManagerLifecycleState;
+  dispatch: HiddenOcaSpotSwapInput;
+}) {
+  const conflict: NonNullable<HiddenOcaSpotSwapResult['conflict']> = {
+    kind: 'reserved_for_other_agent',
+    blockingReasonCode: 'reserved_for_other_agent',
+    reservationId: null,
+    message:
+      input.dispatch.capitalPool === 'all'
+        ? 'The selected swap pool includes capital reserved for another agent.'
+        : 'The requested swap capital is reserved for another agent.',
+    retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+  };
+
+  return buildSpotSwapOperationResult({
+    currentState: input.currentState,
+    dispatch: input.dispatch,
+    result: {
+      status: 'conflict',
+      swapSummary: buildSpotSwapDispatchSummary(input.dispatch),
+      transactionPlanId: null,
+      requestId: null,
+      committedEventIds: [],
+      conflict,
+    },
+  });
+}
+
+function buildSpotSwapOperationResult(input: {
+  currentState: PortfolioManagerLifecycleState;
+  dispatch: HiddenOcaSpotSwapInput;
+  result: HiddenOcaSpotSwapResult;
+}) {
+  if (input.result.status === 'conflict' && input.result.conflict) {
+    const nextState: PortfolioManagerLifecycleState = {
+      ...input.currentState,
+      pendingSpotSwapConflict: {
+        dispatch: {
+          ...input.dispatch,
+          ...(input.result.idempotencyKey ? { idempotencyKey: input.result.idempotencyKey } : {}),
+        },
+        conflict: input.result.conflict,
+      },
+    };
+
+    return {
+      state: nextState,
+      outputs: {
+        status: {
+          executionStatus: 'interrupted' as const,
+          statusMessage: PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE,
+        },
+        interrupt: {
+          type: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE,
+          mirroredToActivity: false,
+          message: PORTFOLIO_MANAGER_SWAP_CONFLICT_MESSAGE,
+          payload: {
+            swap: input.result.swapSummary,
+            conflict: input.result.conflict,
+            retryOptions: input.result.conflict.retryOptions,
+          },
+        },
+        artifacts: [
+          {
+            data: buildSpotSwapArtifact(input.result),
+          },
+        ],
+      },
+    };
+  }
+
+  if (input.result.status === 'awaiting_redelegation') {
+    return {
+      state: input.currentState,
+      outputs: {
+        status: {
+          executionStatus: 'failed' as const,
+          statusMessage:
+            'Spot swap execution is waiting for Shared Ember redelegation readiness and was not completed.',
+        },
+        artifacts: [
+          {
+            data: buildSpotSwapArtifact(input.result),
+          },
+        ],
+      },
+    };
+  }
+
+  if (input.result.status === 'failed' || input.result.status === 'blocked') {
+    return {
+      state: input.currentState,
+      outputs: {
+        status: {
+          executionStatus: 'failed' as const,
+          statusMessage:
+            input.result.failureReason ??
+            'Spot swap could not be prepared or executed through the portfolio manager.',
+        },
+        artifacts: [
+          {
+            data: buildSpotSwapArtifact(input.result),
+          },
+        ],
+      },
+    };
+  }
+
+  return {
+    state: {
+      ...input.currentState,
+      pendingSpotSwapConflict: null,
+    },
+    outputs: {
+      status: {
+        executionStatus: 'completed' as const,
+        statusMessage: buildSpotSwapCompletionMessage(input.result.status),
+      },
+      artifacts: [
+        {
+          data: buildSpotSwapArtifact(input.result),
+        },
+      ],
+    },
+  };
+}
+
+function readSpotSwapConflictOutcome(
+  value: unknown,
+): HiddenOcaReservationConflictHandling['kind'] | 'cancel' | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const outcome = readString(value['outcome']);
+  if (
+    outcome === 'allow_reserved_for_other_agent' ||
+    outcome === 'unassigned_only' ||
+    outcome === 'cancel'
+  ) {
+    return outcome;
+  }
+
+  return null;
+}
+
+function buildConfirmedSpotSwapDispatch(input: {
+  dispatch: HiddenOcaSpotSwapInput;
+  outcome: HiddenOcaReservationConflictHandling['kind'];
+}): HiddenOcaSpotSwapInput {
+  return {
+    ...input.dispatch,
+    ...(input.dispatch.idempotencyKey
+      ? {
+          idempotencyKey: `${input.dispatch.idempotencyKey}:reserved-capital-confirmation:${input.outcome}`,
+        }
+      : {}),
+    reservationConflictHandling: {
+      kind: input.outcome,
+    },
   };
 }
 
@@ -2298,6 +2810,14 @@ export function createPortfolioManagerDomain(
             'Read committed redelegation work from the Shared Ember outbox for the portfolio-manager orchestrator.',
         },
         {
+          name: PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND,
+          description: PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION,
+        },
+        {
+          name: PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND,
+          description: PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND_DESCRIPTION,
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
           description:
             'Complete the rooted bootstrap in one Shared Ember command using onboarding data and the signing handoff.',
@@ -2314,6 +2834,11 @@ export function createPortfolioManagerDomain(
           type: 'portfolio-manager-delegation-signing-request',
           description:
             'Request delegation signatures needed to complete portfolio-manager onboarding.',
+          mirroredToActivity: false,
+        },
+        {
+          type: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE,
+          description: PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_DESCRIPTION,
           mirroredToActivity: false,
         },
       ],
@@ -2379,6 +2904,39 @@ export function createPortfolioManagerDomain(
         context.push(
           `  <pending_onboarding_wallet_address source="onboarding_setup">${currentState.pendingOnboardingWalletAddress}</pending_onboarding_wallet_address>`,
         );
+      }
+
+      if (currentState.pendingSpotSwapConflict) {
+        context.push('  <pending_spot_swap_conflict>');
+        context.push(
+          `    <confirmation_operation>${PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE}</confirmation_operation>`,
+        );
+        context.push(
+          `    <tool_command>${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND}</tool_command>`,
+        );
+        context.push(
+          '    <affirmative_user_reply_outcome>allow_reserved_for_other_agent</affirmative_user_reply_outcome>',
+        );
+        context.push(
+          '    <unassigned_only_user_reply_outcome>unassigned_only</unassigned_only_user_reply_outcome>',
+        );
+        context.push('    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>');
+        context.push(
+          `    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Use ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND} with outcome allow_reserved_for_other_agent.</instruction>`,
+        );
+        appendStructuredXmlNode({
+          lines: context,
+          indent: '    ',
+          tag: 'dispatch',
+          value: currentState.pendingSpotSwapConflict.dispatch,
+        });
+        appendStructuredXmlNode({
+          lines: context,
+          indent: '    ',
+          tag: 'conflict',
+          value: currentState.pendingSpotSwapConflict.conflict,
+        });
+        context.push('  </pending_spot_swap_conflict>');
       }
 
       const approvedSetup = readApprovedSetupFromOnboardingBootstrap(
@@ -2514,6 +3072,7 @@ export function createPortfolioManagerDomain(
             activeWalletAddress: null,
             pendingOnboardingWalletAddress: null,
             pendingApprovedSetup: null,
+            pendingSpotSwapConflict: null,
           };
 
           return {
@@ -3204,6 +3763,160 @@ export function createPortfolioManagerDomain(
               ],
             },
           };
+        }
+        case PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND: {
+          if (!options.hiddenOcaSpotSwapExecutor) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Hidden Onchain Actions spot swap executor is not configured for this portfolio-manager runtime.',
+                },
+              },
+            };
+          }
+
+          const dispatch = buildSpotSwapDispatchInput({
+            operationInput: operation.input,
+            currentState,
+          });
+          if (!dispatch) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap dispatch requires walletAddress, amount, amountType, fromChain, toChain, fromToken, and toToken.',
+                },
+              },
+            };
+          }
+
+          if (dispatch.reservationConflictHandling) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap reserved-capital conflict handling can only be supplied by the portfolio-manager conflict confirmation retry.',
+                },
+              },
+            };
+          }
+
+          if (!dispatch.rootedWalletContextId) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap dispatch requires an active rooted wallet context before hidden execution can start.',
+                },
+              },
+            };
+          }
+
+          if (shouldConfirmSpotSwapReservedCapital(dispatch)) {
+            return buildSpotSwapReservedCapitalConfirmationResult({
+              currentState,
+              dispatch,
+            });
+          }
+
+          const result = await options.hiddenOcaSpotSwapExecutor.executeSpotSwap({
+            threadId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            input: dispatch,
+          });
+
+          return buildSpotSwapOperationResult({
+            currentState,
+            dispatch,
+            result,
+          });
+        }
+        case PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND:
+        case PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE: {
+          const outcome = readSpotSwapConflictOutcome(operation.input);
+          const pendingConflict = currentState.pendingSpotSwapConflict ?? null;
+
+          if (!pendingConflict) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'There is no exact pending spot swap conflict to confirm or retry.',
+                },
+              },
+            };
+          }
+
+          if (outcome === 'cancel') {
+            return {
+              state: {
+                ...currentState,
+                pendingSpotSwapConflict: null,
+              },
+              outputs: {
+                status: {
+                  executionStatus: 'canceled',
+                  statusMessage: 'Spot swap canceled before reserved-capital retry.',
+                },
+              },
+            };
+          }
+
+          if (outcome === null) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Spot swap conflict confirmation requires allow_reserved_for_other_agent, unassigned_only, or cancel.',
+                },
+              },
+            };
+          }
+
+          if (!options.hiddenOcaSpotSwapExecutor) {
+            return {
+              state: currentState,
+              outputs: {
+                status: {
+                  executionStatus: 'failed',
+                  statusMessage:
+                    'Hidden Onchain Actions spot swap executor is not configured for this portfolio-manager runtime.',
+                },
+              },
+            };
+          }
+
+          const dispatch = buildConfirmedSpotSwapDispatch({
+            dispatch: pendingConflict.dispatch,
+            outcome,
+          });
+          const result = await options.hiddenOcaSpotSwapExecutor.executeSpotSwap({
+            threadId,
+            currentRevision: currentState.lastSharedEmberRevision,
+            input: dispatch,
+          });
+
+          return buildSpotSwapOperationResult({
+            currentState: {
+              ...currentState,
+              pendingSpotSwapConflict: null,
+            },
+            dispatch,
+            result,
+          });
         }
         case 'refresh_redelegation_work': {
           if (!options.protocolHost) {

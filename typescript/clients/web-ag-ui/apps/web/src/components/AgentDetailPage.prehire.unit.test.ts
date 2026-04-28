@@ -288,6 +288,47 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     );
   });
 
+  it('renders simple markdown emphasis in chat transcript messages', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        messages: [
+          {
+            id: 'assistant-markdown-1',
+            role: 'assistant',
+            content: 'Use **reserved WETH** only after *confirmation*.',
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('<strong');
+    expect(html).toContain('reserved WETH');
+    expect(html).toContain('<em');
+    expect(html).toContain('confirmation');
+    expect(html).not.toContain('**reserved WETH**');
+    expect(html).not.toContain('*confirmation*');
+  });
+
   it('renders automation status artifacts and A2UI cards in the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
