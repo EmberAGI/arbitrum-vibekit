@@ -87,6 +87,36 @@ describe('syncInstalledArtifacts', () => {
     });
   });
 
+  it('skips artifact sync when the installed snapshot resolves to the package source directory', async () => {
+    const stat = vi.fn(() =>
+      Promise.resolve({
+        isDirectory: () => true,
+      }),
+    );
+    const mkdir = vi.fn(() => Promise.resolve(undefined));
+    const rm = vi.fn(() => Promise.resolve(undefined));
+    const cp = vi.fn(() => Promise.resolve(undefined));
+
+    await expect(
+      copyArtifactDir({
+        sourceRoot: '/workspace/agent-runtime',
+        relativeDir: 'dist',
+        targetRoot: '/workspace/agent-runtime',
+        fileOps: {
+          stat,
+          mkdir,
+          rm,
+          cp,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(stat).toHaveBeenCalledWith('/workspace/agent-runtime/dist');
+    expect(mkdir).not.toHaveBeenCalled();
+    expect(rm).not.toHaveBeenCalled();
+    expect(cp).not.toHaveBeenCalled();
+  });
+
   it('waits for a per-target sync lock before syncing installed artifacts', async () => {
     let releaseAfterSecondLockAttempt: (() => void) | null = null;
     const secondLockAttemptObserved = new Promise<void>((resolve) => {

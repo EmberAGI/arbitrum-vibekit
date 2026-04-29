@@ -90,14 +90,18 @@ export async function copyArtifactDir({
   maxReplaceAttempts = DEFAULT_MAX_REPLACE_ATTEMPTS,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
 }: CopyArtifactDirParams): Promise<void> {
-  const sourceDir = path.join(sourceRoot, relativeDir);
+  const sourceDir = path.resolve(sourceRoot, relativeDir);
   const sourceStats = await fileOps.stat(sourceDir);
 
   if (!sourceStats.isDirectory()) {
     return;
   }
 
-  const targetDir = path.join(targetRoot, relativeDir);
+  const targetDir = path.resolve(targetRoot, relativeDir);
+  if (sourceDir === targetDir) {
+    return;
+  }
+
   await fileOps.mkdir(targetDir, { recursive: true });
   const lockDir = `${targetDir}.sync-lock`;
 
