@@ -33,6 +33,10 @@ const LOADING_TOPBAR_VIEW: DashboardTopbarView = {
       liabilitiesValue: '--',
     },
     {
+      label: 'Total leverage',
+      value: '--',
+    },
+    {
       label: 'Net worth',
       value: '--',
     },

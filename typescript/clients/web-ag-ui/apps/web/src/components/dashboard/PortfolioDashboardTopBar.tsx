@@ -111,8 +111,8 @@ export function PortfolioDashboardTopBar(props: {
   rightAccessory?: React.ReactNode;
 }): React.JSX.Element {
   const gridClassName = props.view.benchmarkAssetLabel
-    ? 'sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content_auto]'
-    : 'sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content]';
+    ? 'sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content_max-content_auto]'
+    : 'sm:grid-cols-2 xl:grid-cols-[max-content_max-content_max-content_max-content]';
 
   return (
     <section className="rounded-b-[24px] rounded-t-none border border-[#E4D5C7] bg-[#FFFCF7] px-4 py-3 shadow-[0_12px_28px_rgba(68,46,21,0.08)] md:px-5">

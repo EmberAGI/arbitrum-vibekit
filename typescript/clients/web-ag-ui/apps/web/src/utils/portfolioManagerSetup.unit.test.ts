@@ -12,6 +12,7 @@ describe('buildPortfolioManagerSetupInput', () => {
         approved: true,
         riskLevel: 'medium',
       },
+      portfolioManagerMandate: {},
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',
@@ -52,6 +53,7 @@ describe('buildPortfolioManagerSetupInput', () => {
         approved: true,
         riskLevel: 'medium',
       },
+      portfolioManagerMandate: {},
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',

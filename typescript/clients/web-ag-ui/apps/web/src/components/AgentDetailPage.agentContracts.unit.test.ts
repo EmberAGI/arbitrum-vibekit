@@ -530,8 +530,9 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     });
 
     expect(html).toContain('Ember Portfolio Agent Setup');
-    expect(html).toContain('Root delegation setup');
-    expect(html).toContain('live wallet observation');
+    expect(html).toContain('Portfolio manager mandate');
+    expect(html).not.toContain('Root delegation setup');
+    expect(html).not.toContain('live wallet observation');
     expect(html).not.toContain('USDC Allocation');
     expect(html).not.toContain('Portfolio policy bootstrap');
   });

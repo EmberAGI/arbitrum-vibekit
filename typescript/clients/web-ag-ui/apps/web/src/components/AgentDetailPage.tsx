@@ -41,6 +41,7 @@ import type {
   OperatorConfigInput,
   PendleSetupInput,
   PortfolioManagerSetupInput,
+  PortfolioManagerMandateInput,
   FundWalletAcknowledgement,
   GmxSetupInput,
   PiOperatorNoteInput,
@@ -107,6 +108,191 @@ const AGENT_X_URL = 'https://x.com/emberagi';
 const MANAGED_LENDING_NETWORK = 'arbitrum';
 const MANAGED_LENDING_PROTOCOL = 'aave';
 const MANAGED_LENDING_CONTROL_PATH = 'lending.supply';
+const DEFAULT_PORTFOLIO_MANAGER_MANDATE_INPUT = {} satisfies PortfolioManagerMandateInput;
+type PortfolioManagerMandateNumericKey =
+  | 'betaExposureCapPct'
+  | 'riskBudgetBps'
+  | 'minimumCashUsd'
+  | 'maxDrawdownPct'
+  | 'targetVolatilityPct'
+  | 'maxSingleAssetAllocationPct'
+  | 'rebalanceThresholdPct'
+  | 'maxLeverageRatio'
+  | 'liquidityBufferPct'
+  | 'maxPerpsAllocationPct'
+  | 'maxPredictionMarketsAllocationPct'
+  | 'maxNftAllocationPct'
+  | 'maxMemecoinAllocationPct'
+  | 'maxRwaAllocationPct'
+  | 'maxIlliquidAllocationPct';
+type PortfolioManagerMandatePillOption = {
+  key: PortfolioManagerMandateNumericKey;
+  label: string;
+  shortLabel: string;
+  helper: string;
+  unit: string;
+  placeholder: string;
+  inputName: string;
+  ariaLabel: string;
+};
+const PORTFOLIO_MANAGER_MANDATE_PILL_OPTIONS: PortfolioManagerMandatePillOption[] = [
+  {
+    key: 'betaExposureCapPct',
+    label: 'Beta exposure cap',
+    shortLabel: 'Beta cap',
+    helper: 'Maximum portfolio beta exposure allowed before the PM should de-risk.',
+    unit: '%',
+    placeholder: '65',
+    inputName: 'portfolio-manager-mandate-beta-exposure-cap-pct',
+    ariaLabel: 'Portfolio manager beta exposure cap',
+  },
+  {
+    key: 'riskBudgetBps',
+    label: 'Risk budget',
+    shortLabel: 'Risk budget',
+    helper: 'Portfolio-wide risk budget expressed in basis points.',
+    unit: 'bps',
+    placeholder: '500',
+    inputName: 'portfolio-manager-mandate-risk-budget-bps',
+    ariaLabel: 'Portfolio manager risk budget',
+  },
+  {
+    key: 'minimumCashUsd',
+    label: 'Minimum cash reserve',
+    shortLabel: 'Cash reserve',
+    helper: 'Minimum unallocated cash the PM should keep available.',
+    unit: 'USD',
+    placeholder: '10',
+    inputName: 'portfolio-manager-mandate-minimum-cash-usd',
+    ariaLabel: 'Portfolio manager minimum cash reserve',
+  },
+  {
+    key: 'maxDrawdownPct',
+    label: 'Maximum drawdown',
+    shortLabel: 'Drawdown',
+    helper: 'Loss threshold where the PM should stop adding risk and preserve capital.',
+    unit: '%',
+    placeholder: '12',
+    inputName: 'portfolio-manager-mandate-max-drawdown-pct',
+    ariaLabel: 'Portfolio manager maximum drawdown',
+  },
+  {
+    key: 'targetVolatilityPct',
+    label: 'Target volatility',
+    shortLabel: 'Volatility',
+    helper: 'Annualized volatility target used to size portfolio risk.',
+    unit: '%',
+    placeholder: '18',
+    inputName: 'portfolio-manager-mandate-target-volatility-pct',
+    ariaLabel: 'Portfolio manager target volatility',
+  },
+  {
+    key: 'maxSingleAssetAllocationPct',
+    label: 'Max single-asset allocation',
+    shortLabel: 'Single asset',
+    helper: 'Concentration cap for any one asset across the managed portfolio.',
+    unit: '%',
+    placeholder: '35',
+    inputName: 'portfolio-manager-mandate-max-single-asset-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum single asset allocation',
+  },
+  {
+    key: 'rebalanceThresholdPct',
+    label: 'Rebalance threshold',
+    shortLabel: 'Rebalance',
+    helper: 'Drift from target allocation that should trigger rebalancing.',
+    unit: '%',
+    placeholder: '7.5',
+    inputName: 'portfolio-manager-mandate-rebalance-threshold-pct',
+    ariaLabel: 'Portfolio manager rebalance threshold',
+  },
+  {
+    key: 'maxLeverageRatio',
+    label: 'Maximum leverage ratio',
+    shortLabel: 'Leverage',
+    helper: 'Portfolio leverage ceiling before the PM must reduce borrowed exposure.',
+    unit: 'x',
+    placeholder: '1.2',
+    inputName: 'portfolio-manager-mandate-max-leverage-ratio',
+    ariaLabel: 'Portfolio manager maximum leverage ratio',
+  },
+  {
+    key: 'liquidityBufferPct',
+    label: 'Liquidity buffer',
+    shortLabel: 'Liquidity',
+    helper: 'Portfolio percentage reserved for withdrawals, redeployments, and execution costs.',
+    unit: '%',
+    placeholder: '8',
+    inputName: 'portfolio-manager-mandate-liquidity-buffer-pct',
+    ariaLabel: 'Portfolio manager liquidity buffer',
+  },
+  {
+    key: 'maxPerpsAllocationPct',
+    label: 'Max portfolio in perps',
+    shortLabel: 'Perps cap',
+    helper: 'Maximum portfolio percentage the PM may allocate to perpetual futures exposure.',
+    unit: '%',
+    placeholder: '15',
+    inputName: 'portfolio-manager-mandate-max-perps-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum allocation to perps',
+  },
+  {
+    key: 'maxPredictionMarketsAllocationPct',
+    label: 'Max portfolio in prediction markets',
+    shortLabel: 'Prediction cap',
+    helper: 'Maximum portfolio percentage the PM may allocate to prediction-market positions.',
+    unit: '%',
+    placeholder: '10',
+    inputName: 'portfolio-manager-mandate-max-prediction-markets-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum allocation to prediction markets',
+  },
+  {
+    key: 'maxNftAllocationPct',
+    label: 'Max portfolio in NFTs',
+    shortLabel: 'NFT cap',
+    helper: 'Maximum portfolio percentage the PM may allocate to NFT or NFT-backed exposure.',
+    unit: '%',
+    placeholder: '5',
+    inputName: 'portfolio-manager-mandate-max-nft-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum allocation to NFTs',
+  },
+  {
+    key: 'maxMemecoinAllocationPct',
+    label: 'Max portfolio in memecoins',
+    shortLabel: 'Memecoin cap',
+    helper: 'Maximum portfolio percentage the PM may allocate to memecoin exposure.',
+    unit: '%',
+    placeholder: '3',
+    inputName: 'portfolio-manager-mandate-max-memecoin-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum allocation to memecoins',
+  },
+  {
+    key: 'maxRwaAllocationPct',
+    label: 'Max portfolio in RWAs',
+    shortLabel: 'RWA cap',
+    helper: 'Maximum portfolio percentage the PM may allocate to tokenized real-world assets.',
+    unit: '%',
+    placeholder: '20',
+    inputName: 'portfolio-manager-mandate-max-rwa-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum allocation to RWAs',
+  },
+  {
+    key: 'maxIlliquidAllocationPct',
+    label: 'Max portfolio in illiquid assets',
+    shortLabel: 'Illiquid cap',
+    helper: 'Maximum portfolio percentage the PM may allocate to illiquid or thinly traded positions.',
+    unit: '%',
+    placeholder: '12',
+    inputName: 'portfolio-manager-mandate-max-illiquid-allocation-pct',
+    ariaLabel: 'Portfolio manager maximum allocation to illiquid assets',
+  },
+];
+const PORTFOLIO_MANAGER_MANDATE_KEYS_TO_STRIP = [
+  ...PORTFOLIO_MANAGER_MANDATE_PILL_OPTIONS.map((option) => option.key),
+  'betaExposureTarget',
+  'riskToleranceScore',
+  'minUndeployedCashBps',
+] as const;
 const DETAIL_PAGE_SHELL_CLASS =
   'flex-1 overflow-y-auto bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.78),rgba(248,241,232,0.96)_38%,#efe3d2_100%)] p-8 text-[#261a12]';
 const DETAIL_CARD_CLASS =
@@ -594,12 +780,24 @@ type ManagedMandateEditorView = {
   reservationSummary: string | null;
 };
 
+type PortfolioManagerMandateEditorView = {
+  ownerAgentId: string;
+  targetAgentId: string;
+  targetAgentRouteId: string;
+  targetAgentKey: string;
+  title: string;
+  mandateRef: string | null;
+  managedMandate: PortfolioManagerMandateInput;
+};
+
 type ManagedMandateEditorSubmitInput = {
   ownerAgentId: string;
   targetAgentId: string;
   targetAgentRouteId: string;
-  managedMandate: ManagedMandateInput;
+  managedMandate: Record<string, unknown>;
 };
+
+type PortfolioManagerMandateEditorSubmitInput = ManagedMandateEditorSubmitInput;
 
 function buildReservationSummaryFromProjection(
   reservation: Record<string, unknown> | null,
@@ -625,6 +823,17 @@ function buildReservationSummaryFromProjection(
   return normalizeReservationSummaryForDisplay(
     `Reservation ${reservationId} ${reservationAction}${quantitySummary}${controlPathSummary}.`,
   );
+}
+
+function readPortfolioManagerNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function readManagedMandateEditorView(
@@ -669,6 +878,39 @@ function readManagedMandateEditorView(
   };
 }
 
+function readPortfolioManagerMandateEditorView(
+  domainProjection: Record<string, unknown> | undefined,
+): PortfolioManagerMandateEditorView | null {
+  const editor = asRecord(domainProjection?.['portfolioManagerMandateEditor']);
+  if (!editor) {
+    return null;
+  }
+
+  const targetAgentRouteId = readString(editor['targetAgentRouteId']);
+  if (!targetAgentRouteId) {
+    return null;
+  }
+  const ownerAgentId = readString(editor['ownerAgentId']);
+  const targetAgentId = readString(editor['targetAgentId']);
+  const targetAgentKey = readString(editor['targetAgentKey']);
+  if (!ownerAgentId || !targetAgentId || !targetAgentKey) {
+    return null;
+  }
+
+  const managedMandateRecord = asRecord(editor['managedMandate']) ?? null;
+  const managedMandate: PortfolioManagerMandateInput = managedMandateRecord ?? {};
+
+  return {
+    ownerAgentId,
+    targetAgentId,
+    targetAgentRouteId,
+    targetAgentKey,
+    title: readString(editor['targetAgentTitle']) ?? 'Portfolio manager mandate',
+    mandateRef: readString(editor['mandateRef']),
+    managedMandate,
+  };
+}
+
 type EmberLendingRuntimeView = {
   phase: string | null;
   laneLabel: string | null;
@@ -707,6 +949,7 @@ function ManagedMandateEditorCard(props: {
   availableTokenSymbols?: string[];
   tokenIconBySymbol: Record<string, string>;
   onSave?: (input: ManagedMandateEditorSubmitInput) => Promise<void> | void;
+  submitLabel?: string;
   chrome?: 'card' | 'plain';
 }) {
   return (
@@ -721,6 +964,7 @@ function ManagedMandateEditorCard(props: {
       availableTokenSymbols={props.availableTokenSymbols}
       tokenIconBySymbolOverride={props.tokenIconBySymbol}
       chrome={props.chrome}
+      submitLabel={props.submitLabel}
       onSave={(input) =>
         props.onSave?.({
           ownerAgentId: input.ownerAgentId,
@@ -733,42 +977,355 @@ function ManagedMandateEditorCard(props: {
   );
 }
 
+function readPortfolioManagerMandatePillOption(
+  key: PortfolioManagerMandateNumericKey,
+): PortfolioManagerMandatePillOption {
+  const option = PORTFOLIO_MANAGER_MANDATE_PILL_OPTIONS.find((candidate) => candidate.key === key);
+  if (!option) {
+    throw new Error(`Unsupported portfolio manager mandate key: ${key}`);
+  }
+  return option;
+}
+
+function readSelectedPortfolioManagerMandateKeys(
+  mandate: PortfolioManagerMandateInput,
+): PortfolioManagerMandateNumericKey[] {
+  return PORTFOLIO_MANAGER_MANDATE_PILL_OPTIONS
+    .filter((option) => readPortfolioManagerNumber(mandate[option.key]) !== undefined)
+    .map((option) => option.key);
+}
+
+function buildPortfolioManagerMandateInputValues(
+  mandate: PortfolioManagerMandateInput,
+): Record<PortfolioManagerMandateNumericKey, string> {
+  const betaExposureCapPct = readPortfolioManagerNumber(mandate.betaExposureCapPct);
+  const riskBudgetBps = readPortfolioManagerNumber(mandate.riskBudgetBps);
+  const minimumCashUsd = readPortfolioManagerNumber(mandate.minimumCashUsd);
+  const maxDrawdownPct = readPortfolioManagerNumber(mandate.maxDrawdownPct);
+  const targetVolatilityPct = readPortfolioManagerNumber(mandate.targetVolatilityPct);
+  const maxSingleAssetAllocationPct = readPortfolioManagerNumber(
+    mandate.maxSingleAssetAllocationPct,
+  );
+  const rebalanceThresholdPct = readPortfolioManagerNumber(mandate.rebalanceThresholdPct);
+  const maxLeverageRatio = readPortfolioManagerNumber(mandate.maxLeverageRatio);
+  const liquidityBufferPct = readPortfolioManagerNumber(mandate.liquidityBufferPct);
+  const maxPerpsAllocationPct = readPortfolioManagerNumber(mandate.maxPerpsAllocationPct);
+  const maxPredictionMarketsAllocationPct = readPortfolioManagerNumber(
+    mandate.maxPredictionMarketsAllocationPct,
+  );
+  const maxNftAllocationPct = readPortfolioManagerNumber(mandate.maxNftAllocationPct);
+  const maxMemecoinAllocationPct = readPortfolioManagerNumber(mandate.maxMemecoinAllocationPct);
+  const maxRwaAllocationPct = readPortfolioManagerNumber(mandate.maxRwaAllocationPct);
+  const maxIlliquidAllocationPct = readPortfolioManagerNumber(mandate.maxIlliquidAllocationPct);
+
+  return {
+    betaExposureCapPct: betaExposureCapPct === undefined ? '' : String(betaExposureCapPct),
+    riskBudgetBps: riskBudgetBps === undefined ? '' : String(riskBudgetBps),
+    minimumCashUsd: minimumCashUsd === undefined ? '' : String(minimumCashUsd),
+    maxDrawdownPct: maxDrawdownPct === undefined ? '' : String(maxDrawdownPct),
+    targetVolatilityPct: targetVolatilityPct === undefined ? '' : String(targetVolatilityPct),
+    maxSingleAssetAllocationPct:
+      maxSingleAssetAllocationPct === undefined ? '' : String(maxSingleAssetAllocationPct),
+    rebalanceThresholdPct:
+      rebalanceThresholdPct === undefined ? '' : String(rebalanceThresholdPct),
+    maxLeverageRatio: maxLeverageRatio === undefined ? '' : String(maxLeverageRatio),
+    liquidityBufferPct: liquidityBufferPct === undefined ? '' : String(liquidityBufferPct),
+    maxPerpsAllocationPct:
+      maxPerpsAllocationPct === undefined ? '' : String(maxPerpsAllocationPct),
+    maxPredictionMarketsAllocationPct:
+      maxPredictionMarketsAllocationPct === undefined
+        ? ''
+        : String(maxPredictionMarketsAllocationPct),
+    maxNftAllocationPct:
+      maxNftAllocationPct === undefined ? '' : String(maxNftAllocationPct),
+    maxMemecoinAllocationPct:
+      maxMemecoinAllocationPct === undefined ? '' : String(maxMemecoinAllocationPct),
+    maxRwaAllocationPct:
+      maxRwaAllocationPct === undefined ? '' : String(maxRwaAllocationPct),
+    maxIlliquidAllocationPct:
+      maxIlliquidAllocationPct === undefined ? '' : String(maxIlliquidAllocationPct),
+  };
+}
+
+function buildPortfolioManagerMandateFromDraft(params: {
+  baseMandate: PortfolioManagerMandateInput;
+  selectedKeys: PortfolioManagerMandateNumericKey[];
+  numberInputs: Record<PortfolioManagerMandateNumericKey, string>;
+  requireCompleteValues: boolean;
+}): PortfolioManagerMandateInput {
+  const nextMandate: Record<string, unknown> = { ...params.baseMandate };
+  for (const key of PORTFOLIO_MANAGER_MANDATE_KEYS_TO_STRIP) {
+    delete nextMandate[key];
+  }
+
+  for (const key of params.selectedKeys) {
+    const option = readPortfolioManagerMandatePillOption(key);
+    const rawValue = params.numberInputs[key].trim();
+    const numericValue = Number(rawValue);
+    if (rawValue.length === 0 || !Number.isFinite(numericValue)) {
+      if (params.requireCompleteValues) {
+        throw new Error(`${option.label} must be a valid number.`);
+      }
+      continue;
+    }
+    nextMandate[key] = numericValue;
+  }
+
+  return nextMandate as PortfolioManagerMandateInput;
+}
+
+function PortfolioManagerMandateWorkbenchCard(props: {
+  view: PortfolioManagerMandateEditorView;
+  onSave?: (input: PortfolioManagerMandateEditorSubmitInput) => Promise<void> | void;
+  onDraftChange?: (managedMandate: PortfolioManagerMandateInput) => void;
+  submitLabel?: string;
+  chrome?: 'card' | 'plain';
+}) {
+  const [selectedKeys, setSelectedKeys] = useState<PortfolioManagerMandateNumericKey[]>(() =>
+    readSelectedPortfolioManagerMandateKeys(props.view.managedMandate),
+  );
+  const [numberInputs, setNumberInputs] = useState<
+    Record<PortfolioManagerMandateNumericKey, string>
+  >(() => buildPortfolioManagerMandateInputValues(props.view.managedMandate));
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setSelectedKeys(readSelectedPortfolioManagerMandateKeys(props.view.managedMandate));
+    setNumberInputs(buildPortfolioManagerMandateInputValues(props.view.managedMandate));
+    setSubmitError(null);
+  }, [
+    props.view.mandateRef,
+    props.view.ownerAgentId,
+    props.view.targetAgentId,
+    props.view.targetAgentKey,
+    props.view.targetAgentRouteId,
+  ]);
+
+  const emitDraftChange = (
+    nextSelectedKeys: PortfolioManagerMandateNumericKey[],
+    nextNumberInputs: Record<PortfolioManagerMandateNumericKey, string>,
+  ) => {
+    props.onDraftChange?.(
+      buildPortfolioManagerMandateFromDraft({
+        baseMandate: props.view.managedMandate,
+        selectedKeys: nextSelectedKeys,
+        numberInputs: nextNumberInputs,
+        requireCompleteValues: false,
+      }),
+    );
+  };
+
+  const handleTogglePill = (key: PortfolioManagerMandateNumericKey) => {
+    const isSelected = selectedKeys.includes(key);
+    const nextSelectedKeys = isSelected
+      ? selectedKeys.filter((selectedKey) => selectedKey !== key)
+      : PORTFOLIO_MANAGER_MANDATE_PILL_OPTIONS
+          .map((option) => option.key)
+          .filter((optionKey) => optionKey === key || selectedKeys.includes(optionKey));
+    setSelectedKeys(nextSelectedKeys);
+    setSubmitError(null);
+    if (isSelected) {
+      emitDraftChange(nextSelectedKeys, numberInputs);
+    }
+  };
+
+  const handleInputChange = (key: PortfolioManagerMandateNumericKey, value: string) => {
+    const nextNumberInputs = {
+      ...numberInputs,
+      [key]: value,
+    };
+    setNumberInputs(nextNumberInputs);
+    setSubmitError(null);
+    emitDraftChange(selectedKeys, nextNumberInputs);
+  };
+
+  const handleSave = async () => {
+    if (!props.onSave) {
+      return;
+    }
+
+    for (const key of selectedKeys) {
+      const option = readPortfolioManagerMandatePillOption(key);
+      const rawValue = numberInputs[key].trim();
+      const value = Number(rawValue);
+      if (rawValue.length === 0 || !Number.isFinite(value)) {
+        setSubmitError(`${option.label} must be a valid number.`);
+        return;
+      }
+    }
+
+    setIsSaving(true);
+    setSubmitError(null);
+    try {
+      await props.onSave({
+        ownerAgentId: props.view.ownerAgentId,
+        targetAgentId: props.view.targetAgentId,
+        targetAgentRouteId: props.view.targetAgentRouteId,
+        managedMandate: buildPortfolioManagerMandateFromDraft({
+          baseMandate: props.view.managedMandate,
+          selectedKeys,
+          numberInputs,
+          requireCompleteValues: true,
+        }),
+      });
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Portfolio mandate update failed.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const rootClassName =
+    props.chrome === 'plain'
+      ? 'py-1'
+      : 'rounded-[22px] border border-[#eadac7] bg-white/80 px-3.5 py-3 shadow-[0_14px_28px_rgba(148,111,79,0.09)]';
+
+  return (
+    <div className={rootClassName}>
+      <div className="space-y-3">
+        <div>
+          <div className="text-[0.88rem] font-semibold text-[#503826]">Portfolio manager mandate</div>
+          <div className="mt-1 text-xs text-[#7c6757]">
+            Select the portfolio-wide constraints you want the PM to enforce.
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2" aria-label="Portfolio manager mandate options">
+          {PORTFOLIO_MANAGER_MANDATE_PILL_OPTIONS.map((option) => {
+            const selected = selectedKeys.includes(option.key);
+            return (
+              <button
+                key={option.key}
+                type="button"
+                aria-pressed={selected}
+                onClick={() => handleTogglePill(option.key)}
+                disabled={isSaving}
+                className={`rounded-full border px-3.5 py-2 text-xs font-semibold transition-all active:scale-[0.98] disabled:opacity-60 ${
+                  selected
+                    ? 'border-[#fd6731] bg-[#fff1e7] text-[#6a3216] shadow-[inset_0_1px_0_rgba(255,255,255,0.76),0_10px_24px_rgba(253,103,49,0.13)]'
+                    : 'border-[#eadac7] bg-white/70 text-[#7c6757] hover:border-[#d8bda3] hover:bg-[#fffaf2]'
+                }`}
+              >
+                {option.shortLabel}
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedKeys.length === 0 ? (
+          <div className="rounded-[18px] border border-dashed border-[#dfcab4] bg-[#fffaf2]/70 px-4 py-5 text-sm text-[#7c6757]">
+            No PM constraints selected yet. Pick one or more policy pills above to add numeric
+            mandate inputs.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {selectedKeys.map((key) => {
+              const option = readPortfolioManagerMandatePillOption(key);
+              return (
+                <label
+                  key={key}
+                  className="grid gap-2 rounded-[18px] border border-[#eadac7] bg-[#fffdf8] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]"
+                >
+                  <span className="flex items-start justify-between gap-3">
+                    <span>
+                      <span className="block text-[11px] font-medium uppercase tracking-[0.14em] text-[#9b826f]">
+                        {option.label}
+                      </span>
+                      <span className="mt-1 block text-xs text-[#7c6757]">{option.helper}</span>
+                    </span>
+                    <span className="rounded-full border border-[#eadac7] bg-[#fff7ef] px-2 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#7c6757]">
+                      {option.unit}
+                    </span>
+                  </span>
+                  <input
+                    name={option.inputName}
+                    aria-label={option.ariaLabel}
+                    type="number"
+                    className={`${DETAIL_INPUT_CLASS} font-mono`}
+                    value={numberInputs[key]}
+                    placeholder={option.placeholder}
+                    onChange={(event) => handleInputChange(key, event.target.value)}
+                    disabled={isSaving}
+                  />
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        {submitError ? <p className="text-xs text-[#8a2f2f]">{submitError}</p> : null}
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-5 py-2`}
+        >
+          {isSaving ? 'Saving...' : props.submitLabel ?? 'Save portfolio mandate'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PortfolioManagerMandateWorkbenchShell(props: {
+  variant: 'portfolio-manager' | 'managed-lending';
   children: ReactNode;
 }) {
-  const lendingAgentConfig = getAgentConfig('agent-ember-lending');
-  const lendingAgentHref = `/hire-agents/${lendingAgentConfig.id}`;
+  const shellAgentConfig = getAgentConfig(
+    props.variant === 'portfolio-manager' ? 'agent-portfolio-manager' : 'agent-ember-lending',
+  );
+  const shellAgentHref = `/hire-agents/${shellAgentConfig.id}`;
+  const shellLabel =
+    props.variant === 'portfolio-manager'
+      ? {
+          aria: 'Open Portfolio Manager',
+          eyebrow: 'PM',
+          title: 'Portfolio',
+          iconFallback: 'PM',
+        }
+      : {
+          aria: 'Open Ember Lending',
+          eyebrow: 'Aave',
+          title: 'Lending',
+          iconFallback: 'EL',
+        };
+  const railClassName =
+    props.variant === 'portfolio-manager'
+      ? 'from-[#fff4e9] to-[#f3dfca] text-[#6a3d20]'
+      : 'from-[#eef8f1] to-[#dceee2] text-[#315f3d]';
 
   return (
     <div className="flex items-stretch gap-4">
       <Link
-        href={lendingAgentHref}
-        aria-label="Open Ember Lending"
-        className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-2 self-stretch border-r border-[#eadac7] pr-4 text-center transition-colors hover:text-[#2f2118]"
+        href={shellAgentHref}
+        aria-label={shellLabel.aria}
+        className="flex w-[92px] shrink-0 flex-col items-center justify-center gap-2 self-stretch border-r border-[#eadac7] pr-4 text-center transition-colors hover:text-[#2f2118] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#fd6731]/30"
       >
         <div
-          className="mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-[#f4ece1]"
-          style={lendingAgentConfig.imageUrl && lendingAgentConfig.avatarBg
-            ? { background: lendingAgentConfig.avatarBg }
+          className={`mx-auto flex h-12 w-12 items-center justify-center overflow-hidden rounded-[18px] bg-gradient-to-br shadow-[inset_0_1px_0_rgba(255,255,255,0.72),0_10px_24px_rgba(99,70,43,0.10)] ${railClassName}`}
+          style={shellAgentConfig.imageUrl && shellAgentConfig.avatarBg
+            ? { background: shellAgentConfig.avatarBg }
             : undefined}
         >
-          {lendingAgentConfig.imageUrl ? (
+          {shellAgentConfig.imageUrl ? (
             <img
-              src={lendingAgentConfig.imageUrl}
-              alt="Ember Lending"
+              src={shellAgentConfig.imageUrl}
+              alt={shellLabel.aria.replace('Open ', '')}
               className="h-8 w-8 object-contain"
             />
           ) : (
-            <span className="text-lg" aria-hidden="true">
-              {lendingAgentConfig.avatar}
+            <span className="text-xs font-semibold" aria-hidden="true">
+              {shellAgentConfig.avatar ?? shellLabel.iconFallback}
             </span>
           )}
         </div>
         <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#9b826f]">
-          Aave
+          {shellLabel.eyebrow}
         </div>
         <div className="text-[11px] font-medium leading-[1.1] text-[#503826]">
-          Lending
+          {shellLabel.title}
         </div>
       </Link>
       <div className="min-w-0 flex-1 self-stretch">{props.children}</div>
@@ -864,6 +1421,10 @@ export function AgentDetailPage({
     () => readManagedMandateEditorView(domainProjection),
     [domainProjection],
   );
+  const portfolioManagerMandateEditorView = useMemo(
+    () => readPortfolioManagerMandateEditorView(domainProjection),
+    [domainProjection],
+  );
   const emberLendingRuntimeView = useMemo(
     () =>
       agentId === 'agent-ember-lending'
@@ -878,8 +1439,15 @@ export function AgentDetailPage({
     onboardingStatus: onboardingFlow?.status,
   });
   const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
-  const portfolioManagedContextVisible =
-    managedRuntimePhaseIsActive && (!isPortfolioAgent || !isOnboardingActive);
+  const managedOnboardingRuntimeActive = lifecycleState?.phase === 'onboarding';
+  const portfolioManagerOnboardingComplete = onboardingFlow?.status === 'completed';
+  const portfolioManagedContextVisible = isPortfolioAgent
+    ? managedRuntimePhaseIsActive && portfolioManagerOnboardingComplete
+    : managedRuntimePhaseIsActive && !isOnboardingActive;
+  const visiblePortfolioManagerMandateEditorView =
+    portfolioManagedContextVisible && isPortfolioAgent
+      ? portfolioManagerMandateEditorView
+      : null;
   const visibleManagedMandateEditorView = portfolioManagedContextVisible
     ? managedMandateEditorView
     : null;
@@ -1232,27 +1800,34 @@ export function AgentDetailPage({
       onSendChatMessage={onSendChatMessage}
     />
   ) : null;
-  const managedAgentContextCards = visibleManagedMandateEditorView ? (
+  const managedAgentContextCards = visiblePortfolioManagerMandateEditorView || visibleManagedMandateEditorView ? (
     <div className={isPortfolioAgent ? 'mt-6 border-t border-[#eadac7] pt-5' : 'mt-6'}>
-      {isPortfolioAgent ? (
-        <PortfolioManagerMandateWorkbenchShell>
-          <ManagedMandateEditorCard
-            view={visibleManagedMandateEditorView}
-            availableTokenSymbols={managedMandateAvailableTokenSymbols}
-            tokenIconBySymbol={tokenIconBySymbol}
-            onSave={onManagedMandateSave}
-            chrome="plain"
-          />
-        </PortfolioManagerMandateWorkbenchShell>
-      ) : (
-        <ManagedMandateEditorCard
-          view={visibleManagedMandateEditorView}
-          availableTokenSymbols={managedMandateAvailableTokenSymbols}
-          tokenIconBySymbol={tokenIconBySymbol}
-          onSave={onManagedMandateSave}
-          chrome="plain"
-        />
-      )}
+      {visiblePortfolioManagerMandateEditorView ? (
+        <div className={`${DETAIL_INSET_CLASS} p-4`}>
+          <PortfolioManagerMandateWorkbenchShell variant="portfolio-manager">
+            <PortfolioManagerMandateWorkbenchCard
+              view={visiblePortfolioManagerMandateEditorView}
+              onSave={onManagedMandateSave}
+              submitLabel="Save PM mandate"
+              chrome="plain"
+            />
+          </PortfolioManagerMandateWorkbenchShell>
+        </div>
+      ) : null}
+      {visibleManagedMandateEditorView ? (
+        <div className={`${DETAIL_INSET_CLASS} p-4 ${visiblePortfolioManagerMandateEditorView ? 'mt-4' : ''}`}>
+          <PortfolioManagerMandateWorkbenchShell variant="managed-lending">
+            <ManagedMandateEditorCard
+              view={visibleManagedMandateEditorView}
+              availableTokenSymbols={managedMandateAvailableTokenSymbols}
+              tokenIconBySymbol={tokenIconBySymbol}
+              onSave={onManagedMandateSave}
+              submitLabel="Save lending mandate"
+              chrome="plain"
+            />
+          </PortfolioManagerMandateWorkbenchShell>
+        </div>
+      ) : null}
     </div>
   ) : null;
   const subagentWalletBar = emberLendingRuntimeView?.walletAddress ? (
@@ -2700,6 +3275,9 @@ function AgentBlockersTab({
     });
   };
 
+  const [portfolioManagerSetupMandate, setPortfolioManagerSetupMandate] =
+    useState<PortfolioManagerMandateInput>(() => DEFAULT_PORTFOLIO_MANAGER_MANDATE_INPUT);
+
   const portfolioManagerSetupManagedMandate = useMemo<ManagedMandateInput>(
     () => ({
       lending_policy: buildManagedLendingPolicy({
@@ -2718,6 +3296,7 @@ function AgentBlockersTab({
 
   const submitPortfolioManagerSetupMandate = async (
     managedMandate: ManagedMandateInput,
+    portfolioManagerMandate: PortfolioManagerMandateInput = portfolioManagerSetupMandate,
   ) => {
     setError(null);
 
@@ -2746,6 +3325,7 @@ function AgentBlockersTab({
         approved: true,
         riskLevel: 'medium',
       },
+      portfolioManagerMandate,
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',
@@ -3070,17 +3650,6 @@ function AgentBlockersTab({
         </div>
       )}
 
-      {delegationsBypassEnabled && (
-        <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
-          <div className="text-yellow-300 text-sm font-medium mb-1">Wallet bypass enabled</div>
-          <p className="text-yellow-200 text-xs">
-            `DELEGATIONS_BYPASS=true` is set. When no wallet is connected, the UI will use
-            {` ${walletBypassAddress} `}for onboarding. Run the agent with
-            {` ${delegationsBypassEnv}=true `}to skip delegation signing.
-          </p>
-        </div>
-      )}
-
       <div>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
           {/* Form Area */}
@@ -3151,23 +3720,31 @@ function AgentBlockersTab({
 
                 <div className="space-y-4 mb-6">
                   <div className={`${DETAIL_INSET_CLASS} p-4`}>
-                    <div className="mb-2 text-sm font-medium text-[#503826]">Root delegation setup</div>
-                    <p className="text-xs text-[#7c6757]">
-                      Shared Ember will observe your connected wallet directly during onboarding and derive
-                      the initial reserve state from that live wallet observation.
+                    <div className="mb-2 text-sm font-medium text-[#503826]">Portfolio manager mandate</div>
+                    <p className="mb-4 text-xs text-[#7c6757]">
+                      Tune the portfolio-wide PM mandate before approving managed lending control.
                     </p>
-                    <p className="mt-3 text-xs text-[#937c69]">
-                      Wallet: {connectedWalletAddress ? `${connectedWalletAddress.slice(0, 10)}…` : 'Not connected'}
-                    </p>
-                  </div>
-
-                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
-                    <div className="mb-2 text-sm font-medium text-[#503826]">Portfolio mandate</div>
-                    <p className="text-xs text-[#7c6757]">
-                      Approve the preloaded medium-risk portfolio mandate so the portfolio manager can
-                      coordinate managed subagents without overriding your rooted wallet controls.
-                    </p>
-                    <p className="mt-3 text-xs text-[#937c69]">Risk level: Medium</p>
+                    <PortfolioManagerMandateWorkbenchShell variant="portfolio-manager">
+                      <PortfolioManagerMandateWorkbenchCard
+                        view={{
+                          ownerAgentId: agentId,
+                          targetAgentId: 'agent-portfolio-manager',
+                          targetAgentRouteId: 'agent-portfolio-manager',
+                          targetAgentKey: 'portfolio-manager-primary',
+                          title: 'Portfolio Manager Mandate',
+                          mandateRef: null,
+                          managedMandate: portfolioManagerSetupMandate,
+                        }}
+                        chrome="plain"
+                        submitLabel="Save PM mandate"
+                        onDraftChange={setPortfolioManagerSetupMandate}
+                        onSave={(input) =>
+                          setPortfolioManagerSetupMandate(
+                            input.managedMandate as PortfolioManagerMandateInput,
+                          )
+                        }
+                      />
+                    </PortfolioManagerMandateWorkbenchShell>
                   </div>
 
                   <div className={`${DETAIL_INSET_CLASS} p-4`}>
@@ -3175,7 +3752,7 @@ function AgentBlockersTab({
                     <p className="mb-4 text-xs text-[#7c6757]">
                       Configure the first lending mandate inline before handing control to the portfolio manager.
                     </p>
-                    <PortfolioManagerMandateWorkbenchShell>
+                    <PortfolioManagerMandateWorkbenchShell variant="managed-lending">
                       <ManagedMandateWorkbenchCard
                         view={{
                           ownerAgentId: agentId,
@@ -3187,7 +3764,7 @@ function AgentBlockersTab({
                         availableTokenSymbols={availableTokenSymbols}
                         tokenIconBySymbolOverride={tokenIconBySymbol}
                         chrome="plain"
-                        submitLabel="Approve & Continue"
+                        submitLabel="Continue onboarding"
                         onSave={(input) => submitPortfolioManagerSetupMandate(input.managedMandate)}
                       />
                     </PortfolioManagerMandateWorkbenchShell>
@@ -3424,31 +4001,16 @@ function AgentBlockersTab({
               </form>
             ) : showDelegationSigningForm ? (
               <div>
-                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Review & Sign Delegations</h3>
-                {activeInterrupt?.message && (
-                  <p className="mb-6 text-sm text-[#7c6757]">{activeInterrupt.message}</p>
-                )}
+                <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Authorize portfolio manager</h3>
 
-                <div className="space-y-4 mb-6">
-                  {(activeInterrupt as unknown as { warnings?: string[] }).warnings?.length ? (
-                    <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/30 p-4">
-                      <div className="text-yellow-300 text-sm font-medium mb-2">Warnings</div>
-                      <ul className="space-y-1 text-yellow-200 text-xs">
-                        {(activeInterrupt as unknown as { warnings: string[] }).warnings.map((w, index) => (
-                          <li key={`${index}-${w}`}>{w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  <div className={`${DETAIL_INSET_CLASS} p-4`}>
-                    <div className="mb-2 text-sm font-medium text-[#503826]">What you are authorizing</div>
-                    <ul className="space-y-1 text-xs text-[#7c6757]">
-                      {(activeInterrupt as unknown as { descriptions?: string[] }).descriptions?.map((d, index) => (
-                        <li key={`${index}-${d}`}>{d}</li>
-                      ))}
-                    </ul>
-                  </div>
+                <div className={`${DETAIL_INSET_CLASS} mb-6 p-4`}>
+                  <p className="text-sm font-medium text-[#503826]">
+                    Sign once to let this portfolio manager operate the mandates you approved.
+                  </p>
+                  <p className="mt-2 text-xs leading-5 text-[#7c6757]">
+                    This authorizes the portfolio manager to coordinate managed agents through your rooted
+                    delegation. Only continue if you trust this session and the mandate settings shown above.
+                  </p>
                 </div>
 
                 {error && <p className="text-red-400 text-sm mb-4">{error}</p>}

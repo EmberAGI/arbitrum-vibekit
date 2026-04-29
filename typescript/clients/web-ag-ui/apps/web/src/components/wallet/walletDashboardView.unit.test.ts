@@ -69,6 +69,7 @@ describe('wallet dashboard view', () => {
     expect(view.topbar.benchmarkAssetLabel).toBe('USDC');
     expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
       'Gross exposure',
+      'Total leverage',
       'Net worth',
       'Unmanaged',
     ]);
@@ -78,6 +79,10 @@ describe('wallet dashboard view', () => {
         value: '$2,800.00',
         positiveAssetsValue: '$2,700.00',
         liabilitiesValue: '$100.00',
+      },
+      {
+        label: 'Total leverage',
+        value: '1.08x',
       },
       {
         label: 'Net worth',
@@ -263,10 +268,15 @@ describe('wallet dashboard view', () => {
     expect(view.summary.activeLaneCount).toBe(1);
     expect(view.topbar.metrics.map((metric) => metric.label)).toEqual([
       'Gross exposure',
+      'Total leverage',
       'Net worth',
       'Unmanaged',
     ]);
-    expect(view.topbar.metrics[2]).toMatchObject({
+    expect(view.topbar.metrics[1]).toMatchObject({
+      label: 'Total leverage',
+      value: '1.13x',
+    });
+    expect(view.topbar.metrics[3]).toMatchObject({
       label: 'Unmanaged',
       value: '$35.00',
     });
