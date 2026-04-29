@@ -87,6 +87,11 @@ describe('AgentDetailPage managed mandate editor', () => {
           lifecycleState: {
             phase: 'active',
           } as never,
+          onboardingFlow: {
+            status: 'completed',
+            revision: 4,
+            steps: [],
+          } as never,
           domainProjection: {
             portfolioManagerMandateEditor: {
               ownerAgentId: 'agent-portfolio-manager',
@@ -107,10 +112,10 @@ describe('AgentDetailPage managed mandate editor', () => {
     });
 
     const lendingSaveButton = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Save managed mandate'),
+      button.textContent?.includes('Save lending mandate'),
     );
     const portfolioManagerSaveButton = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Save portfolio mandate'),
+      button.textContent?.includes('Save PM mandate'),
     );
 
     expect(lendingSaveButton).toBeUndefined();
@@ -213,7 +218,7 @@ describe('AgentDetailPage managed mandate editor', () => {
       'button[aria-label="Edit minimum health factor"]',
     ) as HTMLButtonElement | null;
     const submitButton = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Save managed mandate'),
+      button.textContent?.includes('Save lending mandate'),
     );
 
     expect(editCollateralPolicyButton).toBeDefined();
@@ -322,6 +327,11 @@ describe('AgentDetailPage managed mandate editor', () => {
           lifecycleState: {
             phase: 'active',
           } as never,
+          onboardingFlow: {
+            status: 'completed',
+            revision: 4,
+            steps: [],
+          } as never,
           domainProjection: {
             portfolioManagerMandateEditor: {
               ownerAgentId: 'agent-portfolio-manager',
@@ -352,7 +362,7 @@ describe('AgentDetailPage managed mandate editor', () => {
       'input[name="portfolio-manager-mandate-minimum-cash-usd"]',
     ) as HTMLInputElement | null;
     const submitButton = [...container.querySelectorAll('button')].find((button) =>
-      button.textContent?.includes('Save portfolio mandate'),
+      button.textContent?.includes('Save PM mandate'),
     );
 
     expect(betaExposureInput).toBeDefined();
@@ -389,7 +399,7 @@ describe('AgentDetailPage managed mandate editor', () => {
     });
   });
 
-  it('renders the portfolio manager mandate editor while portfolio manager onboarding is active', async () => {
+  it('hides the portfolio manager mandate editor while portfolio manager onboarding is active', async () => {
     const root = createRoot(container);
 
     await act(async () => {
@@ -451,11 +461,11 @@ describe('AgentDetailPage managed mandate editor', () => {
       'input[name="portfolio-manager-mandate-minimum-cash-usd"]',
     ) as HTMLInputElement | null;
 
-    expect(betaExposureInput).toBeDefined();
-    expect(riskBudgetInput).toBeDefined();
-    expect(minimumCashInput).toBeDefined();
-    expect(container.textContent).toContain('Portfolio manager mandate');
-    expect(container.textContent).toContain('Save portfolio mandate');
+    expect(betaExposureInput).toBeNull();
+    expect(riskBudgetInput).toBeNull();
+    expect(minimumCashInput).toBeNull();
+    expect(container.textContent).not.toContain('Portfolio manager mandate');
+    expect(container.textContent).not.toContain('Save PM mandate');
 
     await act(async () => {
       root.unmount();

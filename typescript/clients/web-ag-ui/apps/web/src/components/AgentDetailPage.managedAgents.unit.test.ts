@@ -175,7 +175,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html).toContain('Edit collateral policy');
     expect(html).toContain('Edit allowed borrow assets');
     expect(html).toContain('>Manage<');
-    expect(html).toContain('Save managed mandate');
+    expect(html).toContain('Save lending mandate');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Managed lending lane');
     expect(html).not.toContain('View lending agent');
@@ -201,7 +201,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     );
     expect(html.indexOf('Ember Lending')).toBeLessThan(html.indexOf('Ember AI Team'));
     expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
-    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save managed mandate'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save lending mandate'));
   });
 
   it('keeps lending chat visible while the thread is input-required', () => {
@@ -311,7 +311,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
       }),
     });
 
-    expect(html).toContain('Save managed mandate');
+    expect(html).toContain('Save lending mandate');
     expect(html).not.toContain('Reservation');
     expect(html).not.toContain('lending.supply');
     expect(html).not.toContain(longReservationId);
@@ -363,20 +363,25 @@ describe('AgentDetailPage managed-agent affordances', () => {
         lifecycleState: {
           phase: 'active',
         } as never,
+        onboardingFlow: {
+          status: 'completed',
+          revision: 4,
+          steps: [],
+        } as never,
         domainProjection: createPortfolioManagerMandateEditorProjection(),
       }),
     );
 
     expect(html).toContain('Portfolio manager mandate');
-    expect(html).toContain('Beta exposure cap (%)');
-    expect(html).toContain('Risk budget (bps)');
-    expect(html).toContain('Minimum cash reserve (USD)');
+    expect(html).toContain('Beta exposure cap');
+    expect(html).toContain('Risk budget');
+    expect(html).toContain('Minimum cash reserve');
     expect(html).toContain('Send message');
     expect(html).not.toContain('Settings and policies');
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Metrics\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Activity\\s*</button>'));
     expect(html).not.toMatch(new RegExp('<button[^>]*>\\s*Chat\\s*</button>'));
-    expect(html).toContain('Save portfolio mandate');
+    expect(html).toContain('Save PM mandate');
     expect(html).not.toContain('Managed lending lane');
     expect(html).not.toContain('View lending agent');
     expect(html).not.toContain('lending.supply');
@@ -384,8 +389,8 @@ describe('AgentDetailPage managed-agent affordances', () => {
     expect(html.indexOf('Ember AI Team')).toBeLessThan(html.indexOf('desc'));
     expect(html).not.toContain('Edit collateral policy');
     expect(html).not.toContain('Edit allowed borrow assets');
-    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save portfolio mandate'));
-    expect(html.indexOf('Save portfolio mandate')).toBeLessThan(html.indexOf('Send message'));
+    expect(html.indexOf('desc')).toBeLessThan(html.indexOf('Save PM mandate'));
+    expect(html.indexOf('Save PM mandate')).toBeLessThan(html.indexOf('Send message'));
   });
 
   it('keeps managed lending lane details hidden while portfolio-manager onboarding is in progress', () => {
@@ -423,7 +428,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     );
 
     expect(html).not.toContain('Managed lending lane');
-    expect(html).not.toContain('Save managed mandate');
+    expect(html).not.toContain('Save lending mandate');
     expect(html).not.toContain('/hire-agents/agent-ember-lending');
   });
 
@@ -462,7 +467,7 @@ describe('AgentDetailPage managed-agent affordances', () => {
     );
 
     expect(html).not.toContain('Managed lending lane');
-    expect(html).not.toContain('Save managed mandate');
+    expect(html).not.toContain('Save lending mandate');
     expect(html).not.toContain('/hire-agents/agent-ember-lending');
   });
 });

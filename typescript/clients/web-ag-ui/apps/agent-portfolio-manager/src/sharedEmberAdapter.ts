@@ -2444,7 +2444,7 @@ function readManagedMandateEditorProjection(value: unknown): ManagedMandateEdito
   const targetAgentId = readString(editor['targetAgentId']);
   const targetAgentKey = readString(editor['targetAgentKey']);
   const mandateRef = readString(editor['mandateRef']);
-  const managedMandate = isRecord(editor['managedMandate']) ? editor['managedMandate'] : null;
+  const managedMandate = readManagedMandate(editor['managedMandate']);
   if (
     targetAgentId !== FIRST_MANAGED_AGENT_TYPE ||
     targetAgentKey === null ||
@@ -2569,8 +2569,8 @@ function readPortfolioManagerMandateEditorProjection(
 
   if (
     targetAgentId !== PORTFOLIO_MANAGER_MANDATE_ROUTE_ID ||
-    targetAgentKey === null ||
-    mandateRef === null ||
+    targetAgentKey !== PORTFOLIO_MANAGER_MANDATE_KEY ||
+    mandateRef !== PORTFOLIO_MANAGER_MANDATE_REF ||
     managedMandate === null
   ) {
     return null;

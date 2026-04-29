@@ -591,9 +591,13 @@ function buildLegacyWalletDashboardView(portfolio: WalletPortfolioView): WalletD
           liabilitiesValue: formatUsd(liabilitiesUsd),
         },
         {
+          label: 'Total leverage',
+          value: formatLeverage(grossExposureUsd, netWorthUsd),
+        },
+        {
           label: 'Net worth',
           value: formatUsd(netWorthUsd),
-      },
+        },
       {
         label: 'Unmanaged',
         value: formatUsd(cashUsd),

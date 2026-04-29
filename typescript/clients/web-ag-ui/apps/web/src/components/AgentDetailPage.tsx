@@ -1440,8 +1440,9 @@ export function AgentDetailPage({
   });
   const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
   const managedOnboardingRuntimeActive = lifecycleState?.phase === 'onboarding';
+  const portfolioManagerOnboardingComplete = onboardingFlow?.status === 'completed';
   const portfolioManagedContextVisible = isPortfolioAgent
-    ? managedRuntimePhaseIsActive
+    ? managedRuntimePhaseIsActive && portfolioManagerOnboardingComplete
     : managedRuntimePhaseIsActive && !isOnboardingActive;
   const visiblePortfolioManagerMandateEditorView =
     portfolioManagedContextVisible && isPortfolioAgent
