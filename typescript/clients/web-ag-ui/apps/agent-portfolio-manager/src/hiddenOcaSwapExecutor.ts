@@ -831,7 +831,7 @@ function buildCreateTransactionRequest(input: {
       request: {
         control_path: HIDDEN_OCA_EXECUTOR_CONTROL_PATH,
         asset: input.fromToken.symbol,
-        protocol_system: 'onchain-actions',
+        protocol_system: 'uniswap',
         network: input.network,
         quantity: {
           kind: 'exact',
@@ -1309,6 +1309,7 @@ async function runExecutionFlow(input: {
 }): Promise<HiddenOcaSpotSwapResult> {
   let revision = input.currentRevision;
   let attempt = 1;
+  let reservationConflictHandling = input.request.reservationConflictHandling;
   const committedEventIds: string[] = [];
 
   while (attempt <= MAX_EXECUTION_REQUEST_ATTEMPTS) {
@@ -1323,7 +1324,7 @@ async function runExecutionFlow(input: {
           expectedRevision,
           transactionPlanId: input.transactionPlanId,
           attempt,
-          reservationConflictHandling: input.request.reservationConflictHandling,
+          reservationConflictHandling,
         }),
     });
     revision = readResultRevision(requestResponse);

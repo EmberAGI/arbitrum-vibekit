@@ -18,6 +18,7 @@ export interface AgentCommandScheduler<TAgent extends SchedulableAgent> {
   dispatchCustom(params: {
     command: string;
     allowPreemptive?: boolean;
+    releaseOwnershipOnResolve?: boolean;
     run: (agent: TAgent) => Promise<unknown>;
   }): boolean;
   handleRunTerminal(): void;

@@ -1081,9 +1081,13 @@ export async function startWorkspaceAgentServer(input: {
   label: string;
   basePath?: string;
   startupProbePath?: string;
+  logFilePath?: string;
 }): Promise<StartedChildProcessServer> {
   const port = await reserveFreePort();
   const logs: string[] = [];
+  const logStream = input.logFilePath
+    ? fs.createWriteStream(input.logFilePath, { flags: 'a' })
+    : null;
   const child = spawn(process.execPath, ['./node_modules/tsx/dist/cli.mjs', 'src/server.ts'], {
     cwd: input.cwd,
     env: {
@@ -1097,7 +1101,9 @@ export async function startWorkspaceAgentServer(input: {
   });
 
   const appendLog = (prefix: string, chunk: Buffer | string) => {
-    for (const line of String(chunk).split(/\r?\n/u)) {
+    const rendered = String(chunk);
+    logStream?.write(`${prefix}${rendered}`);
+    for (const line of rendered.split(/\r?\n/u)) {
       const trimmed = line.trim();
       if (trimmed.length === 0) {
         continue;
@@ -1203,6 +1209,13 @@ export async function startWorkspaceAgentServer(input: {
           clearTimeout(timer);
           resolve();
         });
+      });
+      await new Promise<void>((resolve) => {
+        if (!logStream) {
+          resolve();
+          return;
+        }
+        logStream.end(() => resolve());
       });
     },
   };

@@ -150,7 +150,9 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
   };
   const selectedHasLoadedView = agent.hasLoadedView;
   const selectedIsHired = agent.isHired;
-  const isRestoringState = Boolean(agent.threadId && !agent.hasAuthoritativeState);
+  const isRestoringState = Boolean(
+    agent.threadId && !agent.hasAuthoritativeState && !onboardingOwnerAgentId,
+  );
   const projectionHydrationKeyRef = useRef<string | null>(null);
 
   const handleBack = () => {
@@ -458,6 +460,7 @@ export default function AgentDetailRoute({ params }: { params: Promise<{ id: str
       hasLoadedView={selectedHasLoadedView}
       isFiring={agent.isFiring}
       isSyncing={agent.isSyncing}
+      isRunInFlight={agent.isRunInFlight}
       uiError={agent.uiError}
       onClearUiError={agent.clearUiError}
       onHire={handleHire}

@@ -12,6 +12,28 @@ const handler = createPortfolioManagerAgUiHandler({
   service,
 });
 
+function isBenignConnectionError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    ('code' in error || 'cause' in error) &&
+    (String((error as { code?: unknown }).code ?? '') === 'ECONNRESET' ||
+      String((error as { cause?: { code?: unknown } }).cause?.code ?? '') === 'ECONNRESET' ||
+      String((error as { code?: unknown }).code ?? '') === 'ERR_STREAM_PREMATURE_CLOSE')
+  );
+}
+
+function logProcessError(label: string, error: unknown): void {
+  if (isBenignConnectionError(error)) {
+    console.warn(`agent-portfolio-manager ${label}: client connection closed early`);
+    return;
+  }
+
+  console.error(`agent-portfolio-manager ${label}`, error);
+}
+
+process.on('unhandledRejection', (error) => logProcessError('unhandled rejection', error));
+process.on('uncaughtException', (error) => logProcessError('uncaught exception', error));
+
 async function readRequestBody(request: http.IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
 
@@ -62,7 +84,31 @@ async function writeNodeResponse(response: Response, target: http.ServerResponse
   }
 }
 
+function writeErrorResponse(target: http.ServerResponse, error: unknown): void {
+  if (target.writableEnded) {
+    return;
+  }
+
+  if (target.headersSent) {
+    target.destroy(error instanceof Error ? error : undefined);
+    return;
+  }
+
+  target.writeHead(502, {
+    'content-type': 'application/json; charset=utf-8',
+  });
+  target.end(
+    JSON.stringify({
+      error: 'agent-portfolio-manager request failed',
+      message: error instanceof Error ? error.message : 'Unknown error.',
+    }),
+  );
+}
+
 const server = http.createServer(async (request, response) => {
+  request.on('error', (error) => logProcessError('request error', error));
+  response.on('error', (error) => logProcessError('response error', error));
+
   try {
     const origin = `http://${request.headers.host ?? `127.0.0.1:${port}`}`;
     const url = new URL(request.url ?? '/', origin);
@@ -80,15 +126,7 @@ const server = http.createServer(async (request, response) => {
     await writeNodeResponse(webResponse, response);
   } catch (error) {
     console.error('agent-portfolio-manager request failed', error);
-    response.writeHead(502, {
-      'content-type': 'application/json; charset=utf-8',
-    });
-    response.end(
-      JSON.stringify({
-        error: 'agent-portfolio-manager request failed',
-        message: error instanceof Error ? error.message : 'Unknown error.',
-      }),
-    );
+    writeErrorResponse(response, error);
   }
 });
 

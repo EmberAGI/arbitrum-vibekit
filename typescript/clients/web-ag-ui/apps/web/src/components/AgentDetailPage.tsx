@@ -331,6 +331,7 @@ interface AgentDetailPageProps {
   hasLoadedView: boolean;
   isFiring?: boolean;
   isSyncing?: boolean;
+  isRunInFlight?: boolean;
   uiError?: string | null;
   onClearUiError?: () => void;
   onHire: () => void;
@@ -471,7 +472,90 @@ function asFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function parseJsonRecord(value: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return asRecord(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function readTextParts(value: unknown): string | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const text = value
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return null;
+      }
+      return readString(record.text);
+    })
+    .filter((part): part is string => part !== null)
+    .join('\n')
+    .trim();
+
+  return text.length > 0 ? text : null;
+}
+
+function readToolMessageText(content: unknown): string {
+  if (typeof content === 'string') {
+    const parsed = parseJsonRecord(content);
+    if (parsed) {
+      return (
+        readTextParts(parsed.content) ??
+        readString(parsed.content) ??
+        readString(parsed.text) ??
+        readString(parsed.message) ??
+        ''
+      );
+    }
+    return content;
+  }
+
+  const record = asRecord(content);
+  if (!record) {
+    return '';
+  }
+
+  return (
+    readTextParts(record.content) ??
+    readString(record.content) ??
+    readString(record.text) ??
+    readString(record.message) ??
+    ''
+  );
+}
+
+function isInternalResumePayloadMessage(message: Message): boolean {
+  if (message.role !== 'user' || typeof message.content !== 'string') {
+    return false;
+  }
+
+  const payload = parseJsonRecord(message.content);
+  if (!payload) {
+    return false;
+  }
+
+  return (
+    payload.outcome === 'signed' ||
+    Array.isArray(payload.signedDelegations) ||
+    Array.isArray(payload.signedAuthorizations)
+  );
+}
+
 function getMessageText(message: Message): string {
+  if (isInternalResumePayloadMessage(message)) {
+    return '';
+  }
+
+  if (message.role === 'tool') {
+    return readToolMessageText(message.content);
+  }
+
   if (typeof message.content === 'string') {
     return message.content;
   }
@@ -509,7 +593,7 @@ function getMessageText(message: Message): string {
 function getMessageRoleLabel(message: Message): string {
   if (message.role === 'assistant') return 'Agent';
   if (message.role === 'reasoning') return 'Reasoning';
-  if (message.role === 'tool') return 'Tool';
+  if (message.role === 'tool') return 'Action';
   if (message.role === 'activity' && message.activityType === 'artifact') return 'Artifact';
   if (message.role === 'activity') return 'Activity';
   return 'You';
@@ -1381,6 +1465,7 @@ export function AgentDetailPage({
   hasLoadedView,
   isFiring,
   isSyncing,
+  isRunInFlight = false,
   uiError,
   onClearUiError,
   onHire,
@@ -1433,14 +1518,16 @@ export function AgentDetailPage({
     [agentId, domainProjection, lifecycleState],
   );
   const isPortfolioAgent = agentId === 'agent-portfolio-manager';
-  const isOnboardingActive = resolveOnboardingActive({
+  const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
+  const managedOnboardingRuntimeActive = lifecycleState?.phase === 'onboarding';
+  const resolvedOnboardingActive = resolveOnboardingActive({
     activeInterruptPresent: Boolean(activeInterrupt),
     taskStatus,
     onboardingStatus: onboardingFlow?.status,
   });
-  const managedRuntimePhaseIsActive = lifecycleState?.phase === 'active';
-  const managedOnboardingRuntimeActive = lifecycleState?.phase === 'onboarding';
-  const portfolioManagerOnboardingComplete = onboardingFlow?.status === 'completed';
+  const isOnboardingActive = managedRuntimePhaseIsActive ? false : resolvedOnboardingActive;
+  const portfolioManagerOnboardingComplete =
+    onboardingFlow?.status === 'completed' || managedRuntimePhaseIsActive;
   const portfolioManagedContextVisible = isPortfolioAgent
     ? managedRuntimePhaseIsActive && portfolioManagerOnboardingComplete
     : managedRuntimePhaseIsActive && !isOnboardingActive;
@@ -1451,10 +1538,11 @@ export function AgentDetailPage({
   const visibleManagedMandateEditorView = portfolioManagedContextVisible
     ? managedMandateEditorView
     : null;
+  const portfolioManagerChatEnabled = isPortfolioAgent && portfolioManagedContextVisible;
   const emberLendingChatEnabled =
     agentId === 'agent-ember-lending' &&
     emberLendingRuntimeView?.phase === 'active';
-  const chatEnabled = isPortfolioAgent || emberLendingChatEnabled;
+  const chatEnabled = portfolioManagerChatEnabled || emberLendingChatEnabled;
   const isEmberLendingAgent = agentId === 'agent-ember-lending';
   const inlineOnboardingChatEnabled = isEmberLendingAgent;
   const [activeTab, setActiveTab] = useState<TabType>(
@@ -1487,12 +1575,12 @@ export function AgentDetailPage({
   }, [inlineOnboardingChatEnabled, onHire, selectTab]);
   const submitChatDraft = useCallback(() => {
     const trimmed = chatDraft.trim();
-    if (trimmed.length === 0) {
+    if (trimmed.length === 0 || isRunInFlight) {
       return;
     }
     onSendChatMessage?.(trimmed);
     setChatDraft('');
-  }, [chatDraft, onSendChatMessage]);
+  }, [chatDraft, isRunInFlight, onSendChatMessage]);
   const handleChatSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
@@ -1796,7 +1884,8 @@ export function AgentDetailPage({
       onChatDraftChange={setChatDraft}
       onSubmit={handleChatSubmit}
       onChatKeyDown={handleChatKeyDown}
-      isComposerEnabled={chatEnabled && typeof onSendChatMessage === 'function'}
+      isComposerEnabled={chatEnabled && typeof onSendChatMessage === 'function' && !isRunInFlight}
+      isRunInFlight={isRunInFlight}
       onSendChatMessage={onSendChatMessage}
     />
   ) : null;
@@ -1999,6 +2088,7 @@ export function AgentDetailPage({
                 settings={settings}
                 tokenIconBySymbol={tokenIconBySymbol}
                 onSettingsChange={onSettingsChange}
+                isRunInFlight={isRunInFlight}
               />
             ) : (
               <SettingsTab
@@ -2692,6 +2782,7 @@ function AgentChatTab(props: {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onChatKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   isComposerEnabled: boolean;
+  isRunInFlight: boolean;
   onSendChatMessage?: (content: string) => void;
 }) {
   const visibleMessages = useMemo(() => {
@@ -2755,7 +2846,11 @@ function AgentChatTab(props: {
         />
         <div className="mt-3 flex items-center justify-between gap-4">
           <div className="text-xs text-[#937c69]">
-            {props.isHired ? 'Live chat stays on the same thread.' : 'Chat works before and after hire.'}
+            {props.isHired
+              ? props.isRunInFlight
+                ? 'Agent is still working. You can send the next message when this run finishes.'
+                : 'Live chat stays on the same thread.'
+              : 'Complete onboarding before starting live chat.'}
           </div>
           <button
             type="submit"
@@ -3080,6 +3175,7 @@ interface AgentBlockersTabProps {
   settings?: AgentSettings;
   tokenIconBySymbol: Record<string, string>;
   onSettingsChange?: (updates: Partial<AgentSettings>) => void;
+  isRunInFlight?: boolean;
 }
 
 function AgentBlockersTab({
@@ -3097,6 +3193,7 @@ function AgentBlockersTab({
   settings,
   tokenIconBySymbol,
   onSettingsChange,
+  isRunInFlight = false,
 }: AgentBlockersTabProps) {
   const {
     walletClient,
@@ -3288,7 +3385,7 @@ function AgentBlockersTab({
             max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
           },
         ],
-        allowedBorrowAssets: [],
+        allowedBorrowAssets: [DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET],
       }),
     }),
     [],
@@ -3517,6 +3614,7 @@ function AgentBlockersTab({
       delegationManager: `0x${string}`;
       delegatorAddress: `0x${string}`;
       delegationsToSign: UnsignedDelegation[];
+      portfolioManagerSetup?: PortfolioManagerSetupInput;
     };
 
     if (!walletClient) {
@@ -3544,6 +3642,11 @@ function AgentBlockersTab({
           walletClient.account?.address ?? 'unknown'
         }.`,
       );
+      return;
+    }
+
+    if (isRunInFlight) {
+      setError('Authorization is already being processed. Please wait for it to finish.');
       return;
     }
 
@@ -3577,7 +3680,13 @@ function AgentBlockersTab({
         signedDelegations.push({ ...delegation, signature });
       }
 
-      const response: DelegationSigningResponse = { outcome: 'signed', signedDelegations };
+      const response: DelegationSigningResponse = {
+        outcome: 'signed',
+        signedDelegations,
+        ...(interrupt.portfolioManagerSetup
+          ? { portfolioManagerSetup: interrupt.portfolioManagerSetup }
+          : {}),
+      };
       emitAgentConnectDebug({
         event: 'gmx-delegation-sign-dispatch',
         payload: {
@@ -4030,7 +4139,7 @@ function AgentBlockersTab({
                     type="button"
                     onClick={handleRejectDelegations}
                     className="px-4 py-2 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-sm transition-colors"
-                    disabled={isSigningDelegations}
+                    disabled={isSigningDelegations || isRunInFlight}
                   >
                     Reject
                   </button>
@@ -4046,7 +4155,7 @@ function AgentBlockersTab({
                             )
                           }
                           className={`${DETAIL_NEUTRAL_BUTTON_CLASS} px-4 py-2 text-sm`}
-                          disabled={isSigningDelegations}
+                          disabled={isSigningDelegations || isRunInFlight}
                         >
                           Switch Chain
                         </button>
@@ -4060,9 +4169,9 @@ function AgentBlockersTab({
                         )
                       }
                       className="px-6 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#fd6731]/90 text-white font-medium transition-colors disabled:opacity-60"
-                      disabled={isSigningDelegations || !walletClient}
+                      disabled={isSigningDelegations || isRunInFlight || !walletClient}
                     >
-                      {isSigningDelegations ? 'Signing…' : 'Sign & Continue'}
+                      {isSigningDelegations ? 'Signing…' : isRunInFlight ? 'Authorizing…' : 'Sign & Continue'}
                     </button>
                   </div>
                 </div>

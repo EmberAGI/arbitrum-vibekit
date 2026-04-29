@@ -19,6 +19,7 @@ export interface AgentConfig {
   onboardingOwnerAgentId?: string;
   imperativeCommandTransport?: 'message' | 'forwarded-props';
   settingsRefreshTransport?: 'refresh-command' | 'shared-state-update';
+  runtimePollingEnabled?: boolean;
   // Static metadata used for pre-auth and degraded modes before runtime stream data arrives.
   chains?: string[];
   protocols?: string[];
@@ -41,6 +42,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     surfaceTag: 'Workflow',
     imperativeCommandTransport: 'forwarded-props',
     settingsRefreshTransport: 'refresh-command',
+    runtimePollingEnabled: false,
     chains: ['Arbitrum'],
     protocols: ['Camelot'],
     tokens: ['USDC', 'WETH', 'WBTC'],
@@ -59,6 +61,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     surfaceTag: 'Workflow',
     imperativeCommandTransport: 'forwarded-props',
     settingsRefreshTransport: 'refresh-command',
+    runtimePollingEnabled: false,
     chains: ['Arbitrum'],
     protocols: ['Pendle'],
     tokens: [
@@ -92,6 +95,7 @@ export const AGENT_REGISTRY: Record<string, AgentConfig> = {
     surfaceTag: 'Workflow',
     imperativeCommandTransport: 'forwarded-props',
     settingsRefreshTransport: 'refresh-command',
+    runtimePollingEnabled: false,
     chains: ['Arbitrum'],
     protocols: ['GMX', 'Allora'],
     tokens: ['USDC', 'WETH'],

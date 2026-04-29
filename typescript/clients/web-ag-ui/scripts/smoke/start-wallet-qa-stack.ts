@@ -888,6 +888,7 @@ async function main() {
       env: preAgentOverrides.portfolioManagerEnv,
       label: 'agent-portfolio-manager',
       basePath: '/ag-ui',
+      logFilePath: path.join(workspace.logsDir, 'agent-portfolio-manager.log'),
     });
 
     const preWebOverrides = buildWalletQaEnvironmentOverrides({
@@ -907,6 +908,7 @@ async function main() {
       env: preWebOverrides.emberLendingEnv,
       label: 'agent-ember-lending',
       basePath: '/ag-ui',
+      logFilePath: path.join(workspace.logsDir, 'agent-ember-lending.log'),
     });
 
     const finalOverrides = buildWalletQaEnvironmentOverrides({

@@ -828,7 +828,9 @@ const PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND_DESCRIPTION = [
   'Optional fields are slippageTolerance, expiration, idempotencyKey, rootedWalletContextId, and capitalPool.',
   'amount should be a base-unit integer string; decimal token-unit strings are accepted only when token decimals are known.',
   'amountType must be "exactIn" or "exactOut"; for requests like "half my WETH" or "$3 of WETH", infer the token amount from current portfolio state when possible before dispatching.',
-  'capitalPool may be "unassigned_only", "reserved_or_assigned", or "all"; use reserved_or_assigned when the user explicitly asks to use reserved or assigned units, and use all when the selected asset pool should include both free and reserved units.',
+  'Before calculating a spot swap amount, exclude deployed protocol positions such as lending collateral, aTokens, debt units, LP positions, and other non-wallet positions unless the user explicitly asks to unwind, withdraw, repay, close, or swap deployed position capital.',
+  'For spot swaps, all remaining, available, wallet, free, unassigned, reserved, assigned, and hybrid refer only to idle wallet units unless the user explicitly names deployed protocol capital.',
+  'capitalPool may be "unassigned_only", "reserved_or_assigned", or "all"; use reserved_or_assigned when the user explicitly asks to use reserved or assigned idle wallet units, and use all when the selected idle wallet asset pool should include both free and reserved idle wallet units.',
   'Never suggest releasing or adjusting a reservation for spot swaps; dispatch with capitalPool instead and let the reserved-capital confirmation interrupt ask the user to proceed or retry with unassigned capital only.',
   `If ${PORTFOLIO_MANAGER_SPOT_SWAP_COMMAND} returns a reserved-capital confirmation, stop the current assistant turn and wait for the user's next reply before calling ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND}.`,
   'Do not set reservationConflictHandling in inputJson; it is supplied only by the portfolio-manager conflict confirmation retry.',
@@ -842,6 +844,7 @@ const PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND_DESCRIPTION = [
   'For unassigned/free capital only, set outcome to "unassigned_only".',
   'For cancel/stop, set outcome to "cancel".',
   'Do not call dispatch_spot_swap again for the same pending reserved-capital confirmation.',
+  'If the confirmation fails, report the exact failure and wait for another user instruction; do not retry with unassigned_only unless the user explicitly asks for unassigned-only execution.',
   'Example inputJson: {"outcome":"allow_reserved_for_other_agent"}.',
 ].join(' ');
 const PORTFOLIO_MANAGER_SWAP_CONFLICT_INTERRUPT_TYPE =
@@ -1869,7 +1872,25 @@ function readSpotSwapCapitalPool(value: unknown): HiddenOcaSpotSwapInput['capita
     : null;
 }
 
+function unwrapCommandInputJson(input: unknown): unknown {
+  if (!isRecord(input)) {
+    return input;
+  }
+
+  const inputJson = readString(input['inputJson']);
+  if (!inputJson) {
+    return input;
+  }
+
+  try {
+    return JSON.parse(inputJson) as unknown;
+  } catch {
+    return input;
+  }
+}
+
 function parseSpotSwapDispatchInput(input: unknown): HiddenOcaSpotSwapInput | null {
+  input = unwrapCommandInputJson(input);
   if (!isRecord(input)) {
     return null;
   }
@@ -2117,6 +2138,7 @@ function buildSpotSwapOperationResult(input: {
 function readSpotSwapConflictOutcome(
   value: unknown,
 ): HiddenOcaReservationConflictHandling['kind'] | 'cancel' | null {
+  value = unwrapCommandInputJson(value);
   if (!isRecord(value)) {
     return null;
   }
@@ -2609,6 +2631,18 @@ function parsePortfolioManagerSignedDelegations(
   return input.signedDelegations as PortfolioManagerSignedDelegation[];
 }
 
+function parsePortfolioManagerSigningSetup(input: unknown): PortfolioManagerSetupInput | null {
+  if (typeof input !== 'object' || input === null) {
+    return null;
+  }
+
+  if ('portfolioManagerSetup' in input) {
+    return parsePortfolioManagerSetupInput(input.portfolioManagerSetup);
+  }
+
+  return parsePortfolioManagerSetupInput(input);
+}
+
 function isPortfolioManagerSigningRejected(input: unknown): boolean {
   return (
     typeof input === 'object' &&
@@ -2647,6 +2681,7 @@ function buildPortfolioManagerSigningInterrupt(
       delegationsToSign: [
         buildPortfolioManagerUnsignedDelegation(setup.walletAddress, controllerWalletAddress),
       ],
+      portfolioManagerSetup: setup,
       descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
       warnings: ['Only continue if you trust this portfolio-manager session.'],
     },
@@ -2826,7 +2861,7 @@ function buildPortfolioManagerOnboardingBootstrap(params: {
             root_asset: primaryCollateralAsset,
             network: PORTFOLIO_MANAGER_NETWORK,
             benchmark_asset: FIRST_MANAGED_AGENT_BENCHMARK_ASSET,
-            reserved_quantity: '0',
+            reserved_quantity: '0.01',
             reason: reservePolicySummary,
           },
         ],
@@ -3061,6 +3096,9 @@ export function createPortfolioManagerDomain(
         context.push('    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>');
         context.push(
           `    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Use ${PORTFOLIO_MANAGER_CONFIRM_SPOT_SWAP_COMMAND} with outcome allow_reserved_for_other_agent.</instruction>`,
+        );
+        context.push(
+          '    <instruction>If the reserved-capital confirmation fails, report the exact failure and wait. Do not retry unassigned_only unless the user explicitly asks for unassigned-only execution.</instruction>',
         );
         appendStructuredXmlNode({
           lines: context,
@@ -3324,13 +3362,24 @@ export function createPortfolioManagerDomain(
             };
           }
 
-          const walletAddress = currentState.pendingOnboardingWalletAddress;
-          const approvedSetup = currentState.pendingApprovedSetup ?? null;
+          const signingSetup = parsePortfolioManagerSigningSetup(operation.input);
+          const walletAddress =
+            currentState.pendingOnboardingWalletAddress ?? signingSetup?.walletAddress ?? null;
+          const approvedSetup =
+            currentState.pendingApprovedSetup ??
+            (signingSetup
+              ? {
+                  portfolioMandate: signingSetup.portfolioMandate,
+                  firstManagedMandate: signingSetup.firstManagedMandate,
+                  portfolioManagerMandate: signingSetup.portfolioManagerMandate ?? null,
+                }
+              : null);
           const signedDelegations = parsePortfolioManagerSignedDelegations(operation.input);
           const signedDelegation = signedDelegations?.[0];
           tracePmSigning('received-signing-resume', {
             threadId,
             walletAddress,
+            recoveredApprovedSetupFromResume: currentState.pendingApprovedSetup ? false : Boolean(signingSetup),
             signedDelegationCount: signedDelegations?.length ?? 0,
           });
 

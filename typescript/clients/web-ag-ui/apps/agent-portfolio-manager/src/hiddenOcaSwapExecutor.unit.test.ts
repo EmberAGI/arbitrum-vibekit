@@ -250,7 +250,7 @@ function createCandidatePlanResponse() {
         semantic_request: {
           control_path: 'spot.swap',
           asset: 'USDC',
-          protocol_system: 'onchain-actions',
+          protocol_system: 'uniswap',
           network: 'arbitrum',
           quantity: {
             kind: 'exact',
@@ -386,7 +386,7 @@ describe('createHiddenOcaSpotSwapExecutor', () => {
         request: {
           control_path: 'spot.swap',
           asset: 'USDC',
-          protocol_system: 'onchain-actions',
+          protocol_system: 'uniswap',
           network: 'arbitrum',
           quantity: {
             kind: 'exact',

@@ -42,6 +42,7 @@ const inactiveAgent: UseAgentConnectionResult = {
   isHiring: false,
   isFiring: false,
   isSyncing: false,
+  isRunInFlight: false,
   activeInterrupt: null,
   runHire: () => undefined,
   runFire: () => undefined,

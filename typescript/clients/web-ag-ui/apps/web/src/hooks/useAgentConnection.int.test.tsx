@@ -3547,6 +3547,116 @@ describe('useAgentConnection integration', () => {
     expect(latestValue?.uiError).toBeNull();
   });
 
+  it('applies completed direct resume responses and clears persisted portfolio manager signing interrupts', async () => {
+    let latestValue: ReturnType<typeof useAgentConnection> | null = null;
+    const payload = {
+      outcome: 'signed' as const,
+      signedDelegations: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003' as const,
+          delegator: '0x0000000000000000000000000000000000000002' as const,
+          authority: '0x' as const,
+          caveats: [],
+          salt: '0x01' as const,
+          signature: '0x1234' as const,
+        },
+      ],
+    };
+
+    mocks.interruptState.activeInterrupt = {
+      type: 'portfolio-manager-delegation-signing-request',
+      message: 'Review and sign the delegation needed to activate your portfolio manager.',
+      chainId: 42161,
+      delegationManager: '0x0000000000000000000000000000000000000001',
+      delegatorAddress: '0x0000000000000000000000000000000000000002',
+      delegateeAddress: '0x0000000000000000000000000000000000000003',
+      delegationsToSign: [
+        {
+          delegate: '0x0000000000000000000000000000000000000003',
+          delegator: '0x0000000000000000000000000000000000000002',
+          authority: '0x',
+          caveats: [],
+          salt: '0x01',
+        },
+      ],
+      descriptions: ['delegate portfolio-manager actions'],
+      warnings: [],
+    };
+    mocks.interruptState.canResolve = false;
+    mocks.disconnectFetch.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          ok: true,
+          taskState: 'completed',
+          statusMessage: 'Portfolio manager onboarding complete. Agent is active.',
+          domainProjection: {
+            portfolioProjectionInput: {
+              benchmarkAsset: 'USD',
+              walletContents: [],
+              reservations: [],
+              ownedUnits: [],
+              activePositionScopes: [],
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json',
+          },
+        },
+      ),
+    );
+
+    await act(async () => {
+      root.render(
+        <CapturingHarness
+          agentId="agent-portfolio-manager"
+          onSnapshot={(value) => {
+            latestValue = value;
+          }}
+        />,
+      );
+    });
+    await flushEffects();
+
+    latestValue?.resolveInterrupt(payload);
+    await flushEffects();
+    await flushEffects();
+
+    const nextState = mocks.agent.setState.mock.calls.at(-1)?.[0] as
+      | {
+          thread?: {
+            lifecycle?: { phase?: string };
+            onboardingFlow?: { status?: string };
+            task?: { taskStatus?: { state?: string; message?: { content?: string } } };
+            domainProjection?: Record<string, unknown>;
+            artifacts?: unknown;
+          };
+          tasks?: unknown[];
+        }
+      | undefined;
+
+    expect(nextState?.thread?.lifecycle?.phase).toBe('active');
+    expect(nextState?.thread?.onboardingFlow?.status).toBe('completed');
+    expect(nextState?.thread?.task?.taskStatus?.state).toBe('completed');
+    expect(nextState?.thread?.task?.taskStatus?.message?.content).toBe(
+      'Portfolio manager onboarding complete. Agent is active.',
+    );
+    expect(nextState?.thread?.domainProjection).toEqual({
+      portfolioProjectionInput: {
+        benchmarkAsset: 'USD',
+        walletContents: [],
+        reservations: [],
+        ownedUnits: [],
+        activePositionScopes: [],
+      },
+    });
+    expect(nextState?.thread?.artifacts).toBeUndefined();
+    expect(nextState?.tasks).toEqual([]);
+    expect(latestValue?.uiError).toBeNull();
+  });
+
   it('resumes a thread-backed interrupt on the connected thread when the derived thread id has drifted', async () => {
     let latestValue: ReturnType<typeof useAgentConnection> | null = null;
     const payload = {

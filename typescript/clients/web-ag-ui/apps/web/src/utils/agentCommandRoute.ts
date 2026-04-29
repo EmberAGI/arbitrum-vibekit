@@ -12,14 +12,21 @@ type AgentCommandRouteInput =
     })
   | (AgentCommandRouteBase & {
       resume: unknown;
+    })
+  | (AgentCommandRouteBase & {
+      message: {
+        id: string;
+        content: string;
+      };
     });
 
-type AgentCommandRouteResponse = {
+export type AgentCommandRouteResponse = {
   ok: boolean;
   error?: string;
   taskState?: string | null;
   statusMessage?: string | null;
   domainProjection?: Record<string, unknown> | null;
+  messages?: import('@ag-ui/core').Message[];
 };
 
 function readErrorMessage(value: unknown): string {

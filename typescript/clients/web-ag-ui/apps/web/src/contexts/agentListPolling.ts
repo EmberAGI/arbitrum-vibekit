@@ -93,6 +93,10 @@ export function selectAgentIdsForPolling(params: {
     if (params.activeAgentId && params.activeAgentId === agentId) {
       return false;
     }
+    const taskState = params.agents[agentId]?.taskState;
+    if (taskState === 'working') {
+      return false;
+    }
     const busyUntil = params.busyUntilByAgent?.[agentId];
     if (typeof busyUntil === 'number' && busyUntil > nowMs) {
       return false;

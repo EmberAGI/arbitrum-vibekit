@@ -31,6 +31,24 @@ function readJsonRpcResult(body: unknown): unknown {
   return body['result'];
 }
 
+function readHttpErrorMessage(body: unknown): string | null {
+  if (!isRecord(body)) {
+    return null;
+  }
+
+  const message = body['message'];
+  if (typeof message === 'string' && message.trim().length > 0) {
+    return message;
+  }
+
+  const error = body['error'];
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  return readJsonRpcErrorMessage(body);
+}
+
 async function postJson(input: {
   url: string;
   body: unknown;
@@ -47,8 +65,11 @@ async function postJson(input: {
   const parsedBody = rawBody.length === 0 ? null : (JSON.parse(rawBody) as unknown);
 
   if (!response.ok) {
+    const errorMessage = readHttpErrorMessage(parsedBody);
     throw new Error(
-      `Shared Ember Domain Service HTTP request failed with status ${response.status}.`,
+      `Shared Ember Domain Service HTTP request failed with status ${response.status}${
+        errorMessage === null ? '' : `: ${errorMessage}`
+      }.`,
     );
   }
 

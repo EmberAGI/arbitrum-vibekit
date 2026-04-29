@@ -223,6 +223,7 @@ export type DelegationSigningRequestInterrupt = {
   delegatorAddress: `0x${string}`;
   delegateeAddress: `0x${string}`;
   delegationsToSign: UnsignedDelegation[];
+  portfolioManagerSetup?: PortfolioManagerSetupInput;
   descriptions: string[];
   warnings: string[];
 };
@@ -327,6 +328,7 @@ export interface FundingTokenInput {
 export interface DelegationSigningResponseSigned {
   outcome: 'signed';
   signedDelegations: SignedDelegation[];
+  portfolioManagerSetup?: PortfolioManagerSetupInput;
 }
 
 export interface DelegationSigningResponseRejected {

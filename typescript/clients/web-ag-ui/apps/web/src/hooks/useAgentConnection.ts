@@ -28,6 +28,7 @@ import {
   type FundWalletAcknowledgement,
   type Transaction,
   type ClmmEvent,
+  type TaskState,
   defaultThreadState,
   defaultProfile,
   defaultMetrics,
@@ -37,7 +38,7 @@ import {
 } from '../types/agent';
 import { cleanupAgentConnection } from '../utils/agentConnectionCleanup';
 import { createAgentCommandScheduler } from '../utils/agentCommandScheduler';
-import { invokeAgentCommandRoute } from '../utils/agentCommandRoute';
+import { invokeAgentCommandRoute, type AgentCommandRouteResponse } from '../utils/agentCommandRoute';
 import {
   acquireAgentStreamOwner,
   registerAgentStreamOwner,
@@ -273,6 +274,7 @@ export interface UseAgentConnectionResult {
   isHiring: boolean;
   isFiring: boolean;
   isSyncing: boolean;
+  isRunInFlight: boolean;
 
   // Interrupt state
   activeInterrupt: AgentInterrupt | null;
@@ -340,6 +342,8 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     rollbackSettings: null,
   });
   const [uiError, setUiError] = useState<string | null>(null);
+  const [isRunInFlight, setIsRunInFlight] = useState(false);
+  const [isPostOnboardingCooldown, setIsPostOnboardingCooldown] = useState(false);
   const [, setLocalStateRevision] = useState(0);
   const lastConnectedThreadRef = useRef<string | null>(null);
   const agentRef = useRef<ReturnType<typeof useAgent>['agent'] | null>(null);
@@ -363,6 +367,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const streamOwnerIdRef = useRef<string | null>(null);
   const disconnectRequestKeyRef = useRef<string | null>(null);
   const connectRetryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const postOnboardingCooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   if (streamOwnerIdRef.current == null) {
     streamOwnerIdRef.current = v7();
@@ -573,6 +578,18 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   const setRunInFlight = useCallback((next: boolean) => {
     runInFlightRef.current = next;
+    setIsRunInFlight(next);
+  }, []);
+
+  const schedulePostOnboardingCooldown = useCallback(() => {
+    if (postOnboardingCooldownTimerRef.current !== null) {
+      clearTimeout(postOnboardingCooldownTimerRef.current);
+    }
+    setIsPostOnboardingCooldown(true);
+    postOnboardingCooldownTimerRef.current = setTimeout(() => {
+      postOnboardingCooldownTimerRef.current = null;
+      setIsPostOnboardingCooldown(false);
+    }, 60_000);
   }, []);
 
   const hasStateValues = useCallback((value: unknown): value is ThreadSnapshot => {
@@ -754,6 +771,80 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const readEffectiveThreadSnapshot = useCallback((value: unknown): ThreadSnapshot => {
     return readActiveRetainedThreadSnapshot() ?? readRetainedThreadSnapshot(value) ?? initialAgentState;
   }, [readActiveRetainedThreadSnapshot, readRetainedThreadSnapshot]);
+
+  const applyAgentCommandRouteResult = useCallback(
+    (currentAgent: HookAgent, result: AgentCommandRouteResponse, interruptType: string | null | undefined) => {
+      if (!result.domainProjection && !result.taskState && !result.statusMessage && !result.messages) {
+        return;
+      }
+
+      const previousState = readEffectiveThreadSnapshot(currentAgent.state);
+      const previousThread = previousState.thread ?? defaultThreadState;
+      const taskState = result.taskState as TaskState | null | undefined;
+      const shouldCompletePortfolioManagerOnboarding =
+        interruptType === 'portfolio-manager-delegation-signing-request' && taskState === 'completed';
+      if (shouldCompletePortfolioManagerOnboarding) {
+        schedulePostOnboardingCooldown();
+      }
+      const nextThread: ThreadState = {
+        ...previousThread,
+        ...(result.domainProjection
+          ? {
+              domainProjection: result.domainProjection,
+            }
+          : {}),
+        ...(taskState || result.statusMessage
+          ? {
+              task: {
+                id:
+                  previousThread.task?.id ??
+                  `agent-runtime:${currentAgent.threadId ?? threadIdRef.current ?? agentId}`,
+                taskStatus: {
+                  ...(previousThread.task?.taskStatus ?? { state: 'working' as const }),
+                  ...(taskState ? { state: taskState } : {}),
+                  ...(result.statusMessage
+                    ? {
+                        message: {
+                          content: result.statusMessage,
+                        },
+                      }
+                    : {}),
+                },
+              },
+            }
+          : {}),
+        ...(taskState === 'completed' || taskState === 'failed' || taskState === 'canceled'
+          ? {
+              artifacts: undefined,
+            }
+          : {}),
+        ...(shouldCompletePortfolioManagerOnboarding
+          ? {
+              lifecycle: {
+                ...(previousThread.lifecycle ?? { phase: 'active' as const }),
+                phase: 'active' as const,
+              },
+              onboardingFlow: {
+                ...(previousThread.onboardingFlow ?? { revision: 0, steps: [] }),
+                status: 'completed' as const,
+              },
+            }
+          : {}),
+      };
+      const nextSnapshot: ThreadSnapshot = {
+        ...previousState,
+        thread: nextThread,
+        ...(result.messages ? { messages: result.messages } : {}),
+        ...(taskState === 'completed' || taskState === 'failed' || taskState === 'canceled'
+          ? { tasks: [] }
+          : {}),
+      };
+
+      currentAgent.setState(nextSnapshot);
+      commitRetainedThreadSnapshot(nextSnapshot);
+    },
+    [agentId, commitRetainedThreadSnapshot, readEffectiveThreadSnapshot, schedulePostOnboardingCooldown],
+  );
 
   const clearPendingSyncMutation = useCallback((clientMutationId: string | null) => {
     if (!clientMutationId) return;
@@ -1417,10 +1508,15 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
 
   useEffect(() => {
     setRunInFlight(false);
+    setIsPostOnboardingCooldown(false);
     lastConnectedThreadRef.current = null;
     activeRunRef.current = { threadId, runId: null };
     commandSchedulerRef.current?.reset();
     clearConnectRetryTimer();
+    if (postOnboardingCooldownTimerRef.current !== null) {
+      clearTimeout(postOnboardingCooldownTimerRef.current);
+      postOnboardingCooldownTimerRef.current = null;
+    }
   }, [threadId, clearConnectRetryTimer, setRunInFlight]);
 
   useEffect(() => {
@@ -1468,6 +1564,12 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     if (!threadId || !agent) return;
     if (runtimeStatus !== CopilotKitCoreRuntimeConnectionStatus.Connected) return;
     if (lastConnectedThreadRef.current === threadId) return;
+    const effectiveSnapshot = readEffectiveThreadSnapshot(agent.state);
+    const effectiveThread = effectiveSnapshot.thread ?? defaultThreadState;
+    const isRouteBackedActiveThread =
+      effectiveThread.lifecycle?.phase === 'active' ||
+      effectiveThread.onboardingFlow?.status === 'completed';
+    if (isRouteBackedActiveThread) return;
     const ownerId = streamOwnerIdRef.current;
     if (!ownerId) return;
 
@@ -1556,6 +1658,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     emitConnectTrace,
     getAgentDebugId,
     logConnectEvent,
+    readEffectiveThreadSnapshot,
   ]);
 
   // Extract state with defaults
@@ -1607,6 +1710,31 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
   const settings = currentState.settings ?? defaultSettings;
   const messages = Array.isArray(currentState.messages) ? (currentState.messages as Message[]) : [];
   const syncedPendingInterrupt = deriveSyncedInterrupt(currentState);
+  const routeBackedActiveThread =
+    threadState.lifecycle?.phase === 'active' ||
+    threadState.onboardingFlow?.status === 'completed';
+  useEffect(() => {
+    if (!routeBackedActiveThread || !agent) return;
+    const disconnectThreadId =
+      agent.threadId ?? threadId ?? threadIdRef.current ?? lastConnectedThreadRef.current ?? null;
+    if (!disconnectThreadId) return;
+
+    lastConnectedThreadRef.current = null;
+    clearConnectRetryTimer();
+    void cleanupAgentConnection(agent);
+    void disconnectRuntimeStream({
+      threadId: disconnectThreadId,
+      agent: getAgentDebugId(agent),
+      reason: 'route-backed-active-thread',
+    });
+  }, [
+    agent,
+    clearConnectRetryTimer,
+    disconnectRuntimeStream,
+    getAgentDebugId,
+    routeBackedActiveThread,
+    threadId,
+  ]);
   useEffect(() => {
     emitConnectTrace('state-applied', {
       taskId: threadState.task?.id ?? null,
@@ -1797,7 +1925,13 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       const messageId = v7();
       const accepted = scheduler.dispatchCustom({
         command: 'chat',
+        releaseOwnershipOnResolve: false,
         run: async (currentAgent) => {
+          const currentThreadId = currentAgent.threadId ?? lastConnectedThreadRef.current ?? threadIdRef.current;
+          if (!currentThreadId) {
+            throw new Error('Unable to send a message before the agent thread is ready.');
+          }
+          currentAgent.threadId = currentThreadId;
           currentAgent.addMessage({
             id: messageId,
             role: 'user',
@@ -1815,7 +1949,10 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
         setUiError('Unable to send a message while another run is active.');
       }
     },
-    [runAgentOnCurrentThread],
+    [
+      runAgentOnCurrentThread,
+      stopAgentOnCurrentThread,
+    ],
   );
 
   const clearUiError = useCallback(() => setUiError(null), []);
@@ -1897,11 +2034,20 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
           const currentThreadId =
             currentAgent?.threadId ?? lastConnectedThreadRef.current ?? threadIdRef.current;
           if (currentThreadId) {
-            await invokeAgentCommandRoute({
+            const result = await invokeAgentCommandRoute({
               agentId,
               threadId: currentThreadId,
               resume: input,
             });
+            if (
+              agentId === 'agent-portfolio-manager' &&
+              typeof input === 'object' &&
+              input !== null &&
+              'signedDelegations' in input
+            ) {
+              schedulePostOnboardingCooldown();
+            }
+            applyAgentCommandRouteResult(currentAgent, result, interruptType);
             if (canResolveInterrupt()) {
               dismissStreamInterrupt();
             }
@@ -1964,6 +2110,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     },
     [
       agentId,
+      applyAgentCommandRouteResult,
       canResolveInterrupt,
       dismissStreamInterrupt,
       effectiveActiveInterrupt?.type,
@@ -1971,6 +2118,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
       resolveStreamInterrupt,
       runAgentOnCurrentThread,
       runCommand,
+      schedulePostOnboardingCooldown,
     ],
   );
 
@@ -2137,6 +2285,7 @@ export function useAgentConnection(agentId: string): UseAgentConnectionResult {
     isHiring,
     isFiring,
     isSyncing,
+    isRunInFlight: isRunInFlight || isPostOnboardingCooldown,
     activeInterrupt: effectiveActiveInterrupt,
     runHire,
     runFire,

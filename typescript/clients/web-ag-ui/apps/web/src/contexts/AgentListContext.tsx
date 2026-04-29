@@ -82,7 +82,18 @@ function shouldAcceptAgentListUpdate(params: {
 }
 
 export function AgentListProvider({ children }: { children: ReactNode }) {
-  const agentIds = useMemo(() => getAllAgents().map((agent) => agent.id), []);
+  const agentConfigs = useMemo(() => getAllAgents(), []);
+  const agentIds = useMemo(() => agentConfigs.map((agent) => agent.id), [agentConfigs]);
+  const runtimePollingEnabled = false;
+  const pollableAgentIds = useMemo(
+    () =>
+      runtimePollingEnabled
+        ? agentConfigs
+            .filter((agent) => agent.runtimePollingEnabled !== false)
+            .map((agent) => agent.id)
+        : [],
+    [agentConfigs, runtimePollingEnabled],
+  );
   const pathname = usePathname();
   const { privyWallet } = usePrivyWalletClient();
   const walletKey = resolveAgentThreadWalletAddress(privyWallet?.address);
@@ -303,7 +314,9 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
     startedRef.current = true;
     const nowMs = Date.now();
     pruneBusyCooldowns(nowMs);
-    const initialCandidates = agentIds.filter((agentId) => !(activeAgentId && agentId === activeAgentId));
+    const initialCandidates = pollableAgentIds.filter(
+      (agentId) => !(activeAgentId && agentId === activeAgentId),
+    );
     const eligibleCandidates = selectAgentIdsForPolling({
       agentIds: initialCandidates,
       agents: agentsRef.current,
@@ -319,7 +332,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       maxConcurrent,
       pollAgent,
     });
-  }, [activeAgentId, agentIds, busyCooldownSnapshot, pollAgent, pruneBusyCooldowns, walletKey]);
+  }, [activeAgentId, busyCooldownSnapshot, pollAgent, pollableAgentIds, pruneBusyCooldowns, walletKey]);
 
   useEffect(() => {
     if (!walletKey) {
@@ -337,7 +350,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       const nowMs = Date.now();
       pruneBusyCooldowns(nowMs);
       const candidates = selectAgentIdsForPolling({
-        agentIds,
+        agentIds: pollableAgentIds,
         agents: agentsRef.current,
         activeAgentId,
         busyUntilByAgent: busyCooldownSnapshot(),
@@ -358,7 +371,7 @@ export function AgentListProvider({ children }: { children: ReactNode }) {
       window.clearInterval(timer);
       periodicPollInFlightRef.current = false;
     };
-  }, [activeAgentId, agentIds, busyCooldownSnapshot, pollAgent, pruneBusyCooldowns, walletKey]);
+  }, [activeAgentId, busyCooldownSnapshot, pollAgent, pollableAgentIds, pruneBusyCooldowns, walletKey]);
 
   const value = useMemo(() => ({ agents, upsertAgent }), [agents, upsertAgent]);
 

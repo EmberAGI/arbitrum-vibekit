@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createWalletClient, http, parseGwei, type Hex } from 'viem';
+import { createPublicClient, createWalletClient, http, parseGwei, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { arbitrum } from 'viem/chains';
 import { z } from 'zod';
@@ -26,31 +26,49 @@ type Authorization = z.infer<typeof AuthorizationSchema>;
 async function broadcast7702Authorization(authorization: Authorization, to: Hex): Promise<string> {
   const privateKey = process.env.FUNDING_WALLET_PRIVATE_KEY as Hex;
   const relayer = privateKeyToAccount(privateKey);
+  const transport = http(arbitrum.rpcUrls.default.http[0]);
 
   const client = createWalletClient({
     account: relayer,
     chain: arbitrum,
-    transport: http(arbitrum.rpcUrls.default.http[0]),
+    transport,
   });
 
-  return client.sendTransaction({
+  const publicClient = createPublicClient({
+    chain: arbitrum,
+    transport,
+  });
+
+  const authorizationList = [
+    {
+      chainId: authorization.chainId,
+      address: authorization.address as Hex,
+      nonce: authorization.nonce,
+      r: authorization.r as Hex,
+      s: authorization.s as Hex,
+      v: authorization.v ? BigInt(authorization.v) : undefined,
+      yParity: authorization.yParity,
+    },
+  ];
+
+  const transaction = {
     type: 'eip7702',
     to,
     data: '0x',
     value: BigInt(0),
-    authorizationList: [
-      {
-        chainId: authorization.chainId,
-        address: authorization.address as Hex,
-        nonce: authorization.nonce,
-        r: authorization.r as Hex,
-        s: authorization.s as Hex,
-        v: authorization.v ? BigInt(authorization.v) : undefined,
-        yParity: authorization.yParity,
-      },
-    ],
+    authorizationList,
     maxFeePerGas: parseGwei('0.1'),
     maxPriorityFeePerGas: parseGwei('0.01'),
+  } as const;
+
+  const estimatedGas = await publicClient.estimateGas({
+    account: relayer.address,
+    ...transaction,
+  });
+
+  return client.sendTransaction({
+    ...transaction,
+    gas: estimatedGas + BigInt(5000),
   });
 }
 

@@ -26,7 +26,7 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
             max_allocation_pct: DEFAULT_MANAGED_LENDING_MAX_ALLOCATION_PCT,
           },
         ],
-        allowedBorrowAssets: [],
+        allowedBorrowAssets: [DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET],
       }),
     },
   },
