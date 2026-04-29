@@ -230,15 +230,17 @@ function projectStateSnapshot(input: {
   );
 
   for (const event of input.events) {
-    if (event.type === 'STATE_SNAPSHOT' && 'snapshot' in event) {
-      projectedSnapshot = cloneJson(event.snapshot as Record<string, unknown>);
+    if (event.type === 'STATE_SNAPSHOT' && isRecord(event.snapshot)) {
+      projectedSnapshot = cloneJson(event.snapshot);
       continue;
     }
 
-    if (event.type === 'STATE_DELTA' && Array.isArray(event.delta)) {
-      for (const operation of event.delta as JsonPatchOperation[]) {
-        applyJsonPatchOperation(projectedSnapshot, operation);
-      }
+    if (event.type !== 'STATE_DELTA' || !Array.isArray(event.delta)) {
+      continue;
+    }
+
+    for (const operation of event.delta as JsonPatchOperation[]) {
+      applyJsonPatchOperation(projectedSnapshot, operation);
     }
   }
 

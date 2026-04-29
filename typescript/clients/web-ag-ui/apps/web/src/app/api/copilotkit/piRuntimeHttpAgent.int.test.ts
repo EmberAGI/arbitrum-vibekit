@@ -24,7 +24,6 @@ type AgentRuntimeService = Awaited<
   ReturnType<typeof createPiExampleGatewayService>
 >;
 type StateDeltaEvent = Extract<BaseEvent, { type: EventType.STATE_DELTA }>;
-type StateSnapshotEvent = Extract<BaseEvent, { type: EventType.STATE_SNAPSHOT }>;
 type JsonPatchOperation = {
   op: string;
   path: string;
@@ -155,23 +154,16 @@ function findStateDeltas(events: BaseEvent[]) {
   return events.filter((event): event is StateDeltaEvent => event.type === EventType.STATE_DELTA);
 }
 
-function isStateSnapshotEvent(event: BaseEvent): event is StateSnapshotEvent {
-  return event.type === EventType.STATE_SNAPSHOT && 'snapshot' in event;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function encodeJsonPointerToken(token: string): string {
   return token.replaceAll('~', '~0').replaceAll('/', '~1');
 }
 
-function collectSnapshotReplaceOperations(
-  value: unknown,
-  path = '',
-): JsonPatchOperation[] {
-  const operations = path === '' ? [] : [{ op: 'replace', path, value }];
-
-  if (typeof value !== 'object' || value === null) {
-    return operations;
-  }
+function collectSnapshotReplaceOperations(value: unknown, path = ''): JsonPatchOperation[] {
+  const operations = path === '' ? [] : [{ op: 'replace', path, value } satisfies JsonPatchOperation];
 
   if (Array.isArray(value)) {
     return operations.concat(
@@ -181,15 +173,18 @@ function collectSnapshotReplaceOperations(
     );
   }
 
+  if (!isRecord(value)) {
+    return operations;
+  }
+
   return operations.concat(
-    Object.entries(value).flatMap(([key, item]) =>
-      collectSnapshotReplaceOperations(item, `${path}/${encodeJsonPointerToken(key)}`),
+    Object.entries(value).flatMap(([key, nestedValue]) =>
+      collectSnapshotReplaceOperations(
+        nestedValue,
+        `${path}/${encodeJsonPointerToken(String(key))}`,
+      ),
     ),
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }
 
 function matchesArtifactData(
@@ -255,15 +250,16 @@ function expectStateDeltaOperation(
   events: BaseEvent[],
   predicate: (operation: JsonPatchOperation) => boolean,
 ): void {
-  const stateDeltas = findStateDeltas(events);
-  const operations = stateDeltas.flatMap((event) => event.delta as JsonPatchOperation[]);
-  if (operations.length === 0) {
-    const latestSnapshot = [...events].reverse().find(isStateSnapshotEvent);
-    if (latestSnapshot) {
-      operations.push(...collectSnapshotReplaceOperations(latestSnapshot.snapshot));
-    }
-  }
-
+  const operations = [
+    ...findStateDeltas(events).flatMap((event) =>
+      event.delta.map((operation) => operation as JsonPatchOperation),
+    ),
+    ...events.flatMap((event) =>
+      event.type === EventType.STATE_SNAPSHOT && isRecord(event.snapshot)
+        ? collectSnapshotReplaceOperations(event.snapshot)
+        : [],
+    ),
+  ];
   expect(operations).not.toHaveLength(0);
   expect(operations.some(predicate)).toBe(true);
 }

@@ -77,36 +77,25 @@ function findStateDeltas(events: readonly AgUiEventEnvelope[]) {
   );
 }
 
-function findStateSnapshots(events: readonly AgUiEventEnvelope[]) {
-  return events.filter(
-    (event): event is AgUiEventEnvelope & { snapshot: Record<string, unknown> } =>
-      event.type === 'STATE_SNAPSHOT' &&
-      typeof event['snapshot'] === 'object' &&
-      event['snapshot'] !== null &&
-      !Array.isArray(event['snapshot']),
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function encodeJsonPointerToken(token: string): string {
   return token.replaceAll('~', '~0').replaceAll('/', '~1');
 }
 
-function collectSnapshotReplaceOperations(
-  value: unknown,
-  path = '',
-): JsonPatchOperation[] {
-  if (typeof value !== 'object' || value === null) {
+function collectSnapshotReplaceOperations(value: unknown, path = ''): JsonPatchOperation[] {
+  if (!isRecord(value) && !Array.isArray(value)) {
     return [{ op: 'replace', path, value }];
   }
 
-  if (Array.isArray(value)) {
-    return value.flatMap((item, index) =>
-      collectSnapshotReplaceOperations(item, `${path}/${index}`),
-    );
-  }
-
-  return Object.entries(value).flatMap(([key, item]) =>
-    collectSnapshotReplaceOperations(item, `${path}/${encodeJsonPointerToken(key)}`),
+  const entries = Array.isArray(value) ? [...value.entries()] : Object.entries(value);
+  return entries.flatMap(([key, nestedValue]) =>
+    collectSnapshotReplaceOperations(
+      nestedValue,
+      `${path}/${encodeJsonPointerToken(String(key))}`,
+    ),
   );
 }
 
@@ -114,15 +103,14 @@ function expectStateDeltaOperation(
   events: readonly AgUiEventEnvelope[],
   predicate: (operation: JsonPatchOperation) => boolean,
 ) {
-  const stateDeltas = findStateDeltas(events);
-  const operations = stateDeltas.flatMap((event) => event.delta);
-  if (operations.length === 0) {
-    const latestSnapshot = findStateSnapshots(events).at(-1);
-    if (latestSnapshot) {
-      operations.push(...collectSnapshotReplaceOperations(latestSnapshot.snapshot));
-    }
-  }
-
+  const operations = [
+    ...findStateDeltas(events).flatMap((event) => event.delta),
+    ...events.flatMap((event) =>
+      event.type === 'STATE_SNAPSHOT' && isRecord(event['snapshot'])
+        ? collectSnapshotReplaceOperations(event['snapshot'])
+        : [],
+    ),
+  ];
   expect(operations).not.toHaveLength(0);
   expect(operations.some(predicate)).toBe(true);
 }
