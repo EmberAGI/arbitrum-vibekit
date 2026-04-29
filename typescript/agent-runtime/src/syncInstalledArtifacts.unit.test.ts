@@ -13,6 +13,7 @@ describe('syncInstalledArtifacts', () => {
       }),
     );
     const mkdir = vi.fn(() => Promise.resolve(undefined));
+    const realpath = vi.fn((targetPath: string) => Promise.resolve(targetPath));
     const rm = vi.fn(() => Promise.resolve(undefined));
     const cp = vi.fn(() => Promise.resolve(undefined));
 
@@ -24,6 +25,7 @@ describe('syncInstalledArtifacts', () => {
         fileOps: {
           stat,
           mkdir,
+          realpath,
           rm,
           cp,
         },
@@ -40,6 +42,7 @@ describe('syncInstalledArtifacts', () => {
     expect(cp).toHaveBeenCalledWith('/source/dist', '/target/dist', {
       recursive: true,
       force: true,
+      filter: expect.any(Function),
     });
   });
 
@@ -50,6 +53,7 @@ describe('syncInstalledArtifacts', () => {
       }),
     );
     const mkdir = vi.fn(() => Promise.resolve(undefined));
+    const realpath = vi.fn((targetPath: string) => Promise.resolve(targetPath));
     const rm = vi.fn(() => Promise.resolve(undefined));
     const cp = vi
       .fn()
@@ -66,6 +70,7 @@ describe('syncInstalledArtifacts', () => {
         fileOps: {
           stat,
           mkdir,
+          realpath,
           rm,
           cp,
         },
@@ -80,10 +85,12 @@ describe('syncInstalledArtifacts', () => {
     expect(cp).toHaveBeenNthCalledWith(1, '/source/dist', '/target/dist', {
       recursive: true,
       force: true,
+      filter: expect.any(Function),
     });
     expect(cp).toHaveBeenNthCalledWith(2, '/source/dist', '/target/dist', {
       recursive: true,
       force: true,
+      filter: expect.any(Function),
     });
   });
 
@@ -94,6 +101,7 @@ describe('syncInstalledArtifacts', () => {
       }),
     );
     const mkdir = vi.fn(() => Promise.resolve(undefined));
+    const realpath = vi.fn((targetPath: string) => Promise.resolve(targetPath));
     const rm = vi.fn(() => Promise.resolve(undefined));
     const cp = vi.fn(() => Promise.resolve(undefined));
 
@@ -105,6 +113,7 @@ describe('syncInstalledArtifacts', () => {
         fileOps: {
           stat,
           mkdir,
+          realpath,
           rm,
           cp,
         },
@@ -112,9 +121,117 @@ describe('syncInstalledArtifacts', () => {
     ).resolves.toBeUndefined();
 
     expect(stat).toHaveBeenCalledWith('/workspace/agent-runtime/dist');
+    expect(realpath).not.toHaveBeenCalled();
     expect(mkdir).not.toHaveBeenCalled();
     expect(rm).not.toHaveBeenCalled();
     expect(cp).not.toHaveBeenCalled();
+  });
+
+  it('skips artifact sync when a pnpm file snapshot resolves to the package source directory', async () => {
+    const stat = vi.fn(() =>
+      Promise.resolve({
+        isDirectory: () => true,
+      }),
+    );
+    const mkdir = vi.fn(() => Promise.resolve(undefined));
+    const realpath = vi.fn((targetPath: string) =>
+      Promise.resolve(
+        targetPath.endsWith('/dist')
+          ? '/workspace/node_modules/.pnpm/agent-runtime-pi@file+agent-runtime+lib+pi/node_modules/agent-runtime-pi/dist'
+          : targetPath,
+      ),
+    );
+    const rm = vi.fn(() => Promise.resolve(undefined));
+    const cp = vi.fn(() => Promise.resolve(undefined));
+
+    await expect(
+      copyArtifactDir({
+        sourceRoot: '/workspace/agent-runtime/lib/pi',
+        relativeDir: 'dist',
+        targetRoot:
+          '/workspace/node_modules/.pnpm/agent-runtime-pi@file+agent-runtime+lib+pi/node_modules/agent-runtime-pi',
+        fileOps: {
+          stat,
+          mkdir,
+          realpath,
+          rm,
+          cp,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mkdir).toHaveBeenCalledWith(
+      '/workspace/node_modules/.pnpm/agent-runtime-pi@file+agent-runtime+lib+pi/node_modules/agent-runtime-pi/dist',
+      { recursive: true },
+    );
+    expect(rm).not.toHaveBeenCalled();
+    expect(cp).not.toHaveBeenCalled();
+  });
+
+  it('skips hardlinked files that already point at the source artifact', async () => {
+    const stat = vi.fn((targetPath: string) => {
+      if (targetPath === '/source/dist' || targetPath === '/target/dist') {
+        return Promise.resolve({
+          dev: targetPath === '/source/dist' ? 1 : 2,
+          ino: targetPath === '/source/dist' ? 10 : 20,
+          isDirectory: () => true,
+        });
+      }
+
+      if (targetPath.endsWith('/syncInstalledArtifacts.d.ts')) {
+        return Promise.resolve({
+          dev: 3,
+          ino: 30,
+          isDirectory: () => false,
+        });
+      }
+
+      if (targetPath === '/source/dist/new.js') {
+        return Promise.resolve({
+          dev: 3,
+          ino: 31,
+          isDirectory: () => false,
+        });
+      }
+
+      return Promise.reject(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+    });
+    const mkdir = vi.fn(() => Promise.resolve(undefined));
+    const realpath = vi.fn((targetPath: string) => Promise.resolve(targetPath));
+    const rm = vi.fn(() => Promise.resolve(undefined));
+    const cp = vi.fn(() => Promise.resolve(undefined));
+
+    await expect(
+      copyArtifactDir({
+        sourceRoot: '/source',
+        relativeDir: 'dist',
+        targetRoot: '/target',
+        fileOps: {
+          stat,
+          mkdir,
+          realpath,
+          rm,
+          cp,
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    const options = cp.mock.calls[0]?.[2];
+
+    expect(options).toEqual({
+      recursive: true,
+      force: true,
+      filter: expect.any(Function),
+    });
+    await expect(
+      options?.filter?.(
+        '/source/dist/syncInstalledArtifacts.d.ts',
+        '/target/dist/syncInstalledArtifacts.d.ts',
+      ),
+    ).resolves.toBe(false);
+    await expect(options?.filter?.('/source/dist/new.js', '/target/dist/new.js')).resolves.toBe(
+      true,
+    );
   });
 
   it('waits for a per-target sync lock before syncing installed artifacts', async () => {
@@ -128,6 +245,7 @@ describe('syncInstalledArtifacts', () => {
       }),
     );
     let lockAttempt = 0;
+    const realpath = vi.fn((targetPath: string) => Promise.resolve(targetPath));
     const mkdir = vi.fn((targetPath: string, options?: { recursive?: boolean }) => {
       if (targetPath === '/target/dist') {
         expect(options).toEqual({ recursive: true });
@@ -166,10 +284,11 @@ describe('syncInstalledArtifacts', () => {
           relativeDir: 'dist',
           targetRoot: '/target',
           fileOps: {
-            stat,
-            mkdir,
-            rm,
-            cp,
+          stat,
+          mkdir,
+          realpath,
+          rm,
+          cp,
           },
           retryDelayMs: 0,
         }),
@@ -178,10 +297,11 @@ describe('syncInstalledArtifacts', () => {
           relativeDir: 'dist',
           targetRoot: '/target',
           fileOps: {
-            stat,
-            mkdir,
-            rm,
-            cp,
+          stat,
+          mkdir,
+          realpath,
+          rm,
+          cp,
           },
           retryDelayMs: 0,
         }),
