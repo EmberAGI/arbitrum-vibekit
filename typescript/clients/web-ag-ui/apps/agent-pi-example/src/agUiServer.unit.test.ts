@@ -113,6 +113,37 @@ async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): P
   return events;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function readCurrentArtifactData(event: unknown): unknown {
+  if (!isRecord(event)) {
+    return undefined;
+  }
+
+  if (event['type'] === 'STATE_SNAPSHOT' && isRecord(event['snapshot'])) {
+    const thread = event['snapshot']['thread'];
+    const artifacts = isRecord(thread) ? thread['artifacts'] : undefined;
+    const current = isRecord(artifacts) ? artifacts['current'] : undefined;
+    return isRecord(current) ? current['data'] : undefined;
+  }
+
+  if (event['type'] !== 'STATE_DELTA' || !Array.isArray(event['delta'])) {
+    return undefined;
+  }
+
+  const artifactsDelta = event['delta'].find(
+    (operation) =>
+      isRecord(operation) &&
+      operation['op'] === 'add' &&
+      operation['path'] === '/thread/artifacts',
+  );
+  const value = isRecord(artifactsDelta) ? artifactsDelta['value'] : undefined;
+  const current = isRecord(value) ? value['current'] : undefined;
+  return isRecord(current) ? current['data'] : undefined;
+}
+
 describe('createPiExampleAgUiHandler', () => {
   it('requires real Pi foundation env for default service startup', async () => {
     await expect(createPiExampleGatewayService()).rejects.toThrow('OPENROUTER_API_KEY');
@@ -193,34 +224,9 @@ describe('createPiExampleAgUiHandler', () => {
       }),
     );
 
-    const stateDelta = runEvents.find(
-      (event) =>
-        typeof event === 'object' &&
-        event !== null &&
-        'type' in event &&
-        event.type === 'STATE_DELTA' &&
-        Array.isArray((event as { delta?: unknown[] }).delta),
-    ) as
-      | {
-          delta?: Array<{
-            op?: string;
-            path?: string;
-            value?: {
-              current?: {
-                data?: { type?: string; status?: string };
-              };
-            };
-          }>;
-        }
-      | undefined;
+    const artifactData = [...runEvents].reverse().map(readCurrentArtifactData).find(Boolean);
 
-    const artifactsDelta = stateDelta?.delta?.find(
-      (operation) =>
-        operation.op === 'add' &&
-        operation.path === '/thread/artifacts',
-    );
-
-    expect(artifactsDelta?.value?.current?.data).toMatchObject({
+    expect(artifactData).toMatchObject({
       type: 'automation-status',
       status: 'scheduled',
     });

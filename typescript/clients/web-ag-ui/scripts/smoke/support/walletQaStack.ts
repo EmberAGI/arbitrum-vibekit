@@ -254,6 +254,13 @@ export function buildWalletQaEnvironmentOverrides(input: {
     sharedEmberEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME =
       input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OWS_WALLET_NAME;
   }
+  if (input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME) {
+    sharedEmberEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME =
+      input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME;
+    sharedEmberEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH =
+      input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH ??
+      input.portfolioManagerOwsVaultPath;
+  }
   if (input.emberLendingBaseEnv.EMBER_LENDING_OWS_WALLET_NAME) {
     sharedEmberEnv.EMBER_LENDING_OWS_WALLET_NAME =
       input.emberLendingBaseEnv.EMBER_LENDING_OWS_WALLET_NAME;
@@ -266,6 +273,13 @@ export function buildWalletQaEnvironmentOverrides(input: {
       SHARED_EMBER_BASE_URL: input.sharedEmberBaseUrl,
       ONCHAIN_ACTIONS_API_URL: input.onchainActionsApiUrl,
       PORTFOLIO_MANAGER_OWS_VAULT_PATH: input.portfolioManagerOwsVaultPath,
+      ...(input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME
+        ? {
+            PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH:
+              input.portfolioManagerBaseEnv.PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH ??
+              input.portfolioManagerOwsVaultPath,
+          }
+        : {}),
     },
     emberLendingEnv: {
       ...input.emberLendingBaseEnv,
@@ -342,10 +356,12 @@ export function resolveManagedWalletIds(input: {
   portfolioManagerWallets: OwsWalletRecord[];
   emberLendingWallets: OwsWalletRecord[];
   portfolioManagerWalletName: string | null;
+  portfolioManagerOcaExecutorWalletName?: string | null;
   emberLendingWalletName: string | null;
   controllerSignerAddress?: string | null;
 }): {
   portfolioManagerWalletId: string | null;
+  portfolioManagerOcaExecutorWalletId: string | null;
   emberLendingWalletId: string | null;
 } {
   const portfolioManagerCandidates =
@@ -368,6 +384,21 @@ export function resolveManagedWalletIds(input: {
       );
     }
   }
+
+  const explicitOcaExecutorWallet =
+    input.portfolioManagerOcaExecutorWalletName === null ||
+    input.portfolioManagerOcaExecutorWalletName === undefined
+      ? null
+      : input.portfolioManagerWallets.find(
+          (wallet) =>
+            wallet.id === input.portfolioManagerOcaExecutorWalletName ||
+            wallet.name === input.portfolioManagerOcaExecutorWalletName,
+        ) ?? null;
+  const inferredOcaExecutorWallet =
+    explicitOcaExecutorWallet ??
+    (input.portfolioManagerOcaExecutorWalletName === undefined
+      ? selectedPortfolioManager
+      : null);
 
   const emberLendingCandidates =
     input.emberLendingWalletName === null
@@ -405,6 +436,7 @@ export function resolveManagedWalletIds(input: {
 
   return {
     portfolioManagerWalletId: selectedPortfolioManager?.id ?? null,
+    portfolioManagerOcaExecutorWalletId: inferredOcaExecutorWallet?.id ?? null,
     emberLendingWalletId: selectedEmberLending?.id ?? null,
   };
 }

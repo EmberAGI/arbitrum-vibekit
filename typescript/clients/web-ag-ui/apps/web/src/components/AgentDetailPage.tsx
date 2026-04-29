@@ -71,6 +71,7 @@ import { AgentSurfaceTag } from './ui/AgentSurfaceTag';
 import { CreatorIdentity } from './ui/CreatorIdentity';
 import { CursorListTooltip } from './ui/CursorListTooltip';
 import { CTA_SIZE_MD, CTA_SIZE_MD_FULL } from './ui/cta';
+import { SimpleMarkdownText } from './ui/SimpleMarkdownText';
 import {
   formatDelegationSigningError,
   signDelegationWithFallback,
@@ -2136,7 +2137,9 @@ function AgentChatTab(props: {
               <div className="text-[11px] uppercase tracking-[0.14em] text-[#907764]">
                 {message.label}
               </div>
-              <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.text}</div>
+              <div className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">
+                <SimpleMarkdownText text={message.text} />
+              </div>
             </div>
           ))
         )}

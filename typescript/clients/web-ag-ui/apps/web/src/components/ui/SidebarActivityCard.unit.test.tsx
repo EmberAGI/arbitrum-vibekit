@@ -1,8 +1,15 @@
+// @vitest-environment jsdom
+
 import React from 'react';
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { SidebarActivityCard } from './SidebarActivityCard';
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
 
 describe('SidebarActivityCard', () => {
   it('matches the reference card structure for exposure, active styling, and token overflow', () => {
@@ -47,5 +54,65 @@ describe('SidebarActivityCard', () => {
     expect(html).not.toContain('>ARB<');
     expect(html).not.toContain('>GMX<');
     expect(html).toContain('…');
+  });
+
+  it('shows a compact top-holdings tooltip for the portfolio agent card on hover', () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(
+        React.createElement(SidebarActivityCard, {
+          card: {
+            id: 'agent-portfolio-manager',
+            label: 'Ember Portfolio Agent',
+            statusTone: 'active',
+            valueUsd: 1000,
+            allocationShare: 1,
+            allocationShareLabel: 'portfolio',
+            tokenBreakdown: [],
+            tokenHoldings: [
+              {
+                asset: 'USDC',
+                amount: 1000,
+                share: 0.5,
+                valueUsd: 500,
+                iconUri: '/icons/usdc.svg',
+              },
+              { asset: 'WETH', amount: 0.05, share: 0.2, valueUsd: 200 },
+              { asset: 'WBTC', amount: 0.0012, share: 0.15, valueUsd: 150 },
+              { asset: 'ARB', amount: 80, share: 0.1, valueUsd: 100 },
+              { asset: 'GMX', amount: 4, share: 0.04, valueUsd: 40 },
+              { asset: 'DAI', amount: 10, share: 0.01, valueUsd: 10 },
+            ],
+          },
+        }),
+      );
+    });
+
+    const card = container.querySelector('button');
+    expect(card).not.toBeNull();
+    expect(document.body.textContent).not.toContain('Top holdings');
+
+    act(() => {
+      card?.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: 24, clientY: 24 }));
+    });
+
+    const pageText = document.body.textContent ?? '';
+    expect(pageText).toContain('Top holdings');
+    expect(pageText).toContain('USDC');
+    expect(pageText).toContain('1,000');
+    expect(pageText).toContain('50%');
+    expect(pageText).toContain('$500');
+    expect(pageText).toContain('WETH');
+    expect(pageText).toContain('0.05');
+    expect(pageText).not.toContain('DAI');
+    expect(document.body.querySelector('img[src="/icons/usdc.svg"]')).not.toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
   });
 });

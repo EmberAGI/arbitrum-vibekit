@@ -1,13 +1,50 @@
+import {
+  defaultApplyEvents,
+  type AbstractAgent,
+  type RunAgentInput,
+} from '@ag-ui/client';
 import { EventType } from '@ag-ui/core';
+import type { BaseEvent } from '@ag-ui/core';
 import type { AgentEvent } from '@mariozechner/pi-agent-core';
-import { describe, expect, it } from 'vitest';
+import { lastValueFrom, of, toArray } from 'rxjs';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildPiA2UiActivityEvent,
+  buildPiRuntimeGatewayStateRebaselineEvent,
   buildPiRuntimeGatewayStateDeltaEvent,
   buildPiThreadStateSnapshot,
   mapPiAgentEventsToAgUiEvents,
 } from './index.js';
+
+const applyEventsWithAgUiClient = async (
+  initialState: unknown,
+  events: BaseEvent[],
+): Promise<unknown[]> => {
+  const input = {
+    threadId: 'thread-1',
+    runId: 'run-1',
+    messages: [],
+    tools: [],
+    context: [],
+    state: initialState,
+  } satisfies RunAgentInput;
+  const agent = {
+    messages: [],
+    state: initialState,
+  } as unknown as AbstractAgent;
+
+  const mutations = await lastValueFrom(
+    defaultApplyEvents(input, of(...events), agent, []).pipe(toArray()),
+  );
+  return mutations as unknown[];
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const readPath = (value: unknown, path: string[]): unknown =>
+  path.reduce<unknown>((current, key) => (isRecord(current) ? current[key] : undefined), value);
 
 describe('pi AG-UI projection', () => {
   it('builds a thread snapshot that preserves canonical ids, task projection, artifacts, and activity-renderable A2UI payloads', () => {
@@ -154,6 +191,132 @@ describe('pi AG-UI projection', () => {
         },
       ]),
     });
+  });
+
+  it('builds a snapshot rebaseline for run-completion state when an intervening refresh can stale a delta', async () => {
+    const previousSession = {
+      thread: { id: 'thread-1' },
+      execution: {
+        id: 'exec-1',
+        status: 'completed' as const,
+        statusMessage: 'Portfolio state refreshed.',
+      },
+      artifacts: {
+        current: {
+          artifactId: 'refresh-1',
+          data: {
+            type: 'shared-ember-portfolio-state',
+            revision: 1,
+          },
+        },
+        activity: {
+          artifactId: 'refresh-1',
+          data: {
+            type: 'shared-ember-portfolio-state',
+            revision: 1,
+          },
+        },
+      },
+      threadPatch: {
+        lifecycle: {
+          phase: 'prehire',
+        },
+      },
+    };
+    const interveningClientSession = {
+      ...previousSession,
+      artifacts: {
+        current: {
+          artifactId: 'refresh-2',
+          data: {
+            type: 'shared-ember-portfolio-state',
+            revision: 2,
+          },
+        },
+        activity: {
+          artifactId: 'refresh-2',
+          data: {
+            type: 'shared-ember-portfolio-state',
+            revision: 2,
+          },
+        },
+      },
+    };
+    const runCompletionSession = {
+      thread: { id: 'thread-1' },
+      execution: {
+        id: 'exec-1',
+        status: 'interrupted' as const,
+        statusMessage: 'Connect the wallet you want the portfolio manager to onboard.',
+      },
+      artifacts: {
+        current: {
+          artifactId: 'interrupt-1',
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'portfolio-manager-setup-request',
+            status: 'pending',
+            mirroredToActivity: false,
+            message: 'Connect the wallet you want the portfolio manager to onboard.',
+          },
+        },
+        activity: {
+          artifactId: 'interrupt-1',
+          data: {
+            type: 'interrupt-status',
+            interruptType: 'portfolio-manager-setup-request',
+            status: 'pending',
+            mirroredToActivity: false,
+            message: 'Connect the wallet you want the portfolio manager to onboard.',
+          },
+        },
+      },
+      threadPatch: {
+        lifecycle: {
+          phase: 'onboarding',
+        },
+      },
+    };
+
+    const staleClientState = buildPiThreadStateSnapshot(interveningClientSession);
+    const staleDelta = buildPiRuntimeGatewayStateDeltaEvent({
+      previousSession,
+      session: runCompletionSession,
+    });
+    if (!staleDelta) {
+      throw new Error('Expected previous run-completion delta to be non-empty');
+    }
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      await expect(applyEventsWithAgUiClient(staleClientState, [staleDelta])).resolves.toEqual([]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to apply state patch:'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+
+    const rebaseline = buildPiRuntimeGatewayStateRebaselineEvent({
+      previousSession,
+      session: runCompletionSession,
+    });
+    if (!rebaseline) {
+      throw new Error('Expected changed run-completion state to produce a rebaseline');
+    }
+
+    expect(rebaseline.type).toBe(EventType.STATE_SNAPSHOT);
+    const appliedMutations = await applyEventsWithAgUiClient(staleClientState, [rebaseline]);
+    expect(appliedMutations).toHaveLength(1);
+    expect(readPath(appliedMutations[0], ['state', 'thread', 'lifecycle', 'phase'])).toBe(
+      'onboarding',
+    );
+    expect(
+      readPath(appliedMutations[0], ['state', 'thread', 'artifacts', 'current', 'artifactId']),
+    ).toBe('interrupt-1');
+    expect(readPath(appliedMutations[0], ['state', 'thread', 'task', 'taskStatus', 'state'])).toBe(
+      'input-required',
+    );
   });
 
   it('does not surface hidden interrupt checkpoint artifacts into thread activity fallbacks', () => {

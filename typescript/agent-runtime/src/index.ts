@@ -11,6 +11,7 @@ import {
   buildPiRuntimeDirectExecutionRecordIds as buildPiRuntimeDirectExecutionRecordIdsInternal,
   buildPiRuntimeGatewayConnectEvents as buildPiRuntimeGatewayConnectEventsInternal,
   buildPiRuntimeGatewayStateDeltaEvent as buildPiRuntimeGatewayStateDeltaEventInternal,
+  buildPiRuntimeGatewayStateRebaselineEvent as buildPiRuntimeGatewayStateRebaselineEventInternal,
   createCanonicalPiRuntimeGatewayControlPlane as createCanonicalPiRuntimeGatewayControlPlaneInternal,
   createPiRuntimeGatewayAgUiHandler as createPiRuntimeGatewayAgUiHandlerInternal,
   createPiRuntimeGatewayFoundation as createPiRuntimeGatewayFoundationInternal,
@@ -340,6 +341,8 @@ function buildDomainCommandToolDescription(lifecycle: AgentRuntimeDomainLifecycl
 
   return [
     'Execute one of the declared domain lifecycle commands through the runtime-owned normalized operation pipeline.',
+    'Put any structured command payload in inputJson as a JSON object string.',
+    'Do not rely on the default empty object when the selected command description names required fields.',
     `Available commands: ${commandList}.`,
   ].join(' ');
 }
@@ -2643,7 +2646,11 @@ export async function createAgentRuntime<TState = unknown>(
           description: buildDomainCommandToolDescription(domain.lifecycle),
           parameters: Type.Object({
             name: buildDomainCommandNameSchema(domain.lifecycle),
-            inputJson: Type.String({ default: '{}' }),
+            inputJson: Type.String({
+              description:
+                'JSON object string for the selected command payload. Include all fields required by the command description.',
+              default: '{}',
+            }),
           }) as AgentRuntimeTool['parameters'],
           execute: async (_toolCallId, args) => {
             const toolArgs = parseDomainCommandToolArgs(args);
@@ -2729,7 +2736,7 @@ export async function createAgentRuntime<TState = unknown>(
       }
 
       const nextSession = await runDomainOperation(request.threadId, operation);
-      const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+      const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEventInternal({
         previousSession: session,
         session: nextSession,
       });
@@ -2740,7 +2747,7 @@ export async function createAgentRuntime<TState = unknown>(
           threadId: request.threadId,
           runId: request.runId,
         },
-        ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+        ...(stateRebaselineEvent ? [stateRebaselineEvent] : []),
         {
           type: EventType.RUN_FINISHED,
           threadId: request.threadId,
@@ -2788,12 +2795,12 @@ export async function createAgentRuntime<TState = unknown>(
       );
       if (hasResume) {
         const resumedSession = await resumeInterruptedSession(request.threadId);
-        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+        const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEventInternal({
           previousSession: session,
           session: resumedSession,
         });
-        if (stateDeltaEvent) {
-          leadingEvents = [stateDeltaEvent];
+        if (stateRebaselineEvent) {
+          leadingEvents = [stateRebaselineEvent];
         }
       }
 
@@ -2802,7 +2809,7 @@ export async function createAgentRuntime<TState = unknown>(
       if (resumeOperation && domain?.handleOperation) {
         const previousSession = getSession(request.threadId);
         const nextSession = await runDomainOperation(request.threadId, resumeOperation);
-        const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEventInternal({
+        const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEventInternal({
           previousSession,
           session: nextSession,
         });
@@ -2815,7 +2822,7 @@ export async function createAgentRuntime<TState = unknown>(
                 threadId: request.threadId,
                 runId: request.runId,
               },
-              ...(stateDeltaEvent ? [stateDeltaEvent] : []),
+              ...(stateRebaselineEvent ? [stateRebaselineEvent] : []),
               {
                 type: EventType.RUN_FINISHED,
                 threadId: request.threadId,

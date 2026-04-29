@@ -1466,20 +1466,21 @@ describe('pi gateway service integration', () => {
         status: 'failed',
       },
     });
+    expect(runEvents.filter((event) => event.type === EventType.STATE_DELTA)).toEqual([]);
     expect(runEvents).toContainEqual({
-      type: EventType.STATE_DELTA,
-      delta: expect.arrayContaining([
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/state',
-          value: 'failed',
-        },
-        {
-          op: 'replace',
-          path: '/thread/task/taskStatus/message/content',
-          value: 'Key limit exceeded (monthly limit).',
-        },
-      ]),
+      type: EventType.STATE_SNAPSHOT,
+      snapshot: expect.objectContaining({
+        thread: expect.objectContaining({
+          task: expect.objectContaining({
+            taskStatus: {
+              state: 'failed',
+              message: {
+                content: 'Key limit exceeded (monthly limit).',
+              },
+            },
+          }),
+        }),
+      }),
     });
     expect(runEvents).toContainEqual({
       type: EventType.MESSAGES_SNAPSHOT,

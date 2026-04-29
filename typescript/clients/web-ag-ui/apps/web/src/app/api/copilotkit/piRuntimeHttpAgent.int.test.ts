@@ -158,6 +158,28 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+function encodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function collectSnapshotReplaceOperations(value: unknown, path = ''): JsonPatchOperation[] {
+  const currentOperation = { op: 'replace', path, value } satisfies JsonPatchOperation;
+  if (!isRecord(value)) {
+    return [currentOperation];
+  }
+
+  const entries = Array.isArray(value) ? [...value.entries()] : Object.entries(value);
+  return [
+    currentOperation,
+    ...entries.flatMap(([key, nestedValue]) =>
+      collectSnapshotReplaceOperations(
+        nestedValue,
+        `${path}/${encodeJsonPointerToken(String(key))}`,
+      ),
+    ),
+  ];
+}
+
 function matchesArtifactData(
   value: unknown,
   expected: {
@@ -221,11 +243,18 @@ function expectStateDeltaOperation(
   events: BaseEvent[],
   predicate: (operation: JsonPatchOperation) => boolean,
 ): void {
-  const stateDeltas = findStateDeltas(events);
-  expect(stateDeltas).not.toHaveLength(0);
-  expect(
-    stateDeltas.some((event) => event.delta.some((operation) => predicate(operation as JsonPatchOperation))),
-  ).toBe(true);
+  const operations = [
+    ...findStateDeltas(events).flatMap((event) =>
+      event.delta.map((operation) => operation as JsonPatchOperation),
+    ),
+    ...events.flatMap((event) =>
+      event.type === EventType.STATE_SNAPSHOT && isRecord(event.snapshot)
+        ? collectSnapshotReplaceOperations(event.snapshot)
+        : [],
+    ),
+  ];
+  expect(operations).not.toHaveLength(0);
+  expect(operations.some(predicate)).toBe(true);
 }
 
 function createInternalPostgresHooks() {

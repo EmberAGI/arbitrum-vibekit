@@ -36,6 +36,7 @@ import {
   SidebarActivityCard,
   SidebarAgentAvatar,
   type SidebarActivityCardControlSlice,
+  type SidebarActivityCardTokenHolding,
   type SidebarActivityCardTokenSlice,
   type SidebarActivityCardView,
 } from '@/components/ui/SidebarActivityCard';
@@ -62,6 +63,7 @@ type SidebarProjectionCardData = {
   liabilitiesUsd: number;
   allocationShare: number;
   tokenBreakdown: SidebarActivityCardTokenSlice[];
+  tokenHoldings?: SidebarActivityCardTokenHolding[];
   controlBreakdown?: SidebarActivityCardControlSlice[];
   thirtyDayPnlPct?: number;
 };
@@ -391,6 +393,9 @@ export function AppSidebar() {
       card.tokenBreakdown.forEach((slice) => {
         addToken(slice.asset);
       });
+      card.tokenHoldings?.forEach((holding) => {
+        addToken(holding.asset);
+      });
     });
     allActivityAgents.forEach((activity) => {
       const protocols = activity.entry?.profile?.protocols ?? activity.config.protocols ?? [];
@@ -455,6 +460,14 @@ export function AppSidebar() {
                 sidebarTokenIconBySymbol[normalizeSymbolKey(slice.asset)] ??
                 null,
               fallbackIconSymbol: slice.fallbackIconSymbol ?? slice.asset,
+            })),
+            tokenHoldings: card.tokenHoldings?.map((holding) => ({
+              ...holding,
+              iconUri:
+                holding.iconUri ??
+                sidebarTokenIconBySymbol[normalizeSymbolKey(holding.asset)] ??
+                null,
+              fallbackIconSymbol: holding.fallbackIconSymbol ?? holding.asset,
             })),
           },
         ]),
@@ -849,6 +862,7 @@ function buildSidebarActivityCardView(params: {
         entry: params.activity.entry,
         config: params.activity.config,
       }),
+    tokenHoldings: params.projectionCardData?.tokenHoldings,
     controlBreakdown:
       params.projectionCardData?.controlBreakdown ??
       (params.activity.id === PORTFOLIO_AGENT_ID && params.portfolioControlBreakdown.length > 0
@@ -1111,6 +1125,10 @@ function buildSidebarProjectionCardDataByAgentId(params: {
     liabilitiesUsd: portfolio.agents.portfolio.liabilitiesUsd,
     allocationShare: 1,
     tokenBreakdown: buildProjectionTokenBreakdown(portfolio.agents.portfolio.tokenExposures),
+    tokenHoldings: buildProjectionTokenHoldings({
+      assetFamilies: portfolio.assetFamilies,
+      totalPortfolioUsd: portfolio.summary.positiveAssetsUsd,
+    }),
     controlBreakdown: [
       ...specialistSlices,
       {
@@ -1149,6 +1167,37 @@ function buildProjectionTokenBreakdown(
     asset: tokenExposure.asset,
     share: tokenExposure.share,
   }));
+}
+
+function buildProjectionTokenHoldings(params: {
+  assetFamilies: PortfolioProjectionPacket['assetFamilies'];
+  totalPortfolioUsd: number;
+}): SidebarActivityCardTokenHolding[] {
+  return params.assetFamilies
+    .filter((family) => family.positiveUsd > 0)
+    .map((family) => ({
+      asset: family.asset,
+      amount: family.observedAssets
+        .filter((observedAsset) => observedAsset.sourceKind !== 'debt')
+        .reduce((sum, observedAsset) => sum + resolveObservedAssetDisplayQuantity(observedAsset), 0),
+      share: params.totalPortfolioUsd > 0 ? family.positiveUsd / params.totalPortfolioUsd : 0,
+      valueUsd: family.positiveUsd,
+    }))
+    .filter((holding) => holding.amount > 0 && holding.valueUsd > 0)
+    .sort((left, right) => right.valueUsd - left.valueUsd)
+    .slice(0, 5);
+}
+
+function resolveObservedAssetDisplayQuantity(
+  observedAsset: PortfolioProjectionPacket['assetFamilies'][number]['observedAssets'][number],
+): number {
+  const displayQuantity =
+    observedAsset.displayQuantity === undefined ? null : Number(observedAsset.displayQuantity);
+  if (displayQuantity !== null && Number.isFinite(displayQuantity) && displayQuantity > 0) {
+    return displayQuantity;
+  }
+
+  return observedAsset.quantity;
 }
 
 function formatAgentIdLabel(agentId: string): string {
