@@ -27,6 +27,11 @@ function readStringField(body: Record<string, unknown>, field: string): string |
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function readControlThreadScope(request: Request): { threadId?: string } {
+  const threadId = new URL(request.url).searchParams.get('threadId')?.trim();
+  return threadId ? { threadId } : {};
+}
+
 async function readJsonBody(request: Request): Promise<Record<string, unknown> | Response> {
   try {
     const body = (await request.json()) as unknown;
@@ -127,12 +132,15 @@ function parseRunRequest(body: Record<string, unknown>): PiRuntimeGatewayRunRequ
 
 export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiHandlerOptions) {
   const basePath = (options.basePath ?? DEFAULT_PI_RUNTIME_GATEWAY_AG_UI_BASE_PATH).replace(/\/$/, '');
-  const controlRoutes: Record<string, () => Promise<unknown>> = {
+  const controlRoutes: Record<string, (request: Request) => Promise<unknown>> = {
     [`${basePath}/control/health`]: () => options.service.control.inspectHealth(),
     [`${basePath}/control/threads`]: () => options.service.control.listThreads(),
     [`${basePath}/control/executions`]: () => options.service.control.listExecutions(),
     [`${basePath}/control/automations`]: () => options.service.control.listAutomations(),
-    [`${basePath}/control/automation-runs`]: () => options.service.control.listAutomationRuns(),
+    [`${basePath}/control/automation-runs`]: (request) =>
+      options.service.control.listAutomationRuns(readControlThreadScope(request)),
+    [`${basePath}/control/artifacts`]: (request) =>
+      options.service.control.listArtifacts(readControlThreadScope(request)),
     [`${basePath}/control/scheduler`]: () => options.service.control.inspectScheduler(),
     [`${basePath}/control/outbox`]: () => options.service.control.inspectOutbox(),
     [`${basePath}/control/maintenance`]: () => options.service.control.inspectMaintenance(),
@@ -147,7 +155,7 @@ export function createPiRuntimeGatewayAgUiHandler(options: PiRuntimeGatewayAgUiH
     }
 
     if (request.method === 'GET' && pathname in controlRoutes) {
-      return jsonResponse(await controlRoutes[pathname]!());
+      return jsonResponse(await controlRoutes[pathname]!(request));
     }
 
     const endpoint = new RegExp(`^${basePath}/agent/([^/]+)/(connect|run|stop)$`).exec(pathname);

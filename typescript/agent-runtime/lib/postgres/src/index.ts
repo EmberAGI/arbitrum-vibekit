@@ -33,7 +33,10 @@ export {
   buildPersistExecutionCheckpointStatements,
   buildPersistInterruptCheckpointStatements,
   buildPersistOutboxIntentStatements,
+  buildPersistScheduledAutomationRunSnapshotStatements,
   buildPersistThreadStateStatements,
+  buildStartAutomationExecutionStatements,
+  buildTimeoutAutomationExecutionStatements,
   type PiExecutionCheckpointStatus,
   type PostgresStatement,
 } from './transactions.js';
@@ -52,6 +55,7 @@ export {
   buildPiRuntimeMaintenancePlan,
   type PiAutomationRecord,
   type PiAutomationRunRecord,
+  type PiArtifactRecord,
   type PiExecutionEventRecord,
   type PiExecutionRecord,
   type PiRuntimeInspectionSnapshot,
@@ -62,6 +66,7 @@ export {
 } from './operatorControl.js';
 export {
   executePostgresStatements,
+  isPostgresAffectedRowsError,
   loadPiRuntimeInspectionState,
   persistPiRuntimeDirectExecution,
   type ExecutePostgresStatements,

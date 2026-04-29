@@ -11,6 +11,8 @@ import {
   Minus,
   Check,
   RefreshCw,
+  Search,
+  ExternalLink,
 } from 'lucide-react';
 import type { Message } from '@ag-ui/core';
 import Link from 'next/link';
@@ -95,12 +97,6 @@ import {
   readManagedLendingCollateralPolicies,
 } from '../utils/managedMandate';
 import { ManagedMandateWorkbenchCard } from './ManagedMandateWorkbenchCard';
-import {
-  buildPiExampleInterruptA2UiView,
-  buildPiExampleStatusA2UiView,
-  PiExampleA2UiCard,
-  type PiExampleA2UiView,
-} from './piExampleA2ui';
 
 export type { AgentProfile, AgentMetrics, Transaction, TelemetryItem, ClmmEvent };
 
@@ -306,6 +302,21 @@ function getMessageText(message: Message): string {
       .trim();
   }
 
+  if (message.role === 'activity') {
+    const content = asRecord(message.content);
+    if (!content) {
+      return '';
+    }
+
+    return [
+      readString(content.title),
+      readString(content.text) ?? readString(content.detail) ?? readString(content.summary),
+    ]
+      .filter((value): value is string => Boolean(value))
+      .join('\n')
+      .trim();
+  }
+
   return '';
 }
 
@@ -313,6 +324,7 @@ function getMessageRoleLabel(message: Message): string {
   if (message.role === 'assistant') return 'Agent';
   if (message.role === 'reasoning') return 'Reasoning';
   if (message.role === 'tool') return 'Tool';
+  if (message.role === 'activity' && message.activityType === 'artifact') return 'Artifact';
   if (message.role === 'activity') return 'Activity';
   return 'You';
 }
@@ -418,6 +430,153 @@ function readArtifactEventType(event: ClmmEvent): string {
     readString(asRecord(event.artifact?.data)?.['type']) ??
     'unknown'
   );
+}
+
+type ActivityInspectionAction = {
+  kind: 'run' | 'artifact';
+  id: string;
+  label: string;
+  href: string;
+  detailLines: string[];
+};
+
+type ActivityDescription = {
+  body: string;
+  details: string[];
+  inspections: ActivityInspectionAction[];
+};
+
+function buildActivityElementId(kind: ActivityInspectionAction['kind'], id: string): string {
+  return `automation-${kind}-${encodeURIComponent(id)}`;
+}
+
+function buildActivityAnchor(kind: ActivityInspectionAction['kind'], id: string): string {
+  return `#${buildActivityElementId(kind, id)}`;
+}
+
+function buildActivityInspectionHref(params: {
+  agentId: string;
+  threadId: string;
+  kind: ActivityInspectionAction['kind'];
+  id: string;
+}): string {
+  const searchParams = new URLSearchParams({
+    agentId: params.agentId,
+    threadId: params.threadId,
+    ...(params.kind === 'run' ? { runId: params.id } : { artifactId: params.id }),
+  });
+  const resource = params.kind === 'run' ? 'automation-runs' : 'artifacts';
+  return `/api/copilotkit/control/${resource}?${searchParams.toString()}`;
+}
+
+function buildActivityInspectionActions(params: {
+  agentId: string;
+  threadId: string | null;
+  runId: string | null;
+  artifactId: string | null;
+  summary?: string | null;
+  runThreadKey?: string | null;
+}): ActivityInspectionAction[] {
+  const actions: ActivityInspectionAction[] = [];
+
+  if (params.runId && params.threadId) {
+    actions.push({
+      kind: 'run',
+      id: params.runId,
+      label: `Inspect run ${params.runId}`,
+      href: buildActivityInspectionHref({
+        agentId: params.agentId,
+        threadId: params.threadId,
+        kind: 'run',
+        id: params.runId,
+      }),
+      detailLines: [
+        `Run ${params.runId}`,
+        params.summary ? `Summary ${params.summary}` : null,
+        params.runThreadKey ? `Run thread ${params.runThreadKey}` : null,
+      ].filter((line): line is string => line !== null),
+    });
+  }
+
+  if (params.artifactId && params.threadId) {
+    actions.push({
+      kind: 'artifact',
+      id: params.artifactId,
+      label: `Open artifact ${params.artifactId}`,
+      href: buildActivityInspectionHref({
+        agentId: params.agentId,
+        threadId: params.threadId,
+        kind: 'artifact',
+        id: params.artifactId,
+      }),
+      detailLines: [`Artifact ${params.artifactId}`],
+    });
+  }
+
+  return actions;
+}
+
+function describeActivityEvent(event: ClmmEvent, agentId: string): ActivityDescription {
+  if (event.type === 'status') {
+    return { body: event.message, details: [], inspections: [] };
+  }
+
+  if (event.type === 'dispatch-response') {
+    return { body: `Response with ${event.parts?.length ?? 0} parts`, details: [], inspections: [] };
+  }
+
+  const artifactData = asRecord(event.artifact?.data);
+  const artifactId = readString(event.artifact?.artifactId) ?? readString(event.artifact?.id);
+
+  if (artifactData?.type === 'automation-status') {
+    const status = readString(artifactData.status) ?? 'unknown';
+    const command = readString(artifactData.command) ?? 'automation';
+    const detail = readString(artifactData.detail) ?? 'Automation status updated.';
+    const runId = readString(artifactData.runId);
+    const rootThreadId = readString(artifactData.rootThreadId);
+    const details = [
+      runId ? `Run ${runId}` : null,
+      artifactId ? `Artifact ${artifactId}` : null,
+    ].filter((value): value is string => value !== null);
+
+    return {
+      body: `Automation ${status}\n${command}: ${detail}`,
+      details,
+      inspections: buildActivityInspectionActions({ agentId, threadId: rootThreadId, runId, artifactId }),
+    };
+  }
+
+  if (readArtifactEventType(event) === 'automation-run-snapshot') {
+    const snapshot = asRecord(artifactData?.snapshot);
+    const runId = readString(artifactData?.automationRunId) ?? readString(artifactData?.runId);
+    const runThreadKey = readString(artifactData?.runThreadKey);
+    const rootThreadId = readString(artifactData?.rootThreadId);
+    const summary = readString(snapshot?.summary) ?? readString(artifactData?.summary);
+    const details = [
+      runId ? `Run ${runId}` : null,
+      artifactId ? `Artifact ${artifactId}` : null,
+      runThreadKey ? `Run thread ${runThreadKey}` : null,
+    ].filter((value): value is string => value !== null);
+
+    return {
+      body: summary ? `Automation run snapshot\n${summary}` : 'Automation run snapshot',
+      details,
+      inspections: buildActivityInspectionActions({
+        agentId,
+        threadId: rootThreadId,
+        runId,
+        artifactId,
+        summary,
+        runThreadKey,
+      }),
+    };
+  }
+
+  return {
+    body: `Artifact: ${readArtifactEventType(event)}`,
+    details: artifactId ? [`Artifact ${artifactId}`] : [],
+    inspections: buildActivityInspectionActions({ agentId, threadId: null, runId: null, artifactId }),
+  };
 }
 
 type ManagedMandateEditorView = {
@@ -615,140 +774,6 @@ function PortfolioManagerMandateWorkbenchShell(props: {
       <div className="min-w-0 flex-1 self-stretch">{props.children}</div>
     </div>
   );
-}
-
-type PiExampleChatCard = {
-  id: string;
-  label: 'Artifact' | 'A2UI';
-  view: PiExampleA2UiView;
-  actionKind?: 'submit-operator-note';
-};
-
-function buildPiExampleChatCards(events: ClmmEvent[]): PiExampleChatCard[] {
-  return events.flatMap((event, index): PiExampleChatCard[] => {
-    if (event.type === 'artifact') {
-      const artifactData = asRecord(event.artifact?.data);
-      if (artifactData?.type === 'automation-status') {
-        const status = typeof artifactData.status === 'string' ? artifactData.status : 'unknown';
-        const command = typeof artifactData.command === 'string' ? artifactData.command : 'refresh';
-        const detail = typeof artifactData.detail === 'string' ? artifactData.detail : 'Automation status updated.';
-        return [
-          {
-            id: `artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
-            label: 'Artifact',
-            view: buildPiExampleStatusA2UiView({
-              title: `Automation ${status}`,
-              body: `${command}: ${detail}`,
-            }),
-          },
-        ];
-      }
-
-      if (artifactData?.type === 'lifecycle-status') {
-        const phase = typeof artifactData.phase === 'string' ? artifactData.phase : 'unknown';
-        const onboardingStep =
-          typeof artifactData.onboardingStep === 'string' ? artifactData.onboardingStep : null;
-        const operatorNote =
-          typeof artifactData.operatorNote === 'string' ? artifactData.operatorNote : null;
-        const detailLines = [
-          onboardingStep ? `Step: ${onboardingStep}` : null,
-          operatorNote ? `Operator note: ${operatorNote}` : null,
-        ].filter((line): line is string => line !== null);
-
-        return [
-          {
-            id: `lifecycle-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
-            label: 'Artifact',
-            view: buildPiExampleStatusA2UiView({
-              title: `Lifecycle ${phase}`,
-              body: detailLines.length > 0 ? detailLines.join('\n') : 'Lifecycle state updated.',
-            }),
-          },
-        ];
-      }
-
-      if (artifactData?.type === 'interrupt-status') {
-        const message = typeof artifactData.message === 'string' ? artifactData.message : 'Awaiting operator input.';
-        return [
-          {
-            id: `interrupt-artifact-${event.artifact?.artifactId ?? 'unknown'}-${index}`,
-            label: 'Artifact',
-            view: buildPiExampleStatusA2UiView({
-              title: 'Interrupt checkpoint',
-              body: message,
-            }),
-          },
-        ];
-      }
-
-      return [];
-    }
-
-    if (event.type !== 'dispatch-response') {
-      return [];
-    }
-
-    return event.parts.flatMap((part, partIndex): PiExampleChatCard[] => {
-      if (part.kind !== 'a2ui') {
-        return [];
-      }
-
-      const payloadEnvelope = asRecord(asRecord(part.data)?.payload);
-      if (!payloadEnvelope) {
-        return [];
-      }
-
-      if (payloadEnvelope.kind === 'automation-status') {
-        const payload = asRecord(payloadEnvelope.payload);
-        if (!payload) {
-          return [];
-        }
-
-        const status = typeof payload.status === 'string' ? payload.status : 'unknown';
-        const command = typeof payload.command === 'string' ? payload.command : 'refresh';
-        const detail = typeof payload.detail === 'string' ? payload.detail : 'Automation status updated.';
-        return [
-          {
-            id: `automation-a2ui-${index}-${partIndex}`,
-            label: 'A2UI',
-            view: buildPiExampleStatusA2UiView({
-              title: `Automation ${status}`,
-              body: `${command}: ${detail}`,
-            }),
-          },
-        ];
-      }
-
-      if (payloadEnvelope.kind === 'interrupt') {
-        const payload = asRecord(payloadEnvelope.payload);
-        if (!payload) {
-          return [];
-        }
-
-        return [
-          {
-            id: `interrupt-a2ui-${index}-${partIndex}`,
-            label: 'A2UI',
-            actionKind: 'submit-operator-note',
-            view: buildPiExampleInterruptA2UiView({
-              title: 'Operator input required',
-              message:
-                typeof payload.message === 'string'
-                  ? payload.message
-                  : 'Provide a short operator note to continue.',
-              inputLabel:
-                typeof payload.inputLabel === 'string' ? payload.inputLabel : 'Operator note',
-              submitLabel:
-                typeof payload.submitLabel === 'string' ? payload.submitLabel : 'Continue agent loop',
-              artifactId: typeof payload.artifactId === 'string' ? payload.artifactId : undefined,
-            }),
-          },
-        ];
-      }
-
-      return [];
-    });
-  });
 }
 
 function FloatingErrorToast(props: {
@@ -1199,14 +1224,12 @@ export function AgentDetailPage({
       isHired={isHired}
       isHiring={isHiring}
       messages={messages}
-      activityEvents={events}
       chatDraft={chatDraft}
       onChatDraftChange={setChatDraft}
       onSubmit={handleChatSubmit}
       onChatKeyDown={handleChatKeyDown}
       isComposerEnabled={chatEnabled && typeof onSendChatMessage === 'function'}
       onSendChatMessage={onSendChatMessage}
-      onInterruptSubmit={onInterruptSubmit}
     />
   ) : null;
   const managedAgentContextCards = visibleManagedMandateEditorView ? (
@@ -1427,6 +1450,7 @@ export function AgentDetailPage({
 
         {resolvedTab === 'transactions' && (
           <TransactionHistoryTab
+            agentId={agentId}
             transactions={transactions}
             taskId={taskId}
             taskStatus={taskStatus}
@@ -2088,14 +2112,12 @@ function AgentChatTab(props: {
   isHired: boolean;
   isHiring: boolean;
   messages: Message[];
-  activityEvents: ClmmEvent[];
   chatDraft: string;
   onChatDraftChange: (value: string) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onChatKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   isComposerEnabled: boolean;
   onSendChatMessage?: (content: string) => void;
-  onInterruptSubmit?: (input: PiOperatorNoteInput) => void;
 }) {
   const visibleMessages = useMemo(() => {
     return props.messages
@@ -2109,7 +2131,6 @@ function AgentChatTab(props: {
       )
       .filter((message) => message.text.length > 0);
   }, [props.messages]);
-  const activityCards = buildPiExampleChatCards(props.activityEvents);
 
   return (
     <div className="space-y-4">
@@ -2143,38 +2164,6 @@ function AgentChatTab(props: {
             </div>
           ))
         )}
-
-        {activityCards.map((card) => (
-          <div key={card.id} className={`${DETAIL_PANEL_CLASS} px-4 py-4`}>
-            <div className="text-[11px] uppercase tracking-[0.14em] text-[#907764]">
-              {card.label}
-            </div>
-            <div className="mt-2">
-              <PiExampleA2UiCard
-                view={card.view}
-                onAction={(action) => {
-                  if (
-                    card.actionKind !== 'submit-operator-note' ||
-                    action.actionName !== 'submitOperatorNote' ||
-                    !props.onInterruptSubmit
-                  ) {
-                    return;
-                  }
-
-                  const note =
-                    typeof action.context?.operatorNote === 'string'
-                      ? action.context.operatorNote.trim()
-                      : '';
-                  if (note.length === 0) {
-                    return;
-                  }
-
-                  props.onInterruptSubmit({ operatorNote: note });
-                }}
-              />
-            </div>
-          </div>
-        ))}
       </div>
 
       <form onSubmit={props.onSubmit} className="border-t border-[#eadac7] pt-4">
@@ -2208,6 +2197,7 @@ function AgentChatTab(props: {
 
 // Transaction History Tab Component
 interface TransactionHistoryTabProps {
+  agentId: string;
   transactions: Transaction[];
   taskId?: string;
   taskStatus?: string;
@@ -2219,6 +2209,7 @@ interface TransactionHistoryTabProps {
 }
 
 function TransactionHistoryTab({
+  agentId,
   transactions,
   taskId,
   taskStatus,
@@ -2403,27 +2394,84 @@ function TransactionHistoryTab({
         <div className={`${DETAIL_PANEL_CLASS} p-6`}>
           <h3 className="mb-4 text-lg font-semibold text-[#261a12]">Activity Stream</h3>
           <div className="space-y-3 max-h-64 overflow-y-auto">
-            {events.slice(-10).reverse().map((event, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
-                <div
-                  className={`w-2 h-2 rounded-full mt-2 ${
-                    event.type === 'status'
-                      ? 'bg-blue-400'
-                      : event.type === 'artifact'
-                        ? 'bg-purple-400'
-                        : 'bg-gray-400'
-                  }`}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
-                  <div className="mt-1 text-sm text-[#261a12]">
-                    {event.type === 'status' && event.message}
-                    {event.type === 'artifact' && `Artifact: ${readArtifactEventType(event)}`}
-                    {event.type === 'dispatch-response' && `Response with ${event.parts?.length ?? 0} parts`}
+            {events.slice(-10).reverse().map((event, i) => {
+              const activityDescription = describeActivityEvent(event, agentId);
+              return (
+                <div key={i} className="flex items-start gap-3 rounded-lg bg-[#fff7ef] p-3">
+                  <div
+                    className={`w-2 h-2 rounded-full mt-2 ${
+                      event.type === 'status'
+                        ? 'bg-blue-400'
+                        : event.type === 'artifact'
+                          ? 'bg-purple-400'
+                          : 'bg-gray-400'
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs uppercase tracking-wide text-[#937c69]">{event.type}</div>
+                    <div className="mt-1 whitespace-pre-line text-sm text-[#261a12]">
+                      {activityDescription.body}
+                    </div>
+                    {activityDescription.details.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {activityDescription.details.map((detail) => (
+                          <span
+                            key={detail}
+                            className="rounded-md border border-[#eadac7] bg-white/70 px-2 py-1 text-[11px] text-[#6f5a4c]"
+                          >
+                            {detail}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {activityDescription.inspections.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {activityDescription.inspections.map((inspection) => {
+                          if (inspection.kind === 'run') {
+                            return (
+                              <details
+                                key={`${inspection.kind}-${inspection.id}`}
+                                id={buildActivityElementId('run', inspection.id)}
+                                className="rounded-md border border-[#eadac7] bg-white/80 px-3 py-2 text-xs text-[#503826]"
+                              >
+                                <summary className="flex cursor-pointer items-center gap-2 font-medium text-[#261a12]">
+                                  <Search className="h-3.5 w-3.5" aria-hidden="true" />
+                                  {inspection.label}
+                                </summary>
+                                <div className="mt-2 space-y-1 text-[#6f5a4c]">
+                                  {inspection.detailLines.map((line) => (
+                                    <div key={line}>{line}</div>
+                                  ))}
+                                  <a
+                                    href={inspection.href}
+                                    className="inline-flex items-center gap-1 font-medium text-[#7b4c2f] hover:text-[#3a2417]"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Open run {inspection.id}
+                                  </a>
+                                </div>
+                              </details>
+                            );
+                          }
+
+                          return (
+                            <a
+                              key={`${inspection.kind}-${inspection.id}`}
+                              id={buildActivityElementId('artifact', inspection.id)}
+                              href={inspection.href}
+                              className="inline-flex items-center gap-1 rounded-md border border-[#eadac7] bg-white/80 px-3 py-2 text-xs font-medium text-[#503826] hover:bg-[#fff7ef]"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                              {inspection.label}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

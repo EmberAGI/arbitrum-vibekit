@@ -155,7 +155,7 @@ function findStateDeltas(events: BaseEvent[]) {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function encodeJsonPointerToken(token: string): string {
@@ -163,21 +163,28 @@ function encodeJsonPointerToken(token: string): string {
 }
 
 function collectSnapshotReplaceOperations(value: unknown, path = ''): JsonPatchOperation[] {
-  const currentOperation = { op: 'replace', path, value } satisfies JsonPatchOperation;
-  if (!isRecord(value)) {
-    return [currentOperation];
+  const operations = path === '' ? [] : [{ op: 'replace', path, value } satisfies JsonPatchOperation];
+
+  if (Array.isArray(value)) {
+    return operations.concat(
+      value.flatMap((item, index) =>
+        collectSnapshotReplaceOperations(item, `${path}/${index}`),
+      ),
+    );
   }
 
-  const entries = Array.isArray(value) ? [...value.entries()] : Object.entries(value);
-  return [
-    currentOperation,
-    ...entries.flatMap(([key, nestedValue]) =>
+  if (!isRecord(value)) {
+    return operations;
+  }
+
+  return operations.concat(
+    Object.entries(value).flatMap(([key, nestedValue]) =>
       collectSnapshotReplaceOperations(
         nestedValue,
         `${path}/${encodeJsonPointerToken(String(key))}`,
       ),
     ),
-  ];
+  );
 }
 
 function matchesArtifactData(

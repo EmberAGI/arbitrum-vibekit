@@ -8,7 +8,9 @@ import {
 import { describe, expect, it, vi } from 'vitest';
 
 import {
+  AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
   AGENT_RUNTIME_DOMAIN_COMMAND_TOOL,
+  AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
   type AgentRuntimeService,
   createAgentRuntime,
 } from './index.js';
@@ -26,6 +28,7 @@ type InternalPostgresStatement = {
   tableName: string;
   text: string;
   values: readonly unknown[];
+  requiredAffectedRows?: number;
 };
 type InternalPersistDirectExecutionOptions = {
   threadId: string;
@@ -102,6 +105,7 @@ function createInternalPostgresHooks(
       outboxIntents: unknown[];
       executionEvents: unknown[];
       threadActivities: unknown[];
+      artifacts?: unknown[];
     }>;
     executeStatements: (
       databaseUrl: string,
@@ -138,6 +142,7 @@ function createInternalPostgresHooks(
       outboxIntents: [],
       executionEvents: [],
       threadActivities: [],
+      artifacts: [],
     }));
   const executeStatements = overrides.executeStatements ?? vi.fn(async () => undefined);
   const persistDirectExecution = overrides.persistDirectExecution ?? vi.fn(async () => undefined);
@@ -164,6 +169,7 @@ function createPersistingInternalPostgres() {
     outboxIntents: [],
     executionEvents: [],
     threadActivities: [],
+    artifacts: [],
   }));
   const persistDirectExecution = vi.fn(async (options: unknown) => {
     const params = options as InternalPersistDirectExecutionOptions;
@@ -401,6 +407,18 @@ function createTextStream(text: string) {
   });
 
   return stream;
+}
+
+function createNeverEndingStream(): AsyncIterable<never> {
+  return {
+    [Symbol.asyncIterator](): AsyncIterator<never> {
+      return {
+        async next(): Promise<IteratorResult<never>> {
+          return await new Promise<IteratorResult<never>>(() => undefined);
+        },
+      };
+    },
+  };
 }
 
 async function collectEventSource<T>(source: readonly T[] | AsyncIterable<T>): Promise<T[]> {
@@ -1560,11 +1578,14 @@ describe('agent-runtime integration', () => {
     ).toBe(true);
   });
 
-  it('runs scheduled automation updates through the runtime-owned default Postgres bootstrap path', async () => {
+  it('runs due scheduled automations through the agent with the saved instruction', async () => {
     vi.useFakeTimers();
 
     try {
       const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const observedScheduledPromptUserMessages: string[][] = [];
+      const observedScheduledSystemPrompts: string[] = [];
       let inspectionState = {
         threads: [],
         executions: [],
@@ -1585,6 +1606,7 @@ describe('agent-runtime integration', () => {
         outboxIntents: unknown[];
         executionEvents: unknown[];
         threadActivities: unknown[];
+        artifacts?: unknown[];
       };
       const internalPostgres = createInternalPostgresHooks({
         loadInspectionState: vi.fn(async () => inspectionState),
@@ -1596,6 +1618,23 @@ describe('agent-runtime integration', () => {
         now: () => currentTime,
         agentOptions: {
           streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+              observedScheduledSystemPrompts.push(context.systemPrompt);
+              observedScheduledPromptUserMessages.push(
+                context.messages
+                  .filter((message: Message) => message.role === 'user')
+                  .map((message: Message) =>
+                    typeof message.content === 'string'
+                      ? message.content
+                      : JSON.stringify(message.content),
+                  ),
+              );
+            }
+
             const latestToolResult = [...context.messages]
               .reverse()
               .find((message: Message) => message.role === 'toolResult');
@@ -1635,11 +1674,57 @@ describe('agent-runtime integration', () => {
         }),
       );
 
+      const initialScheduleStatements = internalPostgres.executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(initialScheduleStatements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automations',
+          values: expect.arrayContaining([new Date(currentTime + 60_000)]),
+        }),
+      );
+      expect(initialScheduleStatements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: [
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            expect.any(String),
+            'scheduled',
+            new Date(currentTime + 60_000),
+            null,
+          ],
+        }),
+      );
+
       inspectionState = {
         threads: [
           {
             threadId: 'thread-record-1',
             threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+              activityEvents: [
+                {
+                  type: 'artifact',
+                  artifact: {
+                    artifactId: 'artifact-previous',
+                    data: {
+                      type: 'automation-status',
+                      runId: 'run-automation-previous',
+                      status: 'completed',
+                      detail: 'Automation Sync every minute executed successfully.',
+                    },
+                  },
+                  append: true,
+                },
+              ],
+            },
           },
         ],
         executions: [],
@@ -1647,10 +1732,12 @@ describe('agent-runtime integration', () => {
           {
             automationId: 'automation-1',
             threadId: 'thread-record-1',
-            commandName: 'sync',
+            commandName: 'Sync every minute',
             nextRunAt: new Date(currentTime - 1_000),
             suspended: false,
             schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
               minutes: 1,
             },
           },
@@ -1663,12 +1750,47 @@ describe('agent-runtime integration', () => {
             status: 'scheduled',
             scheduledAt: new Date(currentTime - 60_000),
           },
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-previous',
+            executionId: 'execution-automation-previous',
+            status: 'completed',
+            scheduledAt: new Date(currentTime - 120_000),
+            startedAt: new Date(currentTime - 119_000),
+            completedAt: new Date(currentTime - 110_000),
+          },
         ],
         interrupts: [],
         leases: [],
         outboxIntents: [],
         executionEvents: [],
-        threadActivities: [],
+        threadActivities: [
+          {
+            activityId: 'activity-previous',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-previous',
+            activityKind: 'automation-executed',
+            createdAt: new Date(currentTime - 110_000),
+          },
+        ],
+        artifacts: [
+          {
+            artifactId: 'artifact-previous-snapshot',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-previous',
+            artifactKind: 'automation-run-snapshot',
+            appendOnly: false,
+            payload: {
+              automationRunId: 'run-automation-previous',
+              runThreadKey: 'automation:automation-1:run:run-automation-previous',
+              snapshot: {
+                summary: 'Rebalanced 120 USDC.',
+              },
+            },
+            createdAt: new Date(currentTime - 110_000),
+            updatedAt: new Date(currentTime - 110_000),
+          },
+        ],
       };
 
       await vi.advanceTimersByTimeAsync(1_100);
@@ -1685,14 +1807,2179 @@ describe('agent-runtime integration', () => {
       expect(connectSnapshot!.snapshot.thread.artifacts?.current?.data).toMatchObject({
         type: 'automation-status',
         status: 'completed',
-        command: 'sync',
+        command: 'Sync every minute',
       });
+      expect(observedScheduledUserMessages).toContain('sync treasury balances');
+      expect(observedScheduledPromptUserMessages).toContainEqual(['sync treasury balances']);
+      const scheduledSystemPrompt = observedScheduledSystemPrompts.join('\n');
+      expect(scheduledSystemPrompt).toContain('<scheduled_automation_context>');
+      expect(scheduledSystemPrompt).toContain('<automation_id>automation-1</automation_id>');
+      expect(scheduledSystemPrompt).toContain('<automation_title>Sync every minute</automation_title>');
+      expect(scheduledSystemPrompt).toContain('<root_thread_id>thread-1</root_thread_id>');
+      expect(scheduledSystemPrompt).toContain('<previous_run_status>completed</previous_run_status>');
+      expect(scheduledSystemPrompt).toContain('<previous_run_id>run-automation-previous</previous_run_id>');
+      expect(scheduledSystemPrompt).toContain('<previous_run_summary>Rebalanced 120 USDC.</previous_run_summary>');
+      expect(scheduledSystemPrompt).not.toContain('Automation Sync every minute executed successfully.');
+      expect(scheduledSystemPrompt).toContain(
+        '<previous_run_detail_ref>automation-run:run-automation-previous</previous_run_detail_ref>',
+      );
+      expect(scheduledSystemPrompt).toContain(
+        '<previous_run_artifact_ref>artifact:artifact-previous-snapshot</previous_run_artifact_ref>',
+      );
+      expect(scheduledSystemPrompt).toContain(
+        '<previous_run_activity_ref>thread-activity:activity-previous</previous_run_activity_ref>',
+      );
+      const rootMessages = await readFirstMatchingEvent(
+        await runtime.service.connect({
+          threadId: 'thread-1',
+          runId: 'run-connect-messages',
+        }),
+        isMessagesSnapshotEvent,
+      );
+      expect(rootMessages?.messages).not.toContainEqual(
+        expect.objectContaining({
+          role: 'user',
+          content: 'sync treasury balances',
+        }),
+      );
+      expect(rootMessages?.messages).toContainEqual(
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'artifact',
+          content: expect.objectContaining({
+            type: 'automation-status',
+            status: 'scheduled',
+            title: 'Automation scheduled',
+            text: 'Scheduled sync every 1 minutes.',
+          }),
+        }),
+      );
+      expect(rootMessages?.messages).not.toContainEqual(
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'artifact',
+          content: expect.objectContaining({
+            status: 'running',
+          }),
+        }),
+      );
+      expect(rootMessages?.messages).not.toContainEqual(
+        expect.objectContaining({
+          role: 'activity',
+          activityType: 'artifact',
+          content: expect.objectContaining({
+            status: 'completed',
+          }),
+        }),
+      );
+      const statements = internalPostgres.executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).not.toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_threads',
+          values: expect.arrayContaining(['automation:automation-1:run:run-automation-1']),
+        }),
+      );
       expect(internalPostgres.ensureReady).toHaveBeenCalledWith({});
       expect(internalPostgres.loadInspectionState).toHaveBeenCalled();
       expect(internalPostgres.executeStatements).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('marks scheduled automation runs failed when the agent invocation fails', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              throw new Error('Synthetic scheduled failure.');
+            }
+
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['failed', expect.any(Date), expect.any(Date), 'run-automation-1'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_executions',
+          text: expect.stringContaining('update pi_executions'),
+          values: ['failed', expect.any(Date), expect.any(Date), 'execution-automation-1'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            expect.any(Date),
+            null,
+          ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers persisted due scheduled automations after restart and invokes through the agent', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            return createTextStream('Recovered run complete.');
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toEqual(['sync treasury balances']);
+      expect(executeStatements.mock.calls.flatMap((call) => call[1])).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['completed', expect.any(Date), expect.any(Date), 'run-automation-1'],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not invoke due suspended automations or canceled scheduled runs', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+          {
+            threadId: 'thread-record-2',
+            threadKey: 'thread-2',
+            threadState: {
+              thread: {
+                id: 'thread-2',
+              },
+              execution: {
+                id: 'execution-thread-2',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-suspended',
+            threadId: 'thread-record-1',
+            commandName: 'Suspended sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: true,
+            schedulePayload: {
+              title: 'Suspended sync',
+              instruction: 'should not run suspended',
+              minutes: 1,
+            },
+          },
+          {
+            automationId: 'automation-canceled',
+            threadId: 'thread-record-2',
+            commandName: 'Canceled sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Canceled sync',
+              instruction: 'should not run canceled',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-suspended',
+            runId: 'run-suspended',
+            executionId: 'execution-suspended',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-canceled',
+            runId: 'run-canceled',
+            executionId: 'execution-canceled',
+            status: 'canceled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: new Date(currentTime - 30_000),
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            return createTextStream('Unexpected.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toEqual([]);
+      expect(executeStatements).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels the current active scheduled automation run', async () => {
+    const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+    const executeStatements = vi.fn(async () => undefined);
+    const inspectionState = {
+      threads: [
+        {
+          threadId: 'thread-record-1',
+          threadKey: 'thread-1',
+          threadState: {
+            thread: {
+              id: 'thread-1',
+            },
+            execution: {
+              id: 'execution-thread-1',
+              status: 'completed',
+            },
+          },
+        },
+      ],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-1',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+          commandName: 'Sync every minute',
+          nextRunAt: new Date(currentTime + 60_000),
+          suspended: false,
+          schedulePayload: {
+            title: 'Sync every minute',
+            instruction: 'sync treasury balances',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-1',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+          runId: 'run-automation-active',
+          executionId: 'execution-automation-active',
+          status: 'running',
+          scheduledAt: new Date(currentTime - 60_000),
+          startedAt: new Date(currentTime - 55_000),
+          completedAt: null,
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            return createTextStream('Automation canceled.');
+          }
+
+          return createToolStream({
+            toolName: AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
+            toolCallId: 'tool-automation-cancel',
+            args: {
+              automationId: 'automation-1',
+            },
+          });
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      }),
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-cancel-active',
+        messages: [
+          {
+            id: 'message-cancel-active',
+            role: 'user',
+            content: 'Cancel this automation.',
+          },
+        ],
+      }),
+    );
+
+    const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+    expect(statements).toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_automation_runs',
+        text: expect.stringContaining("status in ('scheduled', 'running', 'started')"),
+        values: [
+          'canceled',
+          new Date(currentTime),
+          'run-automation-active',
+          'automation-1',
+          'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+        ],
+        requiredAffectedRows: 1,
+      }),
+    );
+  });
+
+  it('does not cancel an automation run owned by another root thread', async () => {
+    const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+    const executeStatements = vi.fn(async () => undefined);
+    const inspectionState = {
+      threads: [
+        {
+          threadId: 'thread-record-1',
+          threadKey: 'thread-1',
+          threadState: {
+            thread: {
+              id: 'thread-1',
+            },
+            execution: {
+              id: 'execution-thread-1',
+              status: 'completed',
+            },
+          },
+        },
+      ],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-foreign',
+          threadId: 'thread-record-foreign',
+          commandName: 'Foreign automation',
+          nextRunAt: new Date(currentTime + 60_000),
+          suspended: false,
+          schedulePayload: {
+            title: 'Foreign automation',
+            instruction: 'sync another thread',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-foreign',
+          threadId: 'thread-record-foreign',
+          runId: 'run-automation-foreign',
+          executionId: 'execution-automation-foreign',
+          status: 'running',
+          scheduledAt: new Date(currentTime - 60_000),
+          startedAt: new Date(currentTime - 55_000),
+          completedAt: null,
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            return createTextStream('Automation canceled.');
+          }
+
+          return createToolStream({
+            toolName: AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
+            toolCallId: 'tool-automation-cancel-foreign',
+            args: {
+              automationId: 'automation-foreign',
+            },
+          });
+        },
+      },
+      __internalPostgres: createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      }),
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-cancel-foreign',
+        messages: [
+          {
+            id: 'message-cancel-foreign',
+            role: 'user',
+            content: 'Cancel that automation.',
+          },
+        ],
+      }),
+    );
+
+    const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_automation_runs',
+        values: expect.arrayContaining(['run-automation-foreign']),
+      }),
+    );
+    expect(statements).not.toContainEqual(
+      expect.objectContaining({
+        tableName: 'pi_automations',
+        values: expect.arrayContaining(['automation-foreign']),
+      }),
+    );
+  });
+
+  it('persists scheduled automation runs as running before invoking the agent', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: () => createTextStream('Done.'),
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const calls = executeStatements.mock.calls.map((call) => call[1]);
+      const runningCallIndex = calls.findIndex((statements) =>
+        statements.some(
+          (statement) =>
+            statement.tableName === 'pi_automation_runs' &&
+            statement.text.includes('update pi_automation_runs') &&
+            statement.values[0] === 'running',
+        ),
+      );
+      const terminalCallIndex = calls.findIndex((statements) =>
+        statements.some(
+          (statement) =>
+            statement.tableName === 'pi_automation_runs' &&
+            statement.text.includes('update pi_automation_runs') &&
+            statement.values[0] === 'completed',
+        ),
+      );
+      expect(runningCallIndex).toBeGreaterThanOrEqual(0);
+      expect(terminalCallIndex).toBeGreaterThan(runningCallIndex);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('skips agent invocation when another scheduler process already claimed the run', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const executeStatements = vi.fn(async (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+        if (statements.some((statement) => statement.requiredAffectedRows === 1)) {
+          const error = new Error('Expected pi_automation_runs statement to affect 1 row, but it affected 0.');
+          error.name = 'PostgresAffectedRowsError';
+          throw error;
+        }
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            return createTextStream('Should not run.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toEqual([]);
+      expect(executeStatements).toHaveBeenCalled();
+      expect(executeStatements.mock.calls.flatMap((call) => call[1])).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            tableName: 'pi_automation_runs',
+            requiredAffectedRows: 1,
+          }),
+        ]),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('persists scheduled-run transcript artifacts under the automation execution without a run pi_thread', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      const runtime = await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              return createTextStream('Scheduled run summarized 42 balances.');
+            }
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_artifacts',
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'automation-run-snapshot',
+            false,
+            expect.stringContaining('Scheduled run summarized 42 balances.'),
+            expect.any(Date),
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_execution_events',
+          values: [
+            expect.any(String),
+            'execution-automation-1',
+            'thread-record-1',
+            'automation-run-snapshot',
+            expect.stringContaining('"automationRunId":"run-automation-1"'),
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).not.toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_threads',
+          values: expect.arrayContaining(['automation:automation-1:run:run-automation-1']),
+        }),
+      );
+      const snapshot = await readFirstMatchingEvent(
+        await runtime.service.connect({
+          threadId: 'thread-1',
+          runId: 'run-connect-live-snapshot-artifact',
+        }),
+        isStateSnapshotEvent,
+      );
+      expect(snapshot?.snapshot.thread.activity?.events).toContainEqual(
+        expect.objectContaining({
+          type: 'artifact',
+          artifact: expect.objectContaining({
+            artifactId: expect.any(String),
+            data: expect.objectContaining({
+              type: 'automation-run-snapshot',
+              automationRunId: 'run-automation-1',
+              snapshot: expect.objectContaining({
+                summary: 'Scheduled run summarized 42 balances.',
+              }),
+            }),
+          }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('bounds previous-run summaries before injecting scheduled automation context', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const longPreviousSummary = [
+        'Rebalanced 120 USDC.',
+        ...Array.from({ length: 100 }, (_value, index) => `tail-marker-${index}`),
+      ].join(' ');
+      const observedScheduledSystemPrompts: string[] = [];
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            runId: 'run-automation-previous',
+            executionId: 'execution-automation-previous',
+            status: 'completed',
+            scheduledAt: new Date(currentTime - 120_000),
+            startedAt: new Date(currentTime - 119_000),
+            completedAt: new Date(currentTime - 110_000),
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+        artifacts: [
+          {
+            artifactId: 'artifact-previous-snapshot',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-previous',
+            artifactKind: 'automation-run-snapshot',
+            appendOnly: false,
+            payload: {
+              automationRunId: 'run-automation-previous',
+              runThreadKey: 'automation:automation-1:run:run-automation-previous',
+              snapshot: {
+                summary: longPreviousSummary,
+              },
+            },
+            createdAt: new Date(currentTime - 110_000),
+            updatedAt: new Date(currentTime - 110_000),
+          },
+        ],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              observedScheduledSystemPrompts.push(context.systemPrompt);
+              return createTextStream('Scheduled run summarized 42 balances.');
+            }
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements: vi.fn(async () => undefined),
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const scheduledSystemPrompt = observedScheduledSystemPrompts.join('\n');
+      const previousRunSummary = scheduledSystemPrompt.match(
+        /<previous_run_summary>(?<summary>[\s\S]*?)<\/previous_run_summary>/,
+      )?.groups?.summary;
+      expect(previousRunSummary).toBeDefined();
+      expect(previousRunSummary!.length).toBeLessThanOrEqual(512);
+      expect(previousRunSummary).not.toContain('tail-marker-99');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hydrates persisted scheduled-run snapshot artifacts into root activity inspection state', async () => {
+    const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+    const internalPostgres = createInternalPostgresHooks({
+      loadInspectionState: vi.fn(async () => ({
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+              activityEvents: [],
+            },
+            createdAt: new Date(currentTime - 120_000),
+            updatedAt: new Date(currentTime - 60_000),
+          },
+        ],
+        executions: [],
+        automations: [],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'completed',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: new Date(currentTime - 55_000),
+            completedAt: new Date(currentTime - 50_000),
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [
+          {
+            eventId: 'event-snapshot-1',
+            executionId: 'execution-automation-1',
+            threadId: 'thread-record-1',
+            eventKind: 'automation-run-snapshot',
+            payload: {
+              automationRunId: 'run-automation-1',
+              runThreadKey: 'automation:automation-1:run:run-automation-1',
+              snapshot: {
+                summary: 'Synced 42 balances.',
+              },
+            },
+            createdAt: new Date(currentTime - 50_000),
+          },
+        ],
+        threadActivities: [],
+        artifacts: [
+          {
+            artifactId: 'artifact-snapshot-1',
+            threadId: 'thread-record-1',
+            executionId: 'execution-automation-1',
+            artifactKind: 'automation-run-snapshot',
+            appendOnly: false,
+            payload: {
+              automationRunId: 'run-automation-1',
+              runThreadKey: 'automation:automation-1:run:run-automation-1',
+              snapshot: {
+                summary: 'Synced 42 balances.',
+              },
+            },
+            createdAt: new Date(currentTime - 50_000),
+            updatedAt: new Date(currentTime - 50_000),
+          },
+        ],
+      })),
+    });
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: () => createTextStream('Idle.'),
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    const snapshot = await readFirstMatchingEvent(
+      await runtime.service.connect({
+        threadId: 'thread-1',
+        runId: 'run-connect-snapshot-artifacts',
+      }),
+      isStateSnapshotEvent,
+    );
+
+    expect(snapshot?.snapshot.thread.activity?.events).toContainEqual(
+      expect.objectContaining({
+        type: 'artifact',
+        artifact: expect.objectContaining({
+          artifactId: 'artifact-snapshot-1',
+          data: expect.objectContaining({
+            type: 'automation-run-snapshot',
+            automationRunId: 'run-automation-1',
+            snapshot: expect.objectContaining({
+              summary: 'Synced 42 balances.',
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('keeps scheduled runtime-owned tool checkpoints on the automation execution and root thread', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:00:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestToolResult = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'toolResult');
+            if (latestToolResult) {
+              return createTextStream('Operator input requested.');
+            }
+
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              return createToolStream({
+                toolName: AGENT_RUNTIME_REQUEST_OPERATOR_INPUT_TOOL,
+                toolCallId: 'tool-operator-input',
+                args: {
+                  message: 'Approve scheduled balance sync.',
+                },
+              });
+            }
+            return createTextStream('Idle.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(async () => inspectionState),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_interrupts',
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'input-required',
+            'pending',
+            true,
+            '{}',
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).not.toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_interrupts',
+          values: expect.arrayContaining([
+            expect.stringContaining('automation:automation-1:run:run-automation-1'),
+          ]),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out a stale active automation run instead of starting a concurrent invocation', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-stale',
+            executionId: 'execution-automation-stale',
+            status: 'running',
+            scheduledAt: new Date(currentTime - 20 * 60_000),
+            startedAt: new Date(currentTime - 20 * 60_000),
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage) {
+              observedScheduledUserMessages.push(
+                typeof latestUserMessage.content === 'string'
+                  ? latestUserMessage.content
+                  : JSON.stringify(latestUserMessage.content),
+              );
+            }
+
+            return createTextStream('Should not run concurrently.');
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(observedScheduledUserMessages).toEqual([]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['timed_out', expect.any(Date), expect.any(Date), 'run-automation-stale'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_execution_events',
+          text: expect.stringContaining('insert into pi_execution_events'),
+          values: [
+            expect.any(String),
+            'execution-automation-stale',
+            'thread-record-1',
+            'automation-timed-out',
+            expect.stringContaining('Exceeded the 15 minute scheduled automation timeout.'),
+            expect.any(Date),
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            new Date(currentTime + 60_000),
+            null,
+          ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts unrelated due automations while another automation invocation is still active', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-slow',
+            threadKey: 'thread-slow',
+            threadState: {
+              thread: {
+                id: 'thread-slow',
+              },
+              execution: {
+                id: 'execution-thread-slow',
+                status: 'completed',
+              },
+            },
+          },
+          {
+            threadId: 'thread-record-fast',
+            threadKey: 'thread-fast',
+            threadState: {
+              thread: {
+                id: 'thread-fast',
+              },
+              execution: {
+                id: 'execution-thread-fast',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-slow',
+            threadId: 'thread-record-slow',
+            commandName: 'Slow sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Slow sync',
+              instruction: 'slow due automation should keep running',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+          {
+            automationId: 'automation-fast',
+            threadId: 'thread-record-fast',
+            commandName: 'Fast sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Fast sync',
+              instruction: 'fast due automation should run too',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-slow',
+            runId: 'run-automation-slow',
+            executionId: 'execution-automation-slow',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-fast',
+            runId: 'run-automation-fast',
+            executionId: 'execution-automation-fast',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            if (latestUserMessage?.content === 'slow due automation should keep running') {
+              return createNeverEndingStream() as unknown as ReturnType<typeof createTextStream>;
+            }
+            return createTextStream('Fast run complete.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(() => Promise.resolve(inspectionState)),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toContain('fast due automation should run too');
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: ['running', expect.any(Date), 'run-automation-slow'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: ['running', expect.any(Date), 'run-automation-fast'],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('continues later due automations when a stale active timeout loses its row-count race', async () => {
+    vi.useFakeTimers();
+
+    try {
+      const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      const executeStatements = vi.fn(
+        (_databaseUrl: string, statements: readonly InternalPostgresStatement[]) => {
+          const staleTimeoutStatement = statements.find(
+            (statement) =>
+              statement.tableName === 'pi_automation_runs' &&
+              statement.values.includes('run-automation-stale') &&
+              statement.values.includes('timed_out'),
+          );
+          if (staleTimeoutStatement) {
+            const error = new Error(
+              'Expected pi_automation_runs statement to affect 1 row, but it affected 0.',
+            );
+            error.name = 'PostgresAffectedRowsError';
+            return Promise.reject(error);
+          }
+          return Promise.resolve();
+        },
+      );
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-stale',
+            threadKey: 'thread-stale',
+            threadState: {
+              thread: {
+                id: 'thread-stale',
+              },
+              execution: {
+                id: 'execution-thread-stale',
+                status: 'completed',
+              },
+            },
+          },
+          {
+            threadId: 'thread-record-next',
+            threadKey: 'thread-next',
+            threadState: {
+              thread: {
+                id: 'thread-next',
+              },
+              execution: {
+                id: 'execution-thread-next',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-stale',
+            threadId: 'thread-record-stale',
+            commandName: 'Stale sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Stale sync',
+              instruction: 'stale should not run',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+          {
+            automationId: 'automation-next',
+            threadId: 'thread-record-next',
+            commandName: 'Next sync',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Next sync',
+              instruction: 'next due automation should run',
+              minutes: 1,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-stale',
+            runId: 'run-automation-stale',
+            executionId: 'execution-automation-stale',
+            status: 'running',
+            scheduledAt: new Date(currentTime - 20 * 60_000),
+            startedAt: new Date(currentTime - 20 * 60_000),
+            completedAt: null,
+          },
+          {
+            automationId: 'automation-next',
+            runId: 'run-automation-next',
+            executionId: 'execution-automation-next',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (typeof latestUserMessage?.content === 'string') {
+              observedScheduledUserMessages.push(latestUserMessage.content);
+            }
+            return createTextStream('Next run complete.');
+          },
+        },
+        __internalPostgres: createInternalPostgresHooks({
+          loadInspectionState: vi.fn(() => Promise.resolve(inspectionState)),
+          executeStatements,
+        }),
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      expect(observedScheduledUserMessages).toEqual(['next due automation should run']);
+      expect(executeStatements.mock.calls.flatMap((call) => call[1])).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          values: ['running', expect.any(Date), 'run-automation-next'],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks a same-process hung scheduled invocation timed out without waiting for the agent stream to return', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const terminalTime = Date.parse('2026-03-20T00:22:00.000Z');
+      const observedScheduledUserMessages: string[] = [];
+      let invocationAbortObserved = false;
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+              timeoutMinutes: 0.001,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context, streamOptions) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage) {
+              const content =
+                typeof latestUserMessage.content === 'string'
+                  ? latestUserMessage.content
+                  : JSON.stringify(latestUserMessage.content);
+              observedScheduledUserMessages.push(content);
+              currentTime = terminalTime;
+            }
+
+            if (streamOptions?.signal?.aborted) {
+              invocationAbortObserved = true;
+            } else {
+              streamOptions?.signal?.addEventListener('abort', () => {
+                invocationAbortObserved = true;
+              }, { once: true });
+            }
+
+            return createNeverEndingStream() as unknown as ReturnType<typeof createTextStream>;
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(observedScheduledUserMessages).toEqual(['sync treasury balances']);
+      expect(invocationAbortObserved).toBe(true);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['timed_out', new Date(terminalTime), new Date(terminalTime), 'run-automation-1'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_thread_activity',
+          text: expect.stringContaining('insert into pi_thread_activity'),
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'automation-timed-out',
+            expect.stringContaining('Exceeded the 0.001 minute scheduled automation timeout.'),
+            new Date(terminalTime),
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            new Date(terminalTime + 60_000),
+            null,
+          ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses terminal decision time for completed scheduled automation persistence and cadence', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+      const terminalTime = Date.parse('2026-03-20T00:22:00.000Z');
+      const executeStatements = vi.fn(async () => undefined);
+      const inspectionState = {
+        threads: [
+          {
+            threadId: 'thread-record-1',
+            threadKey: 'thread-1',
+            threadState: {
+              thread: {
+                id: 'thread-1',
+              },
+              execution: {
+                id: 'execution-thread-1',
+                status: 'completed',
+              },
+            },
+          },
+        ],
+        executions: [],
+        automations: [
+          {
+            automationId: 'automation-1',
+            threadId: 'thread-record-1',
+            commandName: 'Sync every minute',
+            nextRunAt: new Date(currentTime - 1_000),
+            suspended: false,
+            schedulePayload: {
+              title: 'Sync every minute',
+              instruction: 'sync treasury balances',
+              minutes: 1,
+              timeoutMinutes: 15,
+            },
+          },
+        ],
+        automationRuns: [
+          {
+            automationId: 'automation-1',
+            runId: 'run-automation-1',
+            executionId: 'execution-automation-1',
+            status: 'scheduled',
+            scheduledAt: new Date(currentTime - 60_000),
+            startedAt: null,
+            completedAt: null,
+          },
+        ],
+        interrupts: [],
+        leases: [],
+        outboxIntents: [],
+        executionEvents: [],
+        threadActivities: [],
+      };
+      const internalPostgres = createInternalPostgresHooks({
+        loadInspectionState: vi.fn(async () => inspectionState),
+        executeStatements,
+      });
+
+      await createAgentRuntime({
+        model: createModel('int-model'),
+        systemPrompt: 'You are an automation agent.',
+        now: () => currentTime,
+        agentOptions: {
+          streamFn: (_model, context) => {
+            const latestUserMessage = [...context.messages]
+              .reverse()
+              .find((message: Message) => message.role === 'user');
+            if (latestUserMessage?.content === 'sync treasury balances') {
+              currentTime = terminalTime;
+            }
+
+            return createTextStream('Scheduled run complete.');
+          },
+        },
+        __internalPostgres: internalPostgres,
+      } as any);
+
+      await vi.advanceTimersByTimeAsync(1_100);
+
+      const statements = executeStatements.mock.calls.flatMap((call) => call[1]);
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('update pi_automation_runs'),
+          values: ['completed', new Date(terminalTime), new Date(terminalTime), 'run-automation-1'],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_automation_runs',
+          text: expect.stringContaining('insert into pi_automation_runs'),
+          values: [
+            expect.any(String),
+            'automation-1',
+            'thread-record-1',
+            expect.any(String),
+            'scheduled',
+            new Date(terminalTime + 60_000),
+            null,
+          ],
+        }),
+      );
+      expect(statements).toContainEqual(
+        expect.objectContaining({
+          tableName: 'pi_thread_activity',
+          text: expect.stringContaining('insert into pi_thread_activity'),
+          values: [
+            expect.any(String),
+            'thread-record-1',
+            'execution-automation-1',
+            'automation-executed',
+            expect.stringContaining('2026-03-20T00:23:00.000Z'),
+            new Date(terminalTime),
+          ],
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reports persisted automation last-run status and timestamp in automation.list', async () => {
+    const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+    const observedToolResults: string[] = [];
+    const inspectionState = {
+      threads: [],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-1',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+          commandName: 'Sync every minute',
+          nextRunAt: new Date(currentTime + 60_000),
+          suspended: false,
+          schedulePayload: {
+            title: 'Sync every minute',
+            instruction: 'sync treasury balances',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-1',
+          runId: 'run-automation-previous',
+          executionId: 'execution-automation-previous',
+          status: 'completed',
+          scheduledAt: new Date(currentTime - 120_000),
+          startedAt: new Date(currentTime - 119_000),
+          completedAt: new Date(currentTime - 110_000),
+        },
+        {
+          automationId: 'automation-1',
+          runId: 'run-automation-next',
+          executionId: 'execution-automation-next',
+          status: 'scheduled',
+          scheduledAt: new Date(currentTime + 60_000),
+          startedAt: null,
+          completedAt: null,
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const internalPostgres = createInternalPostgresHooks({
+      loadInspectionState: vi.fn(async () => inspectionState),
+    });
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            observedToolResults.push(JSON.stringify(latestToolResult));
+            return createTextStream('Listed automations.');
+          }
+
+          return createToolStream({
+            toolName: 'automation_list',
+            toolCallId: 'tool-automation-list',
+            args: {
+              state: 'active',
+              limit: 20,
+            },
+          });
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-list',
+        messages: [
+          {
+            id: 'message-list',
+            role: 'user',
+            content: 'List my automations.',
+          },
+        ],
+      }),
+    );
+
+    const toolResultText = observedToolResults.join('\n');
+    expect(toolResultText).toContain('lastRunStatus');
+    expect(toolResultText).toContain('completed');
+    expect(toolResultText).toContain('2026-03-20T00:18:10.000Z');
+  });
+
+  it('reports persisted suspended automations with no next run as canceled in automation.list', async () => {
+    const currentTime = Date.parse('2026-03-20T00:20:00.000Z');
+    const observedToolResults: string[] = [];
+    const inspectionState = {
+      threads: [],
+      executions: [],
+      automations: [
+        {
+          automationId: 'automation-canceled',
+          threadId: 'd877526e-beed-5450-a4f4-6c2e0c37edcf',
+          commandName: 'Sync every minute',
+          nextRunAt: null,
+          suspended: true,
+          schedulePayload: {
+            title: 'Sync every minute',
+            instruction: 'sync treasury balances',
+            minutes: 1,
+          },
+        },
+      ],
+      automationRuns: [
+        {
+          automationId: 'automation-canceled',
+          runId: 'run-automation-canceled',
+          executionId: 'execution-automation-canceled',
+          status: 'canceled',
+          scheduledAt: new Date(currentTime - 120_000),
+          startedAt: new Date(currentTime - 119_000),
+          completedAt: new Date(currentTime - 110_000),
+        },
+      ],
+      interrupts: [],
+      leases: [],
+      outboxIntents: [],
+      executionEvents: [],
+      threadActivities: [],
+    };
+    const internalPostgres = createInternalPostgresHooks({
+      loadInspectionState: vi.fn(async () => inspectionState),
+    });
+
+    const runtime = await createAgentRuntime({
+      model: createModel('int-model'),
+      systemPrompt: 'You are an automation agent.',
+      now: () => currentTime,
+      agentOptions: {
+        streamFn: (_model, context) => {
+          const latestToolResult = [...context.messages]
+            .reverse()
+            .find((message: Message) => message.role === 'toolResult');
+          if (latestToolResult) {
+            observedToolResults.push(JSON.stringify(latestToolResult));
+            return createTextStream('Listed automations.');
+          }
+
+          return createToolStream({
+            toolName: 'automation_list',
+            toolCallId: 'tool-automation-list-canceled',
+            args: {
+              state: 'all',
+              limit: 20,
+            },
+          });
+        },
+      },
+      __internalPostgres: internalPostgres,
+    } as any);
+
+    await collectEventSource(
+      await runtime.service.run({
+        threadId: 'thread-1',
+        runId: 'run-list-canceled',
+        messages: [
+          {
+            id: 'message-list-canceled',
+            role: 'user',
+            content: 'List my automations.',
+          },
+        ],
+      }),
+    );
+
+    const toolResultText = observedToolResults.join('\n');
+    expect(toolResultText).toContain('"status":"canceled"');
+    expect(toolResultText).not.toContain('"status":"completed"');
   });
 
   it('rehydrates persisted transcript before reconnect snapshots after process restart', async () => {
