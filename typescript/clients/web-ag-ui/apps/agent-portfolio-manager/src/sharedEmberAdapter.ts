@@ -3784,6 +3784,7 @@ export function createPortfolioManagerDomain(
               managedMandateProjection === null
                 ? (currentState.pendingApprovedSetup ?? null)
                 : null,
+            portfolioManagerMandate: currentState.portfolioManagerMandate ?? null,
           };
 
           return {

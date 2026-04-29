@@ -257,7 +257,20 @@ export interface PortfolioManagerMandateApproval {
 export interface PortfolioManagerMandateInput extends Record<string, unknown> {
   betaExposureCapPct?: number;
   riskBudgetBps?: number;
-  minimumCashUsd?: number;
+    maxDrawdownPct?: number;
+  targetVolatilityPct?: number;
+  maxSingleAssetAllocationPct?: number;
+  rebalanceThresholdPct?: number;
+  maxLeverageRatio?: number;
+    maxPerpsAllocationPct?: number;
+  maxPredictionMarketsAllocationPct?: number;
+  maxNftAllocationPct?: number;
+  maxMemecoinAllocationPct?: number;
+  maxRwaAllocationPct?: number;
+  maxIlliquidAllocationPct?: number;
+  betaExposureTarget?: number;
+  riskToleranceScore?: number;
+  minUndeployedCashBps?: number;
 }
 
 export interface ManagedLendingCollateralAssetPolicyInput {
@@ -289,6 +302,7 @@ export interface PortfolioManagerFirstManagedMandateInput {
 export interface PortfolioManagerSetupInput {
   walletAddress: `0x${string}`;
   portfolioMandate: PortfolioManagerMandateApproval;
+  portfolioManagerMandate?: PortfolioManagerMandateInput;
   firstManagedMandate: PortfolioManagerFirstManagedMandateInput;
 }
 

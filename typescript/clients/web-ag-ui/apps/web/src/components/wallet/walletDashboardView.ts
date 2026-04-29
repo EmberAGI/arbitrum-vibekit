@@ -200,6 +200,10 @@ function buildProjectionTopbarView(
         liabilitiesValue: formatUsd(portfolio.summary.liabilitiesUsd),
       },
       {
+        label: 'Total leverage',
+        value: formatLeverage(portfolio.summary.grossExposureUsd, portfolio.summary.netWorthUsd),
+      },
+      {
         label: 'Net worth',
         value: formatUsd(portfolio.summary.netWorthUsd),
       },
@@ -974,6 +978,14 @@ function formatCompactNumber(value: number): string {
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+function formatLeverage(grossExposureUsd: number, navUsd: number): string {
+  if (navUsd <= 0) {
+    return 'N/A';
+  }
+
+  return `${(grossExposureUsd / navUsd).toFixed(2)}x`;
 }
 
 function formatCompactReference(value: string): string {

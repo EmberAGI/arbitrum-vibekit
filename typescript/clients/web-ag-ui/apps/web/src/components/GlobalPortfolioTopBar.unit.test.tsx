@@ -125,6 +125,7 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).toContain('bg-[#FFFDF8]');
     expect(html).not.toContain('sticky top-0 z-40 bg-[#F7EFE3]');
     expect(html).toContain('Gross exposure');
+    expect(html).toContain('Total leverage');
     expect(html).toContain('Net worth');
     expect(html).toContain('Unmanaged');
     expect(html).toContain('Benchmark');
@@ -231,6 +232,7 @@ describe('GlobalPortfolioTopBar', () => {
     expect(html).toContain('sticky top-0 z-40');
     expect(html).toContain('src="/ember-sidebar-logo.png"');
     expect(html).toContain('Gross exposure');
+    expect(html).toContain('Total leverage');
     expect(html).toContain('Net worth');
     expect(html).toContain('Unmanaged');
     expect(html).toContain('Benchmark');

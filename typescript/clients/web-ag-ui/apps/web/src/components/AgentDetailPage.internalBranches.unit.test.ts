@@ -812,9 +812,10 @@ describe('AgentDetailPage internals: blockers variants', () => {
 
     const html = renderBlockers(delegationInterrupt);
 
-    expect(html).toContain('Review &amp; Sign Delegations');
-    expect(html).toContain('Warnings');
-    expect(html).toContain('Authorize spend for CLMM strategy');
+    expect(html).toContain('Authorize portfolio manager');
+    expect(html).toContain('Sign once to let this portfolio manager operate the mandates you approved.');
+    expect(html).not.toContain('Warnings');
+    expect(html).not.toContain('Authorize spend for CLMM strategy');
     expect(html).toContain('Switch Chain');
     expect(html).toContain('Sign &amp; Continue');
   });

@@ -18,6 +18,10 @@ describe('PortfolioDashboardTopBar', () => {
               liabilitiesValue: '$100',
             },
             {
+              label: 'Total leverage',
+              value: '1.08x',
+            },
+            {
               label: 'Net worth',
               value: '$2.6K',
             },
@@ -35,6 +39,7 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).not.toMatch(/>Benchmark<\/div><button/);
     expect(html).toContain('>Benchmark<');
     expect(html).toContain('Gross exposure');
+    expect(html).toContain('Total leverage');
     expect(html).toContain('Net worth');
     expect(html).toContain('Unmanaged');
     expect(html).toContain('font-mono text-[12px] font-semibold text-[#6D5B4C]');
@@ -49,7 +54,7 @@ describe('PortfolioDashboardTopBar', () => {
     expect(html).toContain('xl:justify-center');
     expect(html).not.toContain('xl:flex-none');
     expect(html).toContain('xl:gap-x-12');
-    expect(html).toContain('xl:grid-cols-[max-content_max-content_max-content_auto]');
+    expect(html).toContain('xl:grid-cols-[max-content_max-content_max-content_max-content_auto]');
     expect(html).not.toContain('>Soon<');
     expect(html).toContain('Selected Benchmark');
     expect(html).toContain('rounded-[20px] border border-[#eadac7] bg-[#fffdf8]/98');

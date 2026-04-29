@@ -190,7 +190,7 @@ describe('POST /api/agent-command', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            resume: resumePayload,
+            resume: JSON.stringify(resumePayload),
           },
         },
       }),
