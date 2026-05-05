@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import type {
   PiAutomationRecord,
   PiAutomationRunRecord,
+  PiArtifactRecord,
   PiExecutionEventRecord,
   PiExecutionRecord,
   PiThreadActivityRecord,
@@ -25,6 +26,26 @@ export type ExecutePostgresStatements = (
   statements: readonly PostgresStatement[],
 ) => Promise<void>;
 
+export class PostgresAffectedRowsError extends Error {
+  constructor(params: {
+    tableName: string;
+    expectedRows: number;
+    affectedRows: number;
+  }) {
+    super(
+      `Expected ${params.tableName} statement to affect ${params.expectedRows} row${
+        params.expectedRows === 1 ? '' : 's'
+      }, but it affected ${params.affectedRows}.`,
+    );
+    this.name = 'PostgresAffectedRowsError';
+  }
+}
+
+export function isPostgresAffectedRowsError(error: unknown): boolean {
+  return error instanceof PostgresAffectedRowsError ||
+    (error instanceof Error && error.name === 'PostgresAffectedRowsError');
+}
+
 export type LoadedPiRuntimeInspectionState = {
   threads: readonly PiThreadRecord[];
   executions: readonly PiExecutionRecord[];
@@ -35,6 +56,7 @@ export type LoadedPiRuntimeInspectionState = {
   outboxIntents: readonly PiOutboxRecoveryRecord[];
   executionEvents: readonly PiExecutionEventRecord[];
   threadActivities: readonly PiThreadActivityRecord[];
+  artifacts: readonly PiArtifactRecord[];
 };
 
 export type PersistPiRuntimeDirectExecutionOptions = {
@@ -133,8 +155,25 @@ export const executePostgresStatements: ExecutePostgresStatements = async (datab
 
   try {
     await client.connect();
-    for (const statement of statements) {
-      await client.query(statement.text, [...statement.values]);
+    await client.query('begin');
+    try {
+      for (const statement of statements) {
+        const result = await client.query(statement.text, [...statement.values]);
+        if (
+          statement.requiredAffectedRows !== undefined &&
+          result.rowCount !== statement.requiredAffectedRows
+        ) {
+          throw new PostgresAffectedRowsError({
+            tableName: statement.tableName,
+            expectedRows: statement.requiredAffectedRows,
+            affectedRows: result.rowCount ?? 0,
+          });
+        }
+      }
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback').catch(() => undefined);
+      throw error;
     }
   } finally {
     await client.end().catch(() => undefined);
@@ -152,8 +191,9 @@ export async function loadPiRuntimeInspectionState(
     'select id, thread_id, execution_id, status, mirrored_to_activity from pi_interrupts',
     'select automation_id, owner_id, lease_expires_at, last_heartbeat_at from pi_scheduler_leases',
     'select id, status, available_at, delivered_at from pi_outbox',
-    'select id, execution_id, thread_id, event_kind, created_at from pi_execution_events',
-    'select id, thread_id, execution_id, activity_kind, created_at from pi_thread_activity',
+    'select id, execution_id, thread_id, event_kind, payload, created_at from pi_execution_events',
+    'select id, thread_id, execution_id, activity_kind, payload, created_at from pi_thread_activity',
+    'select id, thread_id, execution_id, artifact_kind, append_only, payload, created_at, updated_at from pi_artifacts',
   ] as const;
 
   const rowsByQuery = options.queryRows
@@ -170,6 +210,7 @@ export async function loadPiRuntimeInspectionState(
     outboxRows,
     executionEventRows,
     threadActivityRows,
+    artifactRows,
   ] = rowsByQuery;
 
   return {
@@ -237,6 +278,7 @@ export async function loadPiRuntimeInspectionState(
       executionId: asString(row.execution_id, 'pi_execution_events.execution_id'),
       threadId: asString(row.thread_id, 'pi_execution_events.thread_id'),
       eventKind: asString(row.event_kind, 'pi_execution_events.event_kind'),
+      payload: row.payload == null ? null : asJsonObject(row.payload, 'pi_execution_events.payload'),
       createdAt: asDate(row.created_at, 'pi_execution_events.created_at'),
     })),
     threadActivities: threadActivityRows.map((row) => ({
@@ -244,7 +286,18 @@ export async function loadPiRuntimeInspectionState(
       threadId: asString(row.thread_id, 'pi_thread_activity.thread_id'),
       executionId: asNullableString(row.execution_id),
       activityKind: asString(row.activity_kind, 'pi_thread_activity.activity_kind'),
+      payload: row.payload == null ? null : asJsonObject(row.payload, 'pi_thread_activity.payload'),
       createdAt: asDate(row.created_at, 'pi_thread_activity.created_at'),
+    })),
+    artifacts: artifactRows.map((row) => ({
+      artifactId: asString(row.id, 'pi_artifacts.id'),
+      threadId: asString(row.thread_id, 'pi_artifacts.thread_id'),
+      executionId: asNullableString(row.execution_id),
+      artifactKind: asString(row.artifact_kind, 'pi_artifacts.artifact_kind'),
+      appendOnly: asBoolean(row.append_only, 'pi_artifacts.append_only'),
+      payload: asJsonObject(row.payload, 'pi_artifacts.payload'),
+      createdAt: asDate(row.created_at, 'pi_artifacts.created_at'),
+      updatedAt: asDate(row.updated_at, 'pi_artifacts.updated_at'),
     })),
   };
 }

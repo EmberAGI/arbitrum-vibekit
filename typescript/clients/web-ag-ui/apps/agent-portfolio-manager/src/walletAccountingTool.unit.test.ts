@@ -96,7 +96,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
       content: [
         {
           type: 'text',
-          text: expect.stringContaining('10 USDC'),
+          text: expect.stringContaining('0.00001 USDC (10 base units)'),
         },
       ],
       details: {
@@ -113,6 +113,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
           {
             asset: 'USDC',
             quantity: '10',
+            displayQuantity: '0.00001',
             status: 'reserved',
             controlPath: 'lending.supply',
           },
@@ -127,6 +128,7 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
                 unitId: 'unit-usdc-a1',
                 asset: 'USDC',
                 quantity: '10',
+                displayQuantity: '0.00001',
               },
             ],
           },
@@ -198,6 +200,102 @@ describe('createPortfolioManagerWalletAccountingTool', () => {
         },
         assets: [],
         reservations: [],
+      },
+    });
+  });
+
+  it('formats known integer token quantities as token units with base units in the agent summary', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'rpc-wallet-accounting-wbtc',
+        result: {
+          protocol_version: 'v1',
+          revision: 10,
+          onboarding_state: {
+            agent_id: 'ember-lending',
+            wallet_address: '0x00000000000000000000000000000000000000a1',
+            network: 'arbitrum',
+            phase: 'active',
+            proofs: {
+              rooted_wallet_context_registered: true,
+              root_delegation_registered: true,
+              root_authority_active: true,
+              wallet_baseline_observed: true,
+              accounting_units_seeded: true,
+              mandate_inputs_configured: true,
+              reserve_policy_configured: true,
+              capital_reserved_for_agent: true,
+              policy_snapshot_recorded: true,
+              agent_active: true,
+            },
+            rooted_wallet_context: {
+              rooted_wallet_context_id: 'rwc-portfolio-manager-a1',
+            },
+            root_delegation: {
+              root_delegation_id: 'root-delegation-portfolio-manager-a1',
+              status: 'active',
+            },
+            owned_units: [
+              {
+                unit_id: 'unit-wbtc-dust-a1',
+                root_asset: 'WBTC',
+                quantity: '3',
+                status: 'free',
+                control_path: 'unassigned',
+                reservation_id: null,
+              },
+              {
+                unit_id: 'unit-wbtc-ingress-a1',
+                root_asset: 'WBTC',
+                quantity: '2792',
+                status: 'free',
+                control_path: 'unassigned',
+                reservation_id: null,
+              },
+            ],
+            reservations: [],
+            policy_snapshots: [],
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(),
+      acknowledgeCommittedEventOutbox: vi.fn(),
+    };
+
+    const tool = createPortfolioManagerWalletAccountingTool({
+      protocolHost,
+      agentId: 'ember-lending',
+    });
+
+    const result = await tool.execute?.('tool-wallet-accounting-wbtc', {
+      walletAddress: '0x00000000000000000000000000000000000000a1',
+    });
+
+    expect(result).toMatchObject({
+      content: [
+        {
+          type: 'text',
+          text: expect.stringContaining('0.00000003 WBTC (3 base units)'),
+        },
+      ],
+    });
+    expect(result?.content[0]?.text).toContain('0.00002792 WBTC (2792 base units)');
+    expect(result?.content[0]?.text).not.toContain('2792 WBTC (free, unassigned)');
+    expect(result).toMatchObject({
+      details: {
+        assets: [
+          {
+            asset: 'WBTC',
+            quantity: '3',
+            displayQuantity: '0.00000003',
+          },
+          {
+            asset: 'WBTC',
+            quantity: '2792',
+            displayQuantity: '0.00002792',
+          },
+        ],
       },
     });
   });

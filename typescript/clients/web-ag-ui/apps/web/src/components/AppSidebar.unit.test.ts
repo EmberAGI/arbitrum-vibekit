@@ -1,9 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { arbitrum, mainnet, polygon } from 'viem/chains';
 
-import { AppSidebar, getSidebarAgentHref, getWalletSelectorChains } from './AppSidebar';
+import { AppSidebar, getSidebarAgentHref } from './AppSidebar';
 
 const privyMocks = vi.hoisted(() => ({
   ready: true,
@@ -48,7 +47,8 @@ vi.mock('next/link', () => {
 
 vi.mock('next/image', () => {
   return {
-    default: (props: React.ImgHTMLAttributes<HTMLImageElement>) => React.createElement('img', props),
+    default: (props: React.ImgHTMLAttributes<HTMLImageElement>) =>
+      React.createElement('img', props),
   };
 });
 
@@ -116,6 +116,7 @@ vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => {
       getSnapshot: getAuthoritativeSnapshotMock,
       setSnapshot: vi.fn(),
     }),
+    useAuthoritativeAgentSnapshotCacheVersion: () => 0,
   };
 });
 
@@ -155,46 +156,62 @@ describe('AppSidebar wallet actions', () => {
     getAuthoritativeSnapshotMock.mockReturnValue(null);
   });
 
-  it('limits wallet selector chain options to Arbitrum and Ethereum', () => {
-    const result = getWalletSelectorChains([arbitrum, mainnet, polygon]);
-    expect(result.map((chain) => chain.id)).toEqual([arbitrum.id, mainnet.id]);
-  });
-
-  it('renders a secondary Manage Wallet link when wallet is connected', () => {
+  it('does not render the network selector or build-agent CTA in the bottom nav', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Manage Wallet');
-    expect(html).toContain('href="/wallet"');
+    expect(html).not.toContain('Arbitrum One');
+    expect(html).not.toContain('Ethereum');
+    expect(html).not.toContain('Build my Agent');
+    expect(html).not.toContain('p-4 border-t border-[#DDC8B3] space-y-3');
+  });
+
+  it('does not render wallet management actions once they move to the global top bar', () => {
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).not.toContain('Manage Wallet');
+    expect(html).not.toContain('href="/wallet"');
+    expect(html).not.toContain('Logout');
   });
 
   it('uses the widened sidebar frame and a light shell palette', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('w-[312px]');
-    expect(html).toContain('bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]');
-    expect(html).toContain('src="/ember-sidebar-logo.png"');
+    expect(html).toContain('border-r border-[#DDC8B3]');
+    expect(html).toContain('bg-[#F7EFE3]');
+    expect(html).toContain('text-[#3C2A21]');
+    expect(html).toContain('transition-[width]');
+    expect(html).not.toContain('src="/ember-sidebar-logo.png"');
+    expect(html).not.toContain('src="/ember-name.svg"');
+    expect(html).not.toContain('>AI</span>');
   });
 
-  it('links the platform chat entry to the portfolio agent conversation', () => {
+  it('does not render the old primary navigation section', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('Ember Portfolio Agent');
-    expect(html).toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+    expect(html).not.toContain('Platform');
+    expect(html).not.toContain('href="/hire-agents/agent-portfolio-manager?tab=chat"');
+    expect(html).not.toContain('>Agents</span>');
+    expect(html).not.toContain('>Hire</a>');
+    expect(html).not.toContain('>Acquire</a>');
+    expect(html).not.toContain('Leaderboard');
   });
 
-  it('does not keep the hire nav item highlighted on the portfolio agent route', () => {
+  it('does not render primary nav active markers on the portfolio agent route', () => {
     pathnameMock = '/hire-agents/agent-portfolio-manager';
 
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
     const activeMarkers = html.match(/w-px h-6 bg-\[#fd6731\]/g) ?? [];
 
-    expect(activeMarkers).toHaveLength(1);
+    expect(activeMarkers).toHaveLength(0);
   });
 
-  it('uses simplified sidebar icons for agents and activity state', () => {
+  it('does not render old primary nav icons or activity state icons', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('lucide-bot');
+    expect(html).not.toContain('lucide-message-square');
+    expect(html).not.toContain('lucide-bot');
+    expect(html).not.toContain('lucide-trophy');
     expect(html).not.toContain('lucide-terminal');
     expect(html).not.toContain('lucide-alert-circle');
     expect(html).not.toContain('lucide-check-circle');
@@ -205,11 +222,11 @@ describe('AppSidebar wallet actions', () => {
     expect(html).not.toContain('text-blue-400');
   });
 
-  it('uses a thin left nav indicator with light hover surfaces', () => {
+  it('keeps light sidebar hover surfaces without the old nav indicator', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('w-px h-6 bg-[#fd6731]');
-    expect(html).toContain('hover:bg-[#F0E2D2]');
+    expect(html).toContain('hover:bg-[#FFF7F2]');
+    expect(html).not.toContain('w-px h-6 bg-[#fd6731]');
     expect(html).not.toContain('hover:bg-[#1B1C21]');
     expect(html).not.toContain('text-white bg-[#1C1D23] border border-[#2F313B]');
   });
@@ -217,8 +234,9 @@ describe('AppSidebar wallet actions', () => {
   it('uses mono typography for sidebar section labels and badges', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
-    expect(html).toContain('text-[10px] font-mono font-medium text-[#8A6F58]');
-    expect(html).toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
+    expect(html).not.toContain('Agent Activity');
+    expect(html).not.toContain('text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]');
+    expect(html).toContain('font-mono text-[10px] uppercase tracking-[0.16em] text-[#8C7F72]');
   });
 
   it('shows only user-facing agents in activity sections', () => {
@@ -243,7 +261,7 @@ describe('AppSidebar wallet actions', () => {
     ]);
     useAgentListMock.mockReturnValue({
       agents: {
-        'agent-portfolio-manager': { taskState: 'running' },
+        'agent-portfolio-manager': { synced: true, taskState: 'running' },
         'agent-pi-example': { taskState: 'running' },
       },
     });
@@ -266,6 +284,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -312,6 +332,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -444,6 +466,8 @@ describe('AppSidebar wallet actions', () => {
       {
         id: 'agent-ember-lending',
         name: 'Ember Lending',
+        imageUrl: '/ember-lending-avatar.svg',
+        avatarBg: '#9896FF',
         chains: ['Arbitrum'],
         protocols: ['Aave'],
         tokens: ['USDC'],
@@ -492,6 +516,8 @@ describe('AppSidebar wallet actions', () => {
     const html = renderToStaticMarkup(React.createElement(AppSidebar));
 
     expect(html).toContain('rounded-[18px]');
+    expect(html).toContain('src="/ember-lending-avatar.svg"');
+    expect(html).toContain('background:#9896FF');
     expect(html).toContain('px-3 pt-4 pb-3');
     expect(html).toContain('$12k gross');
     expect(html).toContain('$4k gross');
@@ -677,9 +703,182 @@ describe('AppSidebar wallet actions', () => {
     expect(html).toContain('33% of portfolio');
     expect(html).toContain('ETH');
     expect(html).toContain('USDT');
-    expect(html).toContain('Unallocated');
+    expect(html).toContain('Unmanaged');
     expect(html).not.toContain('$12k gross');
     expect(html).not.toContain('$4k gross');
+  });
+
+  it('does not inflate lending cards from duplicated Aave owned-unit fragments', () => {
+    getVisibleAgentsMock.mockReturnValue([
+      {
+        id: 'agent-portfolio-manager',
+        name: 'Ember Portfolio Agent',
+        chains: ['Arbitrum'],
+        protocols: ['Shared Ember'],
+        tokens: ['USDC', 'ETH', 'WBTC'],
+      },
+      {
+        id: 'agent-ember-lending',
+        name: 'Ember Lending',
+        chains: ['Arbitrum'],
+        protocols: ['Aave'],
+        tokens: ['USDC'],
+      },
+    ]);
+    useAgentListMock.mockReturnValue({
+      agents: {
+        'agent-portfolio-manager': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Shared Ember'],
+            tokens: ['USDC', 'ETH', 'WBTC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 14.21,
+          },
+        },
+        'agent-ember-lending': {
+          synced: true,
+          taskState: 'working',
+          profile: {
+            chains: ['Arbitrum'],
+            protocols: ['Aave'],
+            tokens: ['USDC'],
+            pools: [],
+            allowedPools: [],
+          },
+          metrics: {
+            iteration: 0,
+            cyclesSinceRebalance: 0,
+            staleCycles: 0,
+            aumUsd: 58.03,
+          },
+        },
+      },
+    });
+    getAuthoritativeSnapshotMock.mockReturnValue({
+      thread: {
+        domainProjection: {
+          portfolioProjectionInput: {
+            benchmarkAsset: 'USD',
+            walletContents: [
+              {
+                asset: 'ETH',
+                network: 'arbitrum',
+                quantity: '1051504785051886',
+                valueUsd: 2.44127473,
+              },
+              {
+                asset: 'WETH',
+                network: 'arbitrum',
+                quantity: '1943700537301869',
+                valueUsd: 4.51268228,
+              },
+              {
+                asset: 'WBTC',
+                network: 'arbitrum',
+                quantity: '3',
+                valueUsd: 0.00232299,
+              },
+            ],
+            ownedUnits: [
+              {
+                unitId: 'unit-usdc-collateral-primary',
+                rootAsset: 'USDC',
+                network: 'arbitrum',
+                quantity: '7254853',
+                benchmarkAsset: 'USD',
+                benchmarkValue: 7.2537305,
+                reservationId: 'res-active-borrow',
+                positionScopeId: 'scope-aave',
+              },
+              ...Array.from({ length: 7 }, (_, index) => ({
+                unitId: `unit-usdc-collateral-fragment-${index + 1}`,
+                rootAsset: 'USDC',
+                network: 'arbitrum',
+                quantity: '1',
+                benchmarkAsset: 'USD',
+                benchmarkValue: 7.2537305,
+                reservationId: 'res-active-borrow',
+                positionScopeId: 'scope-aave',
+              })),
+            ],
+            reservations: [
+              {
+                reservationId: 'res-active-borrow',
+                agentId: 'ember-lending',
+                purpose: 'refresh borrow coverage',
+                controlPath: 'lending.borrow',
+                createdAt: '2026-04-23T21:29:21.768Z',
+                status: 'active',
+                unitAllocations: [
+                  {
+                    unitId: 'unit-usdc-collateral-primary',
+                    quantity: '7254853',
+                  },
+                  ...Array.from({ length: 7 }, (_, index) => ({
+                    unitId: `unit-usdc-collateral-fragment-${index + 1}`,
+                    quantity: '1',
+                  })),
+                ],
+              },
+            ],
+            activePositionScopes: [
+              {
+                scopeId: 'scope-aave',
+                kind: 'lending',
+                network: 'arbitrum',
+                protocolSystem: 'aave',
+                containerRef: 'aave:arbitrum:0x540c144afc3b3a97eeded55376ab257ee706f0ca',
+                status: 'active',
+                marketState: {
+                  availableBorrowsUsd: '5.44029712',
+                  borrowableHeadroomUsd: '5.44029712',
+                  currentLtvBps: 0,
+                  liquidationThresholdBps: 7800,
+                  healthFactor: '-1',
+                },
+                members: [
+                  {
+                    memberId: 'scope-aave:collateral:aArbUSDCn',
+                    role: 'collateral',
+                    asset: 'aArbUSDCn',
+                    quantity: '7254853',
+                    valueUsd: 7.2537305,
+                    economicExposures: [
+                      {
+                        asset: 'USDC',
+                        quantity: '7.254853',
+                      },
+                    ],
+                    state: {
+                      withdrawableQuantity: '0.80609489',
+                      supplyApr: null,
+                      borrowApr: null,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const html = renderToStaticMarkup(React.createElement(AppSidebar));
+
+    expect(html).toContain('$14 gross');
+    expect(html).toContain('$7.3 gross');
+    expect(html).toContain('51% of portfolio');
+    expect(html).not.toContain('$58 gross');
+    expect(html).not.toContain('408% of portfolio');
   });
 
   it('routes portfolio agent sidebar clicks to the chat tab deep link', () => {

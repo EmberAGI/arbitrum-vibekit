@@ -25,10 +25,12 @@ import {
   resolvePostgresBootstrapPlan,
   type PiAutomationRecord,
   type PiAutomationRunRecord,
+  type PiArtifactRecord,
   type PiExecutionEventRecord,
   type PiExecutionRecord,
   type PiOutboxRecoveryRecord,
   type PiRestartInterruptRecord,
+  type PiRuntimeInspectionSnapshot,
   type PiRuntimeMaintenancePlan,
   type PiRuntimeRetentionPolicy,
   type PiSchedulerLeaseRecord,
@@ -203,10 +205,15 @@ export type PiRuntimeGatewayControlPlane = {
   listThreads: () => Promise<unknown>;
   listExecutions: () => Promise<unknown>;
   listAutomations: () => Promise<unknown>;
-  listAutomationRuns: () => Promise<unknown>;
+  listAutomationRuns: (scope?: PiRuntimeGatewayControlScope) => Promise<unknown>;
+  listArtifacts: (scope?: PiRuntimeGatewayControlScope) => Promise<unknown>;
   inspectScheduler: () => Promise<unknown>;
   inspectOutbox: () => Promise<unknown>;
   inspectMaintenance: () => Promise<unknown>;
+};
+
+export type PiRuntimeGatewayControlScope = {
+  threadId?: string;
 };
 
 export type PiRuntimeGatewayService = {
@@ -240,6 +247,7 @@ export type PiRuntimeGatewayInspectionState = {
   outboxIntents: readonly PiOutboxRecoveryRecord[];
   executionEvents: readonly PiExecutionEventRecord[];
   threadActivities: readonly PiThreadActivityRecord[];
+  artifacts?: readonly PiArtifactRecord[];
 };
 
 export const DEFAULT_PI_RUNTIME_GATEWAY_RETENTION = {
@@ -1529,6 +1537,30 @@ export const buildPiRuntimeGatewayStateDeltaEvent = (params: {
   } satisfies StateDeltaEvent;
 };
 
+export const buildPiRuntimeGatewayStateRebaselineEvent = (params: {
+  previousSession: PiRuntimeGatewaySession;
+  session: PiRuntimeGatewaySession;
+}): StateSnapshotEvent | null => {
+  const previousSnapshot = buildPiThreadStateSnapshot(params.previousSession);
+  const nextSnapshot = buildPiThreadStateSnapshot(params.session);
+  if (!jsonPatchCompare) {
+    throw new TypeError('fast-json-patch compare export unavailable');
+  }
+  const delta = jsonPatchCompare(previousSnapshot, nextSnapshot, true);
+
+  if (delta.length === 0) {
+    return null;
+  }
+
+  // Run completion can fold in state changes that were already published on
+  // another stream. A snapshot re-establishes the AG-UI baseline for future
+  // deltas instead of assuming the client still matches previousSession.
+  return {
+    type: EventType.STATE_SNAPSHOT,
+    snapshot: nextSnapshot,
+  } satisfies StateSnapshotEvent;
+};
+
 export const buildPiA2UiActivityEvent = (params: {
   threadId: string;
   executionId: string;
@@ -2253,12 +2285,12 @@ export const createPiRuntimeGatewayRuntime = (params: {
             failureMessage,
           );
           logPiGatewayDebug('run session after transcript persist', session);
-          const stateDeltaEvent = buildPiRuntimeGatewayStateDeltaEvent({
+          const stateRebaselineEvent = buildPiRuntimeGatewayStateRebaselineEvent({
             previousSession: requestSession,
             session,
           });
-          if (stateDeltaEvent) {
-            controller.push(stateDeltaEvent);
+          if (stateRebaselineEvent) {
+            controller.push(stateRebaselineEvent);
           }
           const messagesSnapshotEvent = buildMessagesSnapshotEvent(session);
           if (messagesSnapshotEvent) {
@@ -2310,13 +2342,37 @@ export const createCanonicalPiRuntimeGatewayControlPlane = (params: {
       now: now(),
       ...(await params.loadInspectionState()),
     });
+  const findScopedThreadIds = (snapshot: PiRuntimeInspectionSnapshot, scope?: PiRuntimeGatewayControlScope) => {
+    if (!scope?.threadId) {
+      return null;
+    }
+
+    return new Set(
+      snapshot.threads
+        .filter((thread) => thread.threadId === scope.threadId || thread.threadKey === scope.threadId)
+        .map((thread) => thread.threadId),
+    );
+  };
 
   return {
     inspectHealth: async () => (await loadSnapshot()).health,
     listThreads: async () => (await loadSnapshot()).threads,
     listExecutions: async () => (await loadSnapshot()).executions,
     listAutomations: async () => (await loadSnapshot()).automations,
-    listAutomationRuns: async () => (await loadSnapshot()).automationRuns,
+    listAutomationRuns: async (scope) => {
+      const snapshot = await loadSnapshot();
+      const scopedThreadIds = findScopedThreadIds(snapshot, scope);
+      return scopedThreadIds
+        ? snapshot.automationRuns.filter((run) => scopedThreadIds.has(run.threadId))
+        : snapshot.automationRuns;
+    },
+    listArtifacts: async (scope) => {
+      const snapshot = await loadSnapshot();
+      const scopedThreadIds = findScopedThreadIds(snapshot, scope);
+      return scopedThreadIds
+        ? snapshot.artifacts.filter((artifact) => scopedThreadIds.has(artifact.threadId))
+        : snapshot.artifacts;
+    },
     inspectScheduler: async () => (await loadSnapshot()).scheduler,
     inspectOutbox: async () => (await loadSnapshot()).outbox,
     inspectMaintenance: async (): Promise<PiRuntimeMaintenancePlan> =>
@@ -2340,7 +2396,8 @@ export const createPiRuntimeGatewayService = (params: {
     listThreads: () => params.controlPlane.listThreads(),
     listExecutions: () => params.controlPlane.listExecutions(),
     listAutomations: () => params.controlPlane.listAutomations(),
-    listAutomationRuns: () => params.controlPlane.listAutomationRuns(),
+    listAutomationRuns: (scope) => params.controlPlane.listAutomationRuns(scope),
+    listArtifacts: (scope) => params.controlPlane.listArtifacts(scope),
     inspectScheduler: () => params.controlPlane.inspectScheduler(),
     inspectOutbox: () => params.controlPlane.inspectOutbox(),
     inspectMaintenance: () => params.controlPlane.inspectMaintenance(),

@@ -1,5 +1,5 @@
 import type { Stats } from 'node:fs';
-import { cp, mkdir, rm, stat } from 'node:fs/promises';
+import { cp, mkdir, realpath, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 type RetryableError = NodeJS.ErrnoException;
@@ -7,6 +7,7 @@ type RetryableError = NodeJS.ErrnoException;
 type FileOps = {
   cp: typeof cp;
   mkdir: typeof mkdir;
+  realpath: (path: string) => Promise<string>;
   rm: typeof rm;
   stat: (path: string) => Promise<Stats>;
 };
@@ -21,7 +22,7 @@ type CopyArtifactDirParams = {
 };
 
 const DEFAULT_MAX_REPLACE_ATTEMPTS = 3;
-const DEFAULT_MAX_LOCK_ATTEMPTS = 120;
+const DEFAULT_MAX_LOCK_ATTEMPTS = 1200;
 const DEFAULT_RETRY_DELAY_MS = 25;
 const RETRYABLE_REPLACE_ERROR_CODES = new Set(['EBUSY', 'EEXIST', 'ENOENT', 'ENOTEMPTY', 'EPERM']);
 const RETRYABLE_LOCK_ERROR_CODES = new Set(['EBUSY', 'EEXIST', 'ENOTEMPTY', 'EPERM']);
@@ -29,6 +30,7 @@ const RETRYABLE_LOCK_ERROR_CODES = new Set(['EBUSY', 'EEXIST', 'ENOTEMPTY', 'EPE
 const DEFAULT_FILE_OPS: FileOps = {
   cp,
   mkdir,
+  realpath,
   rm,
   stat,
 };
@@ -54,6 +56,38 @@ const isRetryableLockError = (error: unknown): error is RetryableError =>
   'code' in error &&
   typeof (error as { code?: unknown }).code === 'string' &&
   RETRYABLE_LOCK_ERROR_CODES.has((error as { code: string }).code);
+
+const isMissingPathError = (error: unknown): error is RetryableError =>
+  typeof error === 'object' &&
+  error !== null &&
+  'code' in error &&
+  (error as { code?: unknown }).code === 'ENOENT';
+
+async function isSameFilesystemEntry(
+  sourcePath: string,
+  targetPath: string,
+  fileOps: FileOps,
+): Promise<boolean> {
+  try {
+    const [sourceStats, targetStats] = await Promise.all([
+      fileOps.stat(sourcePath),
+      fileOps.stat(targetPath),
+    ]);
+
+    return (
+      typeof sourceStats.dev === 'number' &&
+      typeof sourceStats.ino === 'number' &&
+      sourceStats.dev === targetStats.dev &&
+      sourceStats.ino === targetStats.ino
+    );
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return false;
+    }
+
+    throw error;
+  }
+}
 
 async function withDirectoryLock(input: {
   fileOps: FileOps;
@@ -90,15 +124,28 @@ export async function copyArtifactDir({
   maxReplaceAttempts = DEFAULT_MAX_REPLACE_ATTEMPTS,
   retryDelayMs = DEFAULT_RETRY_DELAY_MS,
 }: CopyArtifactDirParams): Promise<void> {
-  const sourceDir = path.join(sourceRoot, relativeDir);
+  const sourceDir = path.resolve(sourceRoot, relativeDir);
   const sourceStats = await fileOps.stat(sourceDir);
 
   if (!sourceStats.isDirectory()) {
     return;
   }
 
-  const targetDir = path.join(targetRoot, relativeDir);
-  await fileOps.mkdir(path.dirname(targetDir), { recursive: true });
+  const targetDir = path.resolve(targetRoot, relativeDir);
+  if (sourceDir === targetDir) {
+    return;
+  }
+
+  await fileOps.mkdir(targetDir, { recursive: true });
+  const [realSourceDir, realTargetDir] = await Promise.all([
+    fileOps.realpath(sourceDir),
+    fileOps.realpath(targetDir),
+  ]);
+
+  if (realSourceDir === realTargetDir) {
+    return;
+  }
+
   const lockDir = `${targetDir}.sync-lock`;
 
   await withDirectoryLock({
@@ -109,8 +156,12 @@ export async function copyArtifactDir({
     run: async () => {
       for (let attempt = 1; attempt <= maxReplaceAttempts; attempt += 1) {
         try {
-          await fileOps.rm(targetDir, { recursive: true, force: true });
-          await fileOps.cp(sourceDir, targetDir, { recursive: true, force: true });
+          await fileOps.cp(sourceDir, targetDir, {
+            recursive: true,
+            force: true,
+            filter: async (sourcePath, targetPath) =>
+              !(await isSameFilesystemEntry(sourcePath, targetPath, fileOps)),
+          });
           return;
         } catch (error) {
           if (!isRetryableReplaceError(error) || attempt === maxReplaceAttempts) {

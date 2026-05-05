@@ -9,6 +9,13 @@ function readString(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function readCommaSeparatedStrings(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 async function main() {
   const specRoot = readString(process.env.EMBER_ORCHESTRATION_V1_SPEC_ROOT);
   if (specRoot === null) {
@@ -23,12 +30,17 @@ async function main() {
     throw new Error(`Invalid SHARED_EMBER_PORT: ${process.env.SHARED_EMBER_PORT ?? ''}`);
   }
 
-  const managedAgentId =
-    readString(process.env.SHARED_EMBER_MANAGED_AGENT_ID) ?? DEFAULT_MANAGED_AGENT_ID;
+  const configuredManagedAgentIds = readCommaSeparatedStrings(
+    process.env.SHARED_EMBER_MANAGED_AGENT_IDS,
+  );
+  const managedAgentIds =
+    configuredManagedAgentIds.length > 0
+      ? configuredManagedAgentIds
+      : [readString(process.env.SHARED_EMBER_MANAGED_AGENT_ID) ?? DEFAULT_MANAGED_AGENT_ID];
   const server = await startManagedSharedEmberHarness({
     specRoot,
     vibekitRoot,
-    managedAgentId,
+    managedAgentIds,
     host,
     port,
   });

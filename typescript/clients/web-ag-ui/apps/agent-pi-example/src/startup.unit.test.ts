@@ -15,6 +15,7 @@ function createStubService(): AgentRuntimeService {
       listExecutions: async () => [],
       listAutomations: async () => [],
       listAutomationRuns: async () => [],
+      listArtifacts: async () => [],
       inspectScheduler: async () => ({ dueAutomationIds: [], leases: [] }),
       inspectOutbox: async () => ({ dueOutboxIds: [], intents: [] }),
       inspectMaintenance: async () => ({ recovery: {}, archival: {} }),

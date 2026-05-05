@@ -93,6 +93,76 @@ restart.
     wallet and verifies ordinary portfolio reads ingest the resulting
     ingress/egress changes without repeated phantom deltas on follow-up reads.
 
+- `pnpm smoke:portfolio-swap-ag-ui`
+  - Speaks only to the portfolio-manager AG-UI surface; it does not call Shared
+    Ember JSON-RPC directly and does not drive browser/UI components.
+  - First completes portfolio-manager onboarding through the same AG-UI
+    hire/setup/delegation-signing interrupt flow used by the app smoke. Then it
+    uses ordinary user messages on that active thread to exercise one
+    unreserved WETH -> USDC swap, one mixed unreserved-plus-reserved WETH ->
+    USDC swap with a follow-up confirmation message, then one reserved-capital
+    WETH -> USDC swap with a follow-up confirmation message.
+  - Keeps assertions intentionally thin: the smoke fails on surfaced AG-UI
+    errors/reverts, requires an AG-UI-surfaced execution transaction hash,
+    waits for a successful receipt, and checks the root wallet actually moved
+    WETH down and USDC up. It does not reimplement candidate-unit or
+    reservation selection logic.
+  - Reads an already-running wallet QA stack from
+    `PM_SWAP_SMOKE_PORTFOLIO_MANAGER_BASE_URL`,
+    `PORTFOLIO_MANAGER_AGENT_DEPLOYMENT_URL`, or the latest
+    `runtime/wallet-qa-stack/launcher*.log` READY line.
+  - Optional live setup: set `PM_SWAP_SMOKE_ENABLE_FUNDING=1` to top up the
+    rooted wallet with ETH/WETH using the bundle's `FUNDING_WALLET_PRIVATE_KEY`.
+    The reserved-capital lane still must exist in the real app/accounting
+    state; the smoke does not seed fake reservations.
+  - Useful overrides:
+    `PM_SWAP_SMOKE_IDENTITIES_PATH`,
+    `PM_SWAP_SMOKE_ROOT_WALLET_ADDRESS`,
+    `ARBITRUM_RPC_URL`,
+    `PM_SWAP_SMOKE_NON_RESERVED_PROMPT`,
+    `PM_SWAP_SMOKE_MIXED_PROMPT`,
+    `PM_SWAP_SMOKE_RESERVED_PROMPT`,
+    `PM_SWAP_SMOKE_CONFIRM_PROMPT`,
+    `PM_SWAP_SMOKE_MIN_ROOT_ETH`, and `PM_SWAP_SMOKE_MIN_ROOT_WETH`.
+
+- `pnpm stack:wallet-qa`
+  - Boots the local wallet QA stack for issue-driven debugging:
+    `onchain-actions`, repo-local Shared Ember, `agent-portfolio-manager`,
+    `agent-ember-lending`, and `apps/web`.
+  - If `WALLET_QA_ONCHAIN_ACTIONS_API_URL` is set, the launcher treats
+    `onchain-actions` as an external dependency, checks `/health` on that base
+    URL, and skips starting the local `onchain-actions` worktree entirely.
+  - Builds `apps/web` with the resolved wallet-QA env, then starts it through
+    `next start` instead of `next dev` so the QA stack matches a production-like
+    runtime path.
+  - Resolves the session bundle and `onchain-actions` worktree from the active
+    Forge session layout by default, then rewrites the archived envs at process
+    start so the live stack uses the real extracted OWS vault paths and the
+    actual `onchain-actions` origin.
+  - Prefers an exported `OPENROUTER_API_KEY` over the archived bundle value for
+    both managed agents, so live caller-provided credentials can be used without
+    editing tracked env files.
+  - Uses `postgresql://postgres:postgres@127.0.0.1:55432/pi_runtime` for the
+    managed agents unless `WALLET_QA_PI_DATABASE_URL` is set.
+  - Uses `postgresql://ember:ember@127.0.0.1:55433/ember` for Shared Ember
+    unless `WALLET_QA_SHARED_EMBER_DATABASE_URL` is set.
+  - If those local Postgres endpoints are unreachable and Docker is available,
+    it tries to start `pi-runtime-postgres` and `shared-ember-postgres`
+    automatically.
+  - If Docker is unavailable but the session is running on a Debian host with
+    `apt` and `dpkg-deb`, it falls back to
+    `scripts/smoke/ensure-session-postgres.sh` and boots real Postgres 17
+    clusters under the session runtime.
+  - If the archived OWS vault contains duplicate wallet names, the launcher
+    disambiguates them to exact wallet IDs before boot so the managed agents do
+    not fail on ambiguous `*_OWS_WALLET_NAME` resolution.
+  - `pnpm stack:wallet-qa -- --check` validates the resolved session paths,
+    planned ports, and database readiness without starting the long-lived app
+    processes.
+  - `scripts/smoke/boot-wallet-qa-stack.sh` prefers the session-local
+    `runtime/bin/node` wrapper when present, so Vibekit child processes inherit
+    the recovered Node 22 binary from the active session runtime.
+
 ## Typical Local Flow
 
 ```bash
@@ -116,4 +186,7 @@ pnpm smoke:redelegation-browser-signing
 
 # managed idle-capital reconciliation proof without the web app
 pnpm smoke:managed-idle-reconciliation
+
+# portfolio-manager reserved and unreserved spot-swap proof without the web app
+pnpm smoke:portfolio-swap-ag-ui
 ```

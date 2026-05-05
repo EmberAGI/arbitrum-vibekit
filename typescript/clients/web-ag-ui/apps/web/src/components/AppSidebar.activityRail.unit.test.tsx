@@ -14,12 +14,14 @@ import { AppSidebar } from './AppSidebar';
 const useAgentListMock = vi.fn();
 const getVisibleAgentsMock = vi.fn();
 const getAuthoritativeSnapshotMock = vi.fn();
+const routerPushMock = vi.fn();
+const routerPrefetchMock = vi.fn();
 let pathnameMock = '/hire-agents/agent-ember-lending';
 
 vi.mock('next/navigation', () => {
   return {
     usePathname: () => pathnameMock,
-    useRouter: () => ({ push: vi.fn() }),
+    useRouter: () => ({ push: routerPushMock, prefetch: routerPrefetchMock }),
   };
 });
 
@@ -110,6 +112,7 @@ vi.mock('@/contexts/AuthoritativeAgentSnapshotCache', () => {
       getSnapshot: getAuthoritativeSnapshotMock,
       setSnapshot: vi.fn(),
     }),
+    useAuthoritativeAgentSnapshotCacheVersion: () => 0,
   };
 });
 
@@ -134,6 +137,8 @@ describe('AppSidebar activity rail', () => {
     pathnameMock = '/hire-agents/agent-ember-lending';
     getAuthoritativeSnapshotMock.mockReset();
     getAuthoritativeSnapshotMock.mockReturnValue(null);
+    routerPushMock.mockReset();
+    routerPrefetchMock.mockReset();
     getVisibleAgentsMock.mockReset();
     getVisibleAgentsMock.mockReturnValue([
       {
@@ -196,6 +201,10 @@ describe('AppSidebar activity rail', () => {
     ) as HTMLButtonElement | null;
 
     expect(collapseButton).not.toBeNull();
+    expect(container.innerHTML).toContain('w-[312px]');
+    expect(container.innerHTML).not.toContain('Agent Activity');
+    expect(collapseButton?.innerHTML).toContain('lucide-panel-left-close');
+    expect(collapseButton?.textContent).not.toContain('‹');
 
     act(() => {
       collapseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -204,9 +213,135 @@ describe('AppSidebar activity rail', () => {
     expect(
       container.querySelector('button[aria-label="Expand agent activity rail"]'),
     ).not.toBeNull();
+    expect(container.innerHTML).toContain('w-[72px]');
+    expect(container.innerHTML).not.toContain('w-[312px]');
+    expect(
+      container.querySelector('button[aria-label="Expand agent activity rail"]')?.innerHTML,
+    ).toContain('lucide-panel-left-open');
     expect(container.querySelector('button[aria-label="Ember Portfolio Agent"]')).not.toBeNull();
     expect(container.querySelector('button[aria-label="Ember Lending"]')).not.toBeNull();
     expect(container.querySelector('a[aria-label="Hire specialists"]')).not.toBeNull();
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('uses client-side navigation for activity cards so the rail stays mounted', () => {
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(React.createElement(AppSidebar));
+    });
+
+    const portfolioCard = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Ember Portfolio Agent'),
+    );
+
+    expect(portfolioCard).not.toBeUndefined();
+
+    act(() => {
+      portfolioCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(routerPushMock).toHaveBeenCalledWith('/hire-agents/agent-portfolio-manager?tab=chat');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('marks the clicked activity card active immediately while the route transition catches up', () => {
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(React.createElement(AppSidebar));
+    });
+
+    const portfolioCard = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Ember Portfolio Agent'),
+    );
+
+    expect(portfolioCard?.outerHTML).not.toContain('bg-[#fd6731]');
+
+    act(() => {
+      portfolioCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const updatedPortfolioCard = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Ember Portfolio Agent'),
+    );
+
+    expect(updatedPortfolioCard?.outerHTML).toContain('bg-[#fd6731]');
+    expect(routerPushMock).toHaveBeenCalledWith('/hire-agents/agent-portfolio-manager?tab=chat');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('prefetches visible agent routes so card-to-card navigation is warmed before click', () => {
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(React.createElement(AppSidebar));
+    });
+
+    expect(routerPrefetchMock).toHaveBeenCalledWith('/hire-agents/agent-portfolio-manager?tab=chat');
+    expect(routerPrefetchMock).toHaveBeenCalledWith('/hire-agents/agent-ember-lending');
+
+    act(() => {
+      root.unmount();
+    });
+  });
+
+  it('derives the portfolio card holdings tooltip from the cached portfolio projection', () => {
+    getAuthoritativeSnapshotMock.mockReturnValue({
+      thread: {
+        domainProjection: {
+          portfolioProjectionInput: {
+            benchmarkAsset: 'USD',
+            walletContents: [
+              { asset: 'USDC', network: 'arbitrum', quantity: '1000', valueUsd: 500 },
+              { asset: 'WETH', network: 'arbitrum', quantity: '0.05', valueUsd: 200 },
+              { asset: 'WBTC', network: 'arbitrum', quantity: '0.0012', valueUsd: 150 },
+              { asset: 'ARB', network: 'arbitrum', quantity: '80', valueUsd: 100 },
+              { asset: 'GMX', network: 'arbitrum', quantity: '4', valueUsd: 40 },
+              { asset: 'DAI', network: 'arbitrum', quantity: '10', valueUsd: 10 },
+            ],
+            ownedUnits: [],
+            reservations: [],
+            activePositionScopes: [],
+          },
+        },
+      },
+    });
+    const root = createRoot(container);
+
+    act(() => {
+      root.render(React.createElement(AppSidebar));
+    });
+
+    const portfolioCard = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Ember Portfolio Agent'),
+    );
+
+    expect(portfolioCard).not.toBeUndefined();
+
+    act(() => {
+      portfolioCard?.dispatchEvent(
+        new MouseEvent('mouseover', { bubbles: true, clientX: 24, clientY: 24 }),
+      );
+    });
+
+    const pageText = document.body.textContent ?? '';
+    expect(pageText).toContain('Top holdings');
+    expect(pageText).toContain('USDC');
+    expect(pageText).toContain('1,000');
+    expect(pageText).toContain('50%');
+    expect(pageText).toContain('$500');
+    expect(pageText).toContain('GMX');
+    expect(pageText).not.toContain('DAI');
 
     act(() => {
       root.unmount();

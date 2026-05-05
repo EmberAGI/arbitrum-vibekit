@@ -298,6 +298,37 @@ function getUserText(message: Message): string {
     .join(' ');
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function findLatestAutomationId(messages: readonly Message[]): string | undefined {
+  for (const message of [...messages].reverse()) {
+    if (message.role !== 'toolResult') {
+      continue;
+    }
+
+    const toolResultText = message.content
+      .filter((part): part is Extract<typeof message.content[number], { type: 'text' }> => part.type === 'text')
+      .map((part) => part.text)
+      .join(' ');
+
+    try {
+      const payload = JSON.parse(toolResultText) as unknown;
+      const details = isRecord(payload) ? payload.details : undefined;
+      const automation = isRecord(details) ? details.automation : undefined;
+      const automationId = isRecord(automation) ? automation.id : undefined;
+      if (typeof automationId === 'string' && automationId.length > 0) {
+        return automationId;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+}
+
 function isPiRuntimeContextText(value: string): boolean {
   return value.startsWith('<pi-runtime-gateway>') && value.endsWith('</pi-runtime-gateway>');
 }
@@ -466,7 +497,7 @@ function createPiExampleMockStream(): PiExampleGatewayStream {
         model,
         toolName: AGENT_RUNTIME_AUTOMATION_CANCEL_TOOL,
         toolCallId: 'pi-example-tool-cancel',
-        args: { automationId: 'automation:thread-1' },
+        args: { automationId: findLatestAutomationId(context.messages) ?? 'automation:thread-1' },
         reasoning: 'Canceling the saved automation the user no longer wants running.',
       });
     }

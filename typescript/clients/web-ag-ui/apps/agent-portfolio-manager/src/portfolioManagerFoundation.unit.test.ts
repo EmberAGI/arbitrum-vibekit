@@ -1,8 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { createHiddenOcaSpotSwapExecutorMock } = vi.hoisted(() => ({
+  createHiddenOcaSpotSwapExecutorMock: vi.fn(() => ({
+    executeSpotSwap: vi.fn(),
+  })),
+}));
+
+vi.mock('./hiddenOcaSwapExecutor.js', () => ({
+  createHiddenOcaSpotSwapExecutor: createHiddenOcaSpotSwapExecutorMock,
+}));
 
 import { createPortfolioManagerAgentConfig } from './portfolioManagerFoundation.js';
 
 describe('createPortfolioManagerAgentConfig', () => {
+  beforeEach(() => {
+    createHiddenOcaSpotSwapExecutorMock.mockClear();
+    createHiddenOcaSpotSwapExecutorMock.mockImplementation(() => ({
+      executeSpotSwap: vi.fn(),
+    }));
+  });
+
   it('builds an OpenRouter-backed agent-runtime config for portfolio-manager startup', async () => {
     const config = createPortfolioManagerAgentConfig({
       OPENROUTER_API_KEY: 'test-openrouter-key',
@@ -28,6 +46,11 @@ describe('createPortfolioManagerAgentConfig', () => {
       maxTokens: 4_096,
     });
     expect(config.systemPrompt).toContain('portfolio manager orchestrator');
+    expect(config.systemPrompt).toContain('Never suggest releasing or adjusting a reservation');
+    expect(config.systemPrompt).toContain(
+      'do not call confirm_spot_swap_reserved_capital in the same assistant turn',
+    );
+    expect(config.systemPrompt).toContain('confirm_spot_swap_reserved_capital');
     expect(config.databaseUrl).toBe('postgresql://portfolio:secret@db.internal:5432/pi_runtime');
     expect(config.tools).toEqual([]);
     expect(config.domain?.lifecycle).toMatchObject({
@@ -54,6 +77,12 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'refresh_redelegation_work',
         },
         {
+          name: 'dispatch_spot_swap',
+        },
+        {
+          name: 'confirm_spot_swap_reserved_capital',
+        },
+        {
           name: 'complete_rooted_bootstrap_from_user_signing',
         },
       ],
@@ -65,11 +94,40 @@ describe('createPortfolioManagerAgentConfig', () => {
         {
           type: 'portfolio-manager-delegation-signing-request',
         },
+        {
+          type: 'portfolio-manager-swap-reservation-conflict-request',
+        },
       ],
     });
     expect(config.agentOptions?.initialState).toMatchObject({
       thinkingLevel: 'low',
     });
+    const spotSwapCommand = config.domain?.lifecycle.commands.find(
+      (command) => command.name === 'dispatch_spot_swap',
+    );
+    expect(spotSwapCommand?.description).toContain('inputJson');
+    expect(spotSwapCommand?.description).toContain('walletAddress');
+    expect(spotSwapCommand?.description).toContain('amountType');
+    expect(spotSwapCommand?.description).toContain('fromChain');
+    expect(spotSwapCommand?.description).toContain('toToken');
+    expect(spotSwapCommand?.description).toContain('base-unit');
+    expect(spotSwapCommand?.description).toContain('capitalPool');
+    expect(spotSwapCommand?.description).toContain('reserved_or_assigned');
+    expect(spotSwapCommand?.description).toContain('Never suggest releasing or adjusting');
+    expect(spotSwapCommand?.description).toContain('stop the current assistant turn');
+    const spotSwapConfirmationCommand = config.domain?.lifecycle.commands.find(
+      (command) => command.name === 'confirm_spot_swap_reserved_capital',
+    );
+    expect(spotSwapConfirmationCommand?.description).toContain('allow_reserved_for_other_agent');
+    expect(spotSwapConfirmationCommand?.description).toContain('unassigned_only');
+    expect(spotSwapConfirmationCommand?.description).toContain('cancel');
+    expect(spotSwapConfirmationCommand?.description).toContain('yes');
+    const swapConflictInterrupt = config.domain?.lifecycle.interrupts.find(
+      (interrupt) => interrupt.type === 'portfolio-manager-swap-reservation-conflict-request',
+    );
+    expect(swapConflictInterrupt?.description).toContain('yes');
+    expect(swapConflictInterrupt?.description).toContain('allow_reserved_for_other_agent');
+    expect(swapConflictInterrupt?.description).toContain('Do not repeat dispatch_spot_swap');
     expect(config.agentOptions?.getApiKey?.(undefined as never)).toBe('test-openrouter-key');
     expect(
       await config.domain?.systemContext?.({
@@ -109,6 +167,37 @@ describe('createPortfolioManagerAgentConfig', () => {
           name: 'read_wallet_accounting_state',
         }),
       ]),
+    );
+  });
+
+  it('wires the hidden OCA swap executor with PM-owned redelegation refresh', () => {
+    const runtimeSigning = {
+      readAddress: vi.fn<AgentRuntimeSigningService['readAddress']>(),
+      signPayload: vi.fn<AgentRuntimeSigningService['signPayload']>(),
+    };
+
+    createPortfolioManagerAgentConfig(
+      {
+        OPENROUTER_API_KEY: 'test-openrouter-key',
+        SHARED_EMBER_BASE_URL: 'http://127.0.0.1:56436',
+      },
+      {
+        runtimeSigning,
+        runtimeSignerRef: 'controller-wallet',
+        controllerWalletAddress: '0x00000000000000000000000000000000000000c2',
+        controllerSignerAddress: '0x00000000000000000000000000000000000000c1',
+        hiddenOcaExecutorWalletAddress: '0x00000000000000000000000000000000000000e1',
+        hiddenOcaExecutorRuntimeSignerRef: 'oca-executor-wallet',
+      },
+    );
+
+    expect(createHiddenOcaSpotSwapExecutorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeSigning,
+        runtimeSignerRef: 'oca-executor-wallet',
+        executorWalletAddress: '0x00000000000000000000000000000000000000e1',
+        requestRedelegationRefresh: expect.any(Function),
+      }),
     );
   });
 

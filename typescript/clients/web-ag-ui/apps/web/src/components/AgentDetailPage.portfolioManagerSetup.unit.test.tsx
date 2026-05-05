@@ -115,7 +115,7 @@ describe('AgentDetailPage portfolio-manager setup', () => {
       'a[aria-label="Open Ember Lending"]',
     ) as HTMLAnchorElement | null;
     const submitButton = [...container.querySelectorAll('button')].find(
-      (button) => button.textContent?.includes('Approve'),
+      (button) => button.textContent?.includes('Continue onboarding'),
     ) as HTMLButtonElement | undefined;
 
     expect(lendingAvatar?.getAttribute('src')).toBe('/ember-lending-avatar.svg');
@@ -159,6 +159,7 @@ describe('AgentDetailPage portfolio-manager setup', () => {
         approved: true,
         riskLevel: 'medium',
       },
+      portfolioManagerMandate: {},
       firstManagedMandate: {
         targetAgentId: 'ember-lending',
         targetAgentKey: 'ember-lending-primary',

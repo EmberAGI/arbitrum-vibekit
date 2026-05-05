@@ -155,7 +155,36 @@ function findStateDeltas(events: BaseEvent[]) {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function encodeJsonPointerToken(token: string): string {
+  return token.replaceAll('~', '~0').replaceAll('/', '~1');
+}
+
+function collectSnapshotReplaceOperations(value: unknown, path = ''): JsonPatchOperation[] {
+  const operations = path === '' ? [] : [{ op: 'replace', path, value } satisfies JsonPatchOperation];
+
+  if (Array.isArray(value)) {
+    return operations.concat(
+      value.flatMap((item, index) =>
+        collectSnapshotReplaceOperations(item, `${path}/${index}`),
+      ),
+    );
+  }
+
+  if (!isRecord(value)) {
+    return operations;
+  }
+
+  return operations.concat(
+    Object.entries(value).flatMap(([key, nestedValue]) =>
+      collectSnapshotReplaceOperations(
+        nestedValue,
+        `${path}/${encodeJsonPointerToken(String(key))}`,
+      ),
+    ),
+  );
 }
 
 function matchesArtifactData(
@@ -221,11 +250,18 @@ function expectStateDeltaOperation(
   events: BaseEvent[],
   predicate: (operation: JsonPatchOperation) => boolean,
 ): void {
-  const stateDeltas = findStateDeltas(events);
-  expect(stateDeltas).not.toHaveLength(0);
-  expect(
-    stateDeltas.some((event) => event.delta.some((operation) => predicate(operation as JsonPatchOperation))),
-  ).toBe(true);
+  const operations = [
+    ...findStateDeltas(events).flatMap((event) =>
+      event.delta.map((operation) => operation as JsonPatchOperation),
+    ),
+    ...events.flatMap((event) =>
+      event.type === EventType.STATE_SNAPSHOT && isRecord(event.snapshot)
+        ? collectSnapshotReplaceOperations(event.snapshot)
+        : [],
+    ),
+  ];
+  expect(operations).not.toHaveLength(0);
+  expect(operations.some(predicate)).toBe(true);
 }
 
 function createInternalPostgresHooks() {

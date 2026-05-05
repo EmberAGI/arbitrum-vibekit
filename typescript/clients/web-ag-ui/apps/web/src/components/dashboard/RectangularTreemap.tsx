@@ -23,6 +23,7 @@ const FALLBACK_CONTAINER_SIZE: TreemapContainerSize = {
   width: 248,
   height: 188,
 };
+const TREEMAP_VALUE_SPACING_SCALE = 2 / 3;
 
 function cn(...classNames: Array<string | false | null | undefined>): string {
   return classNames.filter(Boolean).join(' ');
@@ -140,7 +141,7 @@ export function RectangularTreemap({
     <div
       aria-label="Asset allocation treemap"
       className={cn(
-        'relative isolate overflow-visible rounded-[20px] border border-[#E7DBD0] bg-[#0B0B0B]',
+        'relative isolate overflow-visible rounded-[4px] bg-transparent',
         className,
       )}
       ref={containerRef}
@@ -205,7 +206,7 @@ export function RectangularTreemap({
               }}
             >
               <div
-                className="relative flex h-full min-h-0 flex-col justify-start overflow-hidden rounded-[18px]"
+                className="relative flex h-full min-h-0 flex-col justify-start overflow-hidden rounded-[3px]"
                 style={{
                   ...item.toneStyle,
                   ...(isHovered && !hoverChildLayout ? item.hoverToneStyle : undefined),
@@ -249,7 +250,7 @@ export function RectangularTreemap({
                           }}
                         >
                           <div
-                            className="flex h-full min-h-0 flex-col justify-start overflow-hidden rounded-[16px]"
+                            className="flex h-full min-h-0 flex-col justify-start overflow-hidden rounded-[3px]"
                             style={{
                               ...child.toneStyle,
                               paddingInline: `${childMetrics.paddingX}px`,
@@ -409,11 +410,11 @@ function getTreemapTextMetrics(params: {
 }) {
   const boxWidth = Math.max(params.width, 1);
   const boxHeight = Math.max(params.height, 1);
-  const paddingX = clamp(boxWidth * 0.08, 0.25, 10);
-  const paddingY = clamp(boxHeight * 0.08, 0.25, 8);
+  const paddingX = clamp(boxWidth * 0.08, 0.25, 10) * TREEMAP_VALUE_SPACING_SCALE;
+  const paddingY = clamp(boxHeight * 0.08, 0.25, 8) * TREEMAP_VALUE_SPACING_SCALE;
   const contentWidth = Math.max(boxWidth - paddingX * 2, 0.5);
   const contentHeight = Math.max(boxHeight - paddingY * 2, 0.5);
-  const contentGap = clamp(contentHeight * 0.08, 1.5, 4);
+  const contentGap = clamp(contentHeight * 0.08, 1.5, 4) * TREEMAP_VALUE_SPACING_SCALE;
   const labelLineHeight = params.allowWrappedLabel ? 0.94 : 1;
 
   let labelSize = Math.min(

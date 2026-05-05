@@ -65,6 +65,24 @@ describe('POST /api/agent-command', () => {
     });
   });
 
+  it('rejects direct commands for the hidden OCA executor', async () => {
+    const response = await POST(
+      buildRequest({
+        agentId: 'agent-oca-executor',
+        threadId: 'thread-1',
+        command: {
+          name: 'dispatch_spot_swap',
+        },
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: 'Invalid agent command payload.',
+    });
+  });
+
   it('returns the latest thread domain projection after a successful one-off command run', async () => {
     runMock.mockReturnValue(
       from([
@@ -172,7 +190,7 @@ describe('POST /api/agent-command', () => {
         threadId: 'thread-1',
         forwardedProps: {
           command: {
-            resume: resumePayload,
+            resume: JSON.stringify(resumePayload),
           },
         },
       }),

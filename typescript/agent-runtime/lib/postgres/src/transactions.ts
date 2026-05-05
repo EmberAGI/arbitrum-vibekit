@@ -2,6 +2,7 @@ export type PostgresStatement = {
   tableName: string;
   text: string;
   values: readonly unknown[];
+  requiredAffectedRows?: number;
 };
 
 export type PiExecutionCheckpointStatus =
@@ -15,10 +16,12 @@ const buildStatement = (
   tableName: string,
   text: string,
   values: readonly unknown[],
+  options?: Pick<PostgresStatement, 'requiredAffectedRows'>,
 ): PostgresStatement => ({
   tableName,
   text,
   values,
+  ...options,
 });
 
 export function buildPersistDirectExecutionStatements(params: {
@@ -138,7 +141,7 @@ export function buildPersistThreadStateStatements(params: {
   return [
     buildStatement(
       'pi_threads',
-      'insert into pi_threads (id, thread_key, status, thread_state, created_at, updated_at) values ($1, $2, $3, $4, $5, $6) on conflict (id) do update set thread_state = excluded.thread_state, updated_at = excluded.updated_at',
+      'insert into pi_threads (id, thread_key, status, thread_state, created_at, updated_at) values ($1, $2, $3, $4, $5, $6) on conflict (thread_key) do update set id = excluded.id, status = excluded.status, thread_state = excluded.thread_state, updated_at = excluded.updated_at',
       [params.threadId, params.threadKey, 'active', JSON.stringify(params.threadState), params.now, params.now],
     ),
   ];
@@ -176,7 +179,7 @@ export function buildPersistAutomationDispatchStatements(params: {
     buildStatement(
       'pi_automation_runs',
       'insert into pi_automation_runs (id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, null)',
-      [params.runId, params.automationId, params.threadId, params.executionId, 'scheduled', params.now, null],
+      [params.runId, params.automationId, params.threadId, params.executionId, 'scheduled', params.nextRunAt, null],
     ),
     buildStatement(
       'pi_executions',
@@ -210,17 +213,21 @@ export function buildCompleteAutomationExecutionStatements(params: {
   now: Date;
   nextRunAt: Date;
   leaseExpiresAt: Date;
+  status?: 'completed' | 'failed';
 }): PostgresStatement[] {
+  const status = params.status ?? 'completed';
+  const eventKind = status === 'completed' ? 'automation-executed' : 'automation-failed';
   return [
     buildStatement(
       'pi_automation_runs',
-      'update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4',
-      ['completed', params.now, params.now, params.currentRunId],
+      "update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4 and status = 'running'",
+      [status, params.now, params.now, params.currentRunId],
+      { requiredAffectedRows: 1 },
     ),
     buildStatement(
       'pi_executions',
       'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
-      ['completed', params.now, params.now, params.currentExecutionId],
+      [status, params.now, params.now, params.currentExecutionId],
     ),
     buildStatement(
       'pi_automations',
@@ -230,7 +237,7 @@ export function buildCompleteAutomationExecutionStatements(params: {
     buildStatement(
       'pi_automation_runs',
       'insert into pi_automation_runs (id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, null)',
-      [params.nextRunId, params.automationId, params.threadId, params.nextExecutionId, 'scheduled', params.now, null],
+      [params.nextRunId, params.automationId, params.threadId, params.nextExecutionId, 'scheduled', params.nextRunAt, null],
     ),
     buildStatement(
       'pi_executions',
@@ -249,7 +256,7 @@ export function buildCompleteAutomationExecutionStatements(params: {
         params.eventId,
         params.currentExecutionId,
         params.threadId,
-        'automation-executed',
+        eventKind,
         JSON.stringify({
           automationId: params.automationId,
           nextRunId: params.nextRunId,
@@ -266,10 +273,149 @@ export function buildCompleteAutomationExecutionStatements(params: {
         params.activityId,
         params.threadId,
         params.currentExecutionId,
-        'automation-executed',
+        eventKind,
         JSON.stringify({
           automationId: params.automationId,
           nextRunAt: params.nextRunAt,
+        }),
+        params.now,
+      ],
+    ),
+  ];
+}
+
+export function buildStartAutomationExecutionStatements(params: {
+  currentRunId: string;
+  currentExecutionId: string;
+  threadId: string;
+  automationId: string;
+  eventId: string;
+  activityId: string;
+  now: Date;
+}): PostgresStatement[] {
+  return [
+    buildStatement(
+      'pi_automation_runs',
+      "update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2) where id = $3 and status = 'scheduled'",
+      ['running', params.now, params.currentRunId],
+      { requiredAffectedRows: 1 },
+    ),
+    buildStatement(
+      'pi_executions',
+      'update pi_executions set status = $1, updated_at = $2 where id = $3',
+      ['working', params.now, params.currentExecutionId],
+    ),
+    buildStatement(
+      'pi_execution_events',
+      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.eventId,
+        params.currentExecutionId,
+        params.threadId,
+        'automation-running',
+        JSON.stringify({
+          automationId: params.automationId,
+          runId: params.currentRunId,
+        }),
+        params.now,
+      ],
+    ),
+    buildStatement(
+      'pi_thread_activity',
+      'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.activityId,
+        params.threadId,
+        params.currentExecutionId,
+        'automation-running',
+        JSON.stringify({
+          automationId: params.automationId,
+          runId: params.currentRunId,
+        }),
+        params.now,
+      ],
+    ),
+  ];
+}
+
+export function buildTimeoutAutomationExecutionStatements(params: {
+  automationId: string;
+  currentRunId: string;
+  currentExecutionId: string;
+  nextRunId: string;
+  nextExecutionId: string;
+  threadId: string;
+  commandName: string;
+  schedulePayload: Record<string, unknown>;
+  eventId: string;
+  activityId: string;
+  now: Date;
+  nextRunAt: Date;
+  leaseExpiresAt: Date;
+  timeoutDetail: string;
+}): PostgresStatement[] {
+  return [
+    buildStatement(
+      'pi_automation_runs',
+      "update pi_automation_runs set status = $1, started_at = coalesce(started_at, $2), completed_at = $3 where id = $4 and status = 'running'",
+      ['timed_out', params.now, params.now, params.currentRunId],
+      { requiredAffectedRows: 1 },
+    ),
+    buildStatement(
+      'pi_executions',
+      'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
+      ['failed', params.now, params.now, params.currentExecutionId],
+    ),
+    buildStatement(
+      'pi_automations',
+      'update pi_automations set next_run_at = $1, updated_at = $2 where id = $3',
+      [params.nextRunAt, params.now, params.automationId],
+    ),
+    buildStatement(
+      'pi_automation_runs',
+      'insert into pi_automation_runs (id, automation_id, thread_id, execution_id, status, scheduled_at, started_at, completed_at) values ($1, $2, $3, $4, $5, $6, $7, null)',
+      [params.nextRunId, params.automationId, params.threadId, params.nextExecutionId, 'scheduled', params.nextRunAt, null],
+    ),
+    buildStatement(
+      'pi_executions',
+      'insert into pi_executions (id, thread_id, automation_run_id, status, source, current_interrupt_id, created_at, updated_at, completed_at) values ($1, $2, $3, $4, $5, null, $6, $7, null) on conflict (id) do update set status = excluded.status, updated_at = excluded.updated_at',
+      [params.nextExecutionId, params.threadId, params.nextRunId, 'queued', 'automation', params.now, params.now],
+    ),
+    buildStatement(
+      'pi_scheduler_leases',
+      'insert into pi_scheduler_leases (automation_id, owner_id, lease_expires_at, last_heartbeat_at) values ($1, $2, $3, $4) on conflict (automation_id) do update set owner_id = excluded.owner_id, lease_expires_at = excluded.lease_expires_at, last_heartbeat_at = excluded.last_heartbeat_at',
+      [params.automationId, `scheduler:${params.commandName}`, params.leaseExpiresAt, params.now],
+    ),
+    buildStatement(
+      'pi_execution_events',
+      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.eventId,
+        params.currentExecutionId,
+        params.threadId,
+        'automation-timed-out',
+        JSON.stringify({
+          automationId: params.automationId,
+          nextRunId: params.nextRunId,
+          nextExecutionId: params.nextExecutionId,
+          schedulePayload: params.schedulePayload,
+          detail: params.timeoutDetail,
+        }),
+        params.now,
+      ],
+    ),
+    buildStatement(
+      'pi_thread_activity',
+      'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.activityId,
+        params.threadId,
+        params.currentExecutionId,
+        'automation-timed-out',
+        JSON.stringify({
+          automationId: params.automationId,
+          nextRunAt: params.nextRunAt,
+          detail: params.timeoutDetail,
         }),
         params.now,
       ],
@@ -289,8 +435,8 @@ export function buildCancelAutomationStatements(params: {
   const statements: PostgresStatement[] = [
     buildStatement(
       'pi_automations',
-      'update pi_automations set suspended = $1, next_run_at = $2, updated_at = $3 where id = $4',
-      [true, null, params.now, params.automationId],
+      'update pi_automations set suspended = $1, next_run_at = $2, updated_at = $3 where id = $4 and thread_id = $5',
+      [true, null, params.now, params.automationId, params.threadId],
     ),
   ];
 
@@ -298,8 +444,9 @@ export function buildCancelAutomationStatements(params: {
     statements.push(
       buildStatement(
         'pi_automation_runs',
-        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and status = 'scheduled'",
-        ['canceled', params.now, params.currentRunId],
+        "update pi_automation_runs set status = $1, completed_at = $2 where id = $3 and automation_id = $4 and thread_id = $5 and status in ('scheduled', 'running', 'started')",
+        ['canceled', params.now, params.currentRunId, params.automationId, params.threadId],
+        { requiredAffectedRows: 1 },
       ),
     );
   }
@@ -308,8 +455,8 @@ export function buildCancelAutomationStatements(params: {
     statements.push(
       buildStatement(
         'pi_executions',
-        'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4',
-        ['completed', params.now, params.now, params.currentExecutionId],
+        'update pi_executions set status = $1, updated_at = $2, completed_at = $3 where id = $4 and thread_id = $5',
+        ['failed', params.now, params.now, params.currentExecutionId, params.threadId],
       ),
     );
   }
@@ -317,23 +464,31 @@ export function buildCancelAutomationStatements(params: {
   statements.push(
     buildStatement(
       'pi_scheduler_leases',
-      'delete from pi_scheduler_leases where automation_id = $1',
-      [params.automationId],
+      'delete from pi_scheduler_leases where automation_id = $1 and exists (select 1 from pi_automations where id = $1 and thread_id = $2)',
+      [params.automationId, params.threadId],
     ),
-    buildStatement(
-      'pi_execution_events',
-      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
-      [
-        params.eventId,
-        params.currentExecutionId,
-        params.threadId,
-        'automation-canceled',
-        JSON.stringify({
-          automationId: params.automationId,
-        }),
-        params.now,
-      ],
-    ),
+  );
+
+  if (params.currentExecutionId !== null) {
+    statements.push(
+      buildStatement(
+        'pi_execution_events',
+        'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+        [
+          params.eventId,
+          params.currentExecutionId,
+          params.threadId,
+          'automation-canceled',
+          JSON.stringify({
+            automationId: params.automationId,
+          }),
+          params.now,
+        ],
+      ),
+    );
+  }
+
+  statements.push(
     buildStatement(
       'pi_thread_activity',
       'insert into pi_thread_activity (id, thread_id, execution_id, activity_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
@@ -351,6 +506,56 @@ export function buildCancelAutomationStatements(params: {
   );
 
   return statements;
+}
+
+export function buildPersistScheduledAutomationRunSnapshotStatements(params: {
+  artifactId: string;
+  eventId: string;
+  threadId: string;
+  executionId: string;
+  automationRunId: string;
+  runThreadKey: string;
+  rootThreadId: string;
+  rootThreadRecordId: string;
+  sessionSnapshot: Record<string, unknown>;
+  now: Date;
+}): PostgresStatement[] {
+  const payload = {
+    automationRunId: params.automationRunId,
+    runThreadKey: params.runThreadKey,
+    rootThreadId: params.rootThreadId,
+    rootThreadRecordId: params.rootThreadRecordId,
+    snapshot: params.sessionSnapshot,
+  };
+
+  return [
+    buildStatement(
+      'pi_artifacts',
+      'insert into pi_artifacts (id, thread_id, execution_id, artifact_kind, append_only, payload, created_at, updated_at) values ($1, $2, $3, $4, $5, $6, $7, $8) on conflict (id) do update set payload = excluded.payload, updated_at = excluded.updated_at',
+      [
+        params.artifactId,
+        params.threadId,
+        params.executionId,
+        'automation-run-snapshot',
+        false,
+        JSON.stringify(payload),
+        params.now,
+        params.now,
+      ],
+    ),
+    buildStatement(
+      'pi_execution_events',
+      'insert into pi_execution_events (id, execution_id, thread_id, event_kind, payload, created_at) values ($1, $2, $3, $4, $5, $6)',
+      [
+        params.eventId,
+        params.executionId,
+        params.threadId,
+        'automation-run-snapshot',
+        JSON.stringify(payload),
+        params.now,
+      ],
+    ),
+  ];
 }
 
 export function buildPersistInterruptCheckpointStatements(params: {

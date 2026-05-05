@@ -1,6 +1,6 @@
 # ADR 0014: fail-closed-service-identity-preflight-for-managed-shared-ember-agents
 
-Status: Accepted
+Status: Superseded by ADR 0017 for hidden internal worker readiness. The visible managed-service fail-closed rule remains retained by ADR 0017.
 Date: 2026-04-02
 
 ## Context

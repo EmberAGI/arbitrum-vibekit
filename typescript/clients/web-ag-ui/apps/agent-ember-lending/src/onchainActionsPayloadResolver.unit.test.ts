@@ -22,8 +22,7 @@ function createSignedDelegation(input: {
     delegate: input.delegate,
     delegator: input.delegator,
     authority:
-      input.authority ??
-      '0x0000000000000000000000000000000000000000000000000000000000000000',
+      input.authority ?? '0x0000000000000000000000000000000000000000000000000000000000000000',
     caveats: [],
     salt: '0x0000000000000000000000000000000000000000000000000000000000000000',
     signature: '0x1234',
@@ -31,10 +30,9 @@ function createSignedDelegation(input: {
 }
 
 function encodeDelegationArtifactRef(delegation: Delegation): string {
-  return `metamask-delegation:${Buffer.from(
-    JSON.stringify(delegation),
-    'utf8',
-  ).toString('base64url')}`;
+  return `metamask-delegation:${Buffer.from(JSON.stringify(delegation), 'utf8').toString(
+    'base64url',
+  )}`;
 }
 
 function buildExpectedDelegatedUnsignedTransactionHex(input: {
@@ -111,7 +109,6 @@ const TEST_ACTIVE_DELEGATION_ARTIFACT_REF_NO_PREFIX_SIG = encodeDelegationArtifa
   ...TEST_ACTIVE_DELEGATION,
   signature: TEST_ACTIVE_DELEGATION.signature.slice(2) as `0x${string}`,
 });
-const MAX_UINT256 = ((1n << 256n) - 1n).toString();
 
 describe('resolveEmberLendingOnchainActionsApiUrl', () => {
   it('normalizes an explicit OpenAPI document URL down to the API origin', () => {
@@ -841,7 +838,9 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       })),
       estimateGas: vi
         .fn()
-        .mockRejectedValueOnce(new Error('execution reverted: ERC20: transfer amount exceeds allowance'))
+        .mockRejectedValueOnce(
+          new Error('execution reverted: ERC20: transfer amount exceeds allowance'),
+        )
         .mockResolvedValueOnce(65_000n),
     };
     const resolvePublicClient = vi.fn(() => rpcClient);
@@ -958,19 +957,22 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
           },
         ),
       );
-    const reserveFrozenError = Object.assign(new Error('Execution reverted for an unknown reason.'), {
-      name: 'EstimateGasExecutionError',
-      shortMessage: 'Execution reverted for an unknown reason.',
-      details: 'execution reverted',
-      cause: Object.assign(new Error('Execution reverted for an unknown reason.'), {
-        name: 'ExecutionRevertedError',
-        cause: Object.assign(new Error('RPC Request failed.'), {
-          name: 'RpcRequestError',
-          data: '0x6d305815',
-          details: 'execution reverted',
+    const reserveFrozenError = Object.assign(
+      new Error('Execution reverted for an unknown reason.'),
+      {
+        name: 'EstimateGasExecutionError',
+        shortMessage: 'Execution reverted for an unknown reason.',
+        details: 'execution reverted',
+        cause: Object.assign(new Error('Execution reverted for an unknown reason.'), {
+          name: 'ExecutionRevertedError',
+          cause: Object.assign(new Error('RPC Request failed.'), {
+            name: 'RpcRequestError',
+            data: '0x6d305815',
+            details: 'execution reverted',
+          }),
         }),
-      }),
-    });
+      },
+    );
     const rpcClient = {
       getTransactionCount: vi.fn(async () => 11),
       estimateFeesPerGas: vi.fn(async () => ({
@@ -1140,8 +1142,7 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         executionPreparationId: 'execprep-ember-lending-collateral-coverage-001',
         transactionPlanId: 'txplan-ember-lending-collateral-coverage-001',
         requestId: 'req-ember-lending-collateral-coverage-001',
-        canonicalUnsignedPayloadRef:
-          'unsigned-txpayload-ember-lending-collateral-coverage-001',
+        canonicalUnsignedPayloadRef: 'unsigned-txpayload-ember-lending-collateral-coverage-001',
         delegationArtifactRef: TEST_ACTIVE_DELEGATION_ARTIFACT_REF,
         rootDelegationArtifactRef: TEST_ROOT_DELEGATION_ARTIFACT_REF,
         plannedTransactionPayloadRef: 'txpayload-ember-lending-collateral-coverage-001',
@@ -1279,24 +1280,20 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       'https://api.emberai.xyz/tokens?chainIds=42161&page=2',
       undefined,
     );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      3,
-      'https://api.emberai.xyz/lending/supply',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000a1',
-          supplyTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000c1',
-          },
-          amount: '10000000',
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(3, 'https://api.emberai.xyz/lending/supply', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        supplyTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000c1',
+        },
+        amount: '10000000',
+      }),
+    });
   });
 
   it('converts decimal token quantities into base units before calling Onchain Actions', async () => {
@@ -1369,35 +1366,31 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
         required_control_path: 'lending.supply',
         network: 'arbitrum',
       },
-        compactPlanSummary: {
-          control_path: 'lending.supply',
-          asset: 'WETH',
-          amount: '0.005',
+      compactPlanSummary: {
+        control_path: 'lending.supply',
+        asset: 'WETH',
+        amount: '0.005',
         summary: 'supply reserved WETH on Aave',
       },
     });
 
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://api.emberai.xyz/lending/supply',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000a1',
-          supplyTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000a1',
-          },
-          amount: parseUnits('0.005', 18).toString(),
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://api.emberai.xyz/lending/supply', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        supplyTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000a1',
+        },
+        amount: parseUnits('0.005', 18).toString(),
+      }),
+    });
   });
 
-  it('uses the full-debt sentinel when anchoring a repay payload for the rooted user wallet', async () => {
+  it('uses the resolved repay amount when anchoring a full repay payload for the rooted user wallet', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -1471,30 +1464,26 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       compactPlanSummary: {
         control_path: 'lending.repay',
         asset: 'WETH',
-        amount: '20000000000000000',
+        amount: '0.02',
         summary:
           'repay the full outstanding WETH loan so the managed lending position returns to a debt-free supplied state',
       },
     });
 
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://api.emberai.xyz/lending/repay',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000a1',
-          repayTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000a1',
-          },
-          amount: MAX_UINT256,
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://api.emberai.xyz/lending/repay', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        repayTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000a1',
+        },
+        amount: parseUnits('0.02', 18).toString(),
+      }),
+    });
   });
 
   it('maps Arbitrum native-USDC debt wrapper symbols back to canonical USDC when anchoring repay payloads', async () => {
@@ -1576,24 +1565,20 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://api.emberai.xyz/lending/repay',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000b9',
-          repayTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000c9',
-          },
-          amount: '2500000',
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://api.emberai.xyz/lending/repay', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000b9',
+        repayTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000c9',
+        },
+        amount: '2500000',
+      }),
+    });
   });
 
   it('keeps the exact requested amount for repay payloads when the plan was built from explicit requested quantities', async () => {
@@ -1675,24 +1660,20 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://api.emberai.xyz/lending/repay',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000a1',
-          repayTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000a1',
-          },
-          amount: '20000000000000000',
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://api.emberai.xyz/lending/repay', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        repayTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000a1',
+        },
+        amount: '20000000000000000',
+      }),
+    });
   });
 
   it('uses the rooted user wallet as the capital-owning planning wallet when anchoring a managed lending payload', async () => {
@@ -1773,24 +1754,20 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       },
     });
 
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://api.emberai.xyz/lending/supply',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000a1',
-          supplyTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000a1',
-          },
-          amount: '5000000000000000',
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://api.emberai.xyz/lending/supply', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        supplyTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000a1',
+        },
+        amount: '5000000000000000',
+      }),
+    });
   });
 
   it('resolves prepared unsigned transactions for managed rooted-capital execution using the signer wallet chain state', async () => {
@@ -2015,24 +1992,20 @@ describe('createEmberLendingOnchainActionsAnchoredPayloadResolver', () => {
       'https://api.emberai.xyz/tokens?chainIds=42161&page=1',
       undefined,
     );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://api.emberai.xyz/lending/supply',
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          walletAddress: '0x00000000000000000000000000000000000000b1',
-          supplyTokenUid: {
-            chainId: '42161',
-            address: '0x00000000000000000000000000000000000000c1',
-          },
-          amount: '10000000',
-        }),
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://api.emberai.xyz/lending/supply', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
       },
-    );
+      body: JSON.stringify({
+        walletAddress: '0x00000000000000000000000000000000000000b1',
+        supplyTokenUid: {
+          chainId: '42161',
+          address: '0x00000000000000000000000000000000000000c1',
+        },
+        amount: '10000000',
+      }),
+    });
     expect(anchoredPayload).toMatchObject({
       anchoredPayloadRef: 'txpayload-ember-lending-001',
       capitalOwnerWalletAddress: '0x00000000000000000000000000000000000000b1',

@@ -42,6 +42,7 @@ function createStubService() {
       listExecutions: async () => [],
       listAutomations: async () => [{ automationId: 'automation-1' }],
       listAutomationRuns: async () => [{ runId: 'run-1' }],
+      listArtifacts: async () => [{ artifactId: 'artifact-1' }],
       inspectScheduler: async () => ({ dueAutomationIds: ['automation-1'], leases: [] }),
       inspectOutbox: async () => ({ dueOutboxIds: ['outbox-1'], intents: [] }),
       inspectMaintenance: async () => ({
@@ -145,6 +146,7 @@ describe('Pi AG-UI transport helpers', () => {
     const threadsResponse = await handler(new Request('http://localhost/ag-ui/control/threads'));
     const automationsResponse = await handler(new Request('http://localhost/ag-ui/control/automations'));
     const automationRunsResponse = await handler(new Request('http://localhost/ag-ui/control/automation-runs'));
+    const artifactsResponse = await handler(new Request('http://localhost/ag-ui/control/artifacts'));
     const schedulerResponse = await handler(new Request('http://localhost/ag-ui/control/scheduler'));
     const outboxResponse = await handler(new Request('http://localhost/ag-ui/control/outbox'));
     const maintenanceResponse = await handler(new Request('http://localhost/ag-ui/control/maintenance'));
@@ -166,6 +168,7 @@ describe('Pi AG-UI transport helpers', () => {
     await expect(threadsResponse.text()).resolves.toContain('"threadId":"thread-1"');
     await expect(automationsResponse.text()).resolves.toContain('"automationId":"automation-1"');
     await expect(automationRunsResponse.text()).resolves.toContain('"runId":"run-1"');
+    await expect(artifactsResponse.text()).resolves.toContain('"artifactId":"artifact-1"');
     await expect(schedulerResponse.text()).resolves.toContain('"dueAutomationIds":["automation-1"]');
     await expect(outboxResponse.text()).resolves.toContain('"dueOutboxIds":["outbox-1"]');
     await expect(maintenanceResponse.text()).resolves.toContain('"automationIdsToResume":["automation-1"]');

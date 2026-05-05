@@ -88,6 +88,84 @@ The domain owns:
 - projection assembly
 - structural contract enforcement
 
+Scheduled automation runs use the saved automation instruction as scheduled
+user input in an ephemeral runtime execution context. That context is linked to
+the root thread for projection, but it is not persisted as a normal
+user-visible `PiThread`. Durable scheduled-run truth belongs to
+`AutomationRun`, `PiExecution`, execution/activity history, summaries,
+artifacts, failures, timeout state, and outbox/dedupe references.
+When the Pi loop snapshots the scheduled context, `agent-runtime` checkpoints
+the `PiExecution` against the root thread record, writes a bounded
+`automation-run-snapshot` artifact/event for run-detail inspection, and
+deliberately skips a `pi_threads` write for the internal
+`automation:<automationId>:run:<runId>` context. Scheduler claiming and its
+running event/activity writes commit in one Postgres transaction. The claim is
+row-count checked: if another runtime process has already moved a run out of
+`scheduled`, this process rolls back the batch and skips invocation. Newly
+inserted scheduled-run records, including the first run created by
+`automation.schedule`, use the future cadence timestamp for `scheduled_at`,
+matching `next_run_at` instead of the definition creation time.
+Terminal completion, failure, timeout, and cancellation updates are also
+status-conditional and row-count checked. A stale scheduler cannot rewrite a
+run that another process already completed, timed out, or canceled, and it
+cannot insert a duplicate future scheduled run after losing that terminal race.
+Lost stale-active timeout races are treated the same way as lost claim and
+completion races: the current tick skips that run and continues processing
+later due automations. Cancellation also updates the linked `PiExecution` to a
+failed terminal state, so operator inspection does not display a canceled
+background invocation as successful. Model-facing `automation.cancel` is scoped
+to the active root thread record: persisted automation, current-run lookup, run
+updates, execution updates, and scheduler-lease cleanup must not target another
+root thread just because the model has an automation id. If a canceled
+definition has no current run or execution, the cancel transaction still
+suspends the definition and writes nullable root activity, but it does not
+insert an execution event with a null execution id. `automation.list`
+reports a suspended persisted automation as `canceled` even when cancellation has
+also cleared `next_run_at`.
+Postgres inspection loads execution-event payloads, activity payloads, and
+artifact payloads so control-plane and AG-UI activity surfaces can expose the
+persisted `automation-run-snapshot` details after restart. The same
+`automation-run-snapshot` artifact is also projected into the live root
+activity before completion is published, so connected clients see the run
+summary/details without requiring a reconnect or process restart.
+Previous scheduled-run prompt context includes only concise prior result
+summary plus run-detail/activity/artifact references, and that summary is read
+from the persisted scheduled-run snapshot before falling back to generic root
+status activity. Snapshot summaries and `<previous_run_summary>` prompt content
+are compacted to a bounded single-line summary instead of carrying the full
+assistant response forward.
+If the same process starts a scheduled invocation that hangs, the scheduler
+races the invocation against the automation timeout, aborts the active runtime
+run, marks the run timed out, advances cadence, and ignores late snapshot
+persistence from the timed-out run. Completion, failure, and timeout
+persistence use the terminal-decision timestamp, not the tick-start timestamp,
+for `completed_at`, terminal events/activity, lease expiry, stable replacement
+ids, and the next-run cadence timestamp.
+Scheduler dispatch is guarded per automation rather than globally: the same
+automation cannot overlap with itself, but one long-running automation must not
+prevent unrelated due automations from being claimed and started.
+Canceling an automation targets the current scheduled or active run, suspends
+future cadence, deletes the scheduler lease, and asks the runtime stop path to
+abort an active same-process scheduled invocation.
+
+Runtime-owned tools invoked during scheduled execution persist their
+checkpoints against the scheduled automation `PiExecution` and the root
+`PiThread`. That keeps operator interrupts, signing-oriented checkpoints, and
+future outbox/dedupe records on the same fail-closed runtime boundary used by
+direct user executions.
+
+The web app consumes those runtime-owned activity artifacts as a general
+activity stream. It may render automation run ids, statuses, summaries, and
+artifact references, and it must expose inspect/open affordances for persisted
+run snapshots and artifacts through runtime control-plane-backed links, not
+local page anchors or static identifier labels. The web UI must not treat
+scheduled-run prompt messages as a durable chat transcript.
+Those inspection links carry the active root thread id, and the runtime control
+plane filters automation-run and artifact lists to that root-thread scope
+before the web proxy selects a requested id. The AG-UI gateway service wrapper
+must preserve that optional scope when it delegates to the canonical control
+plane; otherwise a scoped HTTP route can receive runtime-wide candidates.
+
 If a domain integration needs to call an external service, the domain/config
 layer may delegate to an app-local adapter that returns semantic state,
 artifacts, interrupts, and status outputs. `agent-runtime` still owns runtime
