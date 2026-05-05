@@ -109,6 +109,18 @@ describe('useOnchainActionsIconMaps internals', () => {
     expect(snapshot.missingSymbolKeys).toEqual(['UNKNOWN']);
   });
 
+  it('normalizes requested token symbols into a stable deduplicated key list', () => {
+    expect(
+      __useOnchainActionsIconMapsTestOnly.buildRequestedSymbolKeys([
+        ' usdc ',
+        'USDC',
+        'weth',
+        '',
+        'WETH',
+      ]),
+    ).toEqual(['USDC', 'WETH']);
+  });
+
   it('builds refreshed token icon map after cache population', async () => {
     const dynamicSymbol = 'TEST_DYNAMIC_ARB';
     const fetchMock = vi.fn().mockResolvedValue({

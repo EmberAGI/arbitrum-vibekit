@@ -47,7 +47,24 @@ The foundational runtime model is intentionally lower-level than any specific ag
 
 Additional rules:
 - Background/autonomous executions run in separate operational contexts linked back to the root thread.
-- The root thread receives projected summaries, visible status updates, and artifacts by default.
+- Scheduled automation executions use ephemeral in-memory agent execution context for the saved instruction.
+- That scheduled-run context must not be persisted as a durable `PiThread` or exposed as a primary user-visible chat thread by default.
+- Generic session persistence must detect the scheduled-run context and skip `pi_threads` writes for `automation:<automationId>:run:<runId>` prompt contexts; it checkpoints the `PiExecution` against the root `PiThread` record and persists a bounded run snapshot as an execution-scoped `automation-run-snapshot` artifact/event.
+- The durable scheduled-run contract is `AutomationRun` + `PiExecution` + execution/activity events, bounded transcript snapshots, summaries, artifacts, failure/timeout detail, outbox/dedupe references, and root-thread projections.
+- Starting a scheduled run is a conditional `scheduled -> running` claim committed in the same Postgres transaction as the running event/activity writes. If another runtime process has already claimed the row, the scheduler must roll back and skip invocation rather than invoking the agent twice.
+- The first `AutomationRun.scheduled_at` created by `automation.schedule` and every replacement scheduled run must store the due cadence timestamp that matches `PiAutomation.next_run_at`, not the creation, tick-start, or terminal timestamp.
+- Scheduler execution is guarded per automation, not by one global invocation lock. The same automation must not overlap with itself, but a long-running or timed-out invocation for one automation must not starve unrelated due automations.
+- Completion, failure, timeout, and cancellation transitions are also conditional terminal claims. They must only update the expected active/scheduled row, require one affected row, and abort the remaining transaction so stale writers cannot overwrite a competing terminal state or insert another future run.
+- A stale-active timeout that loses its row-count terminal race must be handled as a lost race, skipped, and not allowed to abort processing of later due automations in the same scheduler tick.
+- A same-process scheduled invocation must be bounded by the automation timeout. If the agent stream hangs after the claim commits, the scheduler aborts the active runtime run, marks the `AutomationRun` timed out, schedules the next run on cadence, and suppresses late snapshot persistence from that timed-out run.
+- Completion, failure, and timeout persistence must use the terminal-decision time, not the tick-start time, for completed timestamps, terminal event/activity timestamps, lease expiry, replacement run/execution ids, and next-run cadence.
+- Canceling automation must suspend cadence and cancel only the current scheduled or already-running run owned by the active root thread. The model-facing cancel path must scope persisted automation lookup, run lookup, row updates, execution updates, and scheduler-lease cleanup to the active root thread record; an automation id from another root thread is not sufficient authority. If the current run is active in the same process, cancellation must call the runtime stop path so terminal completion cannot continue to advance cadence. A canceled active run must not leave the linked `PiExecution` looking completed in inspection; the execution terminal state must reflect the unsuccessful cancellation boundary. If the automation definition has no current run/execution, cancellation still suspends the definition and may write root activity with a nullable execution id, but it must not insert a `pi_execution_events` row with a null execution id.
+- Runtime-owned tools raised inside a scheduled run, including interrupt/outbox/signing-style boundaries, must persist against the scheduled automation `PiExecution` and root `PiThread`, not a synthetic run-thread record.
+- Runtime inspection/control state must load artifact payloads and execution/activity payloads so persisted scheduled-run snapshots remain inspectable after restart.
+- Model-facing automation listing must treat suspension as the canonical canceled signal before deriving completed state from `next_run_at = null`, because cancellation clears the next-run timestamp as part of suspending cadence.
+- The root thread receives projected summaries, visible status updates, and run-snapshot artifacts by default. Persisted scheduled-run snapshots must be appended to live root activity before publishing terminal updates and rehydrated from Postgres on cold load.
+- Web activity views must expose inspect/open affordances for projected `AutomationRun` ids and persisted run-snapshot artifacts through control-plane-backed navigation. Static identifier labels and local page anchors are not sufficient for run-detail inspection. Control-plane-backed run/artifact opens must carry active root-thread scope, the AG-UI gateway service wrapper must forward that scope to the canonical control plane, and runtime control reads must filter by that scope before returning run or artifact candidates.
+- Previous-run context included in the next scheduled prompt must be concise: prior run id/status/timestamp plus snapshot-derived result summary and run-detail/activity/artifact references, not a replay of the old transcript. Snapshot summaries and the injected `<previous_run_summary>` value must be compacted to a bounded single-line summary before they are persisted or reused.
 - Raw internal execution/automation history is available only through explicit tools.
 - The root thread must expose one stable current-state artifact, one append-only activity artifact/log, and optional execution-specific artifacts.
 - The runtime must treat projection as a first-class subsystem rather than ad hoc adapter glue:
@@ -74,6 +91,7 @@ Additional rules:
 
 - Separating thread, execution, automation definition, and automation firing responsibilities creates testable boundaries for persistence and retries.
 - Operational context separation keeps autonomous reasoning from polluting the user-visible chat thread.
+- Keeping scheduled-run prompts ephemeral avoids user-visible thread clutter while preserving durable auditability through run and execution records.
 - A stable root thread plus projected artifacts supports the chat-first UI while preserving rich background behavior.
 - A formal projection subsystem reduces drift across AG-UI, A2A, and future channel adapters.
 - Anchoring the model on `@mariozechner/pi-agent-core` + `@mariozechner/pi-ai` prevents the architecture from drifting into an imaginary Pi platform detached from the real `pi-mono` package seams.
@@ -87,6 +105,8 @@ Additional rules:
   - Rejected because it conflates durable user context with retryable execution state and creates transcript pollution.
 - Use one shared execution lane for chat turns and background autonomy:
   - Rejected because it creates unnecessary contention and weakens replay/inspection boundaries.
+- Persist every scheduled-run context as a normal durable `PiThread`:
+  - Rejected because scheduled-run prompts are operational execution context, not user-facing conversation containers.
 - Create a separate durable `Task` entity alongside `PiExecution` for the same execution:
   - Rejected because it would duplicate execution identity and create drift between domain state and A2A/UI projections.
 - Require exact LangGraph-style in-flight checkpoint resume:

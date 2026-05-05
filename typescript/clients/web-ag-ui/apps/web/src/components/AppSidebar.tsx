@@ -1,27 +1,23 @@
 'use client';
 
-import {
-  MessageSquare,
-  ChevronDown,
-  ChevronRight,
-  Bot,
-  Trophy,
-} from 'lucide-react';
-import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
-import type { Chain } from 'viem';
-import { defaultEvmChain, supportedEvmChains } from '@/config/evmChains';
+import { usePathname, useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLogin, usePrivy } from '@privy-io/react-auth';
+import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useOnchainActionsIconMaps } from '@/hooks/useOnchainActionsIconMaps';
 import { usePrivyWalletClient } from '@/hooks/usePrivyWalletClient';
 import { useUpgradeToSmartAccount } from '@/hooks/useUpgradeToSmartAccount';
 import { useAgent } from '@/contexts/AgentContext';
-import { useAuthoritativeAgentSnapshotCache } from '@/contexts/AuthoritativeAgentSnapshotCache';
+import {
+  useAuthoritativeAgentSnapshotCache,
+  useAuthoritativeAgentSnapshotCacheVersion,
+} from '@/contexts/AuthoritativeAgentSnapshotCache';
 import { useAgentList } from '@/contexts/AgentListContext';
 import type { AgentConfig } from '@/config/agents';
 import { getVisibleAgents } from '@/config/agents';
 import type { AgentListEntry } from '@/contexts/agentListTypes';
+import { PROTOCOL_TOKEN_FALLBACK } from '@/constants/protocolTokenFallback';
 import { buildPortfolioProjection } from '@/projections/portfolio/buildPortfolioProjection';
 import { portfolioProjectionInputSchema } from '@/projections/portfolio/schema';
 import type {
@@ -35,13 +31,12 @@ import { extractTaskStatusMessage } from '@/utils/extractTaskStatusMessage';
 import { isPrivyConfigured } from '@/utils/privyConfig';
 import { invokeAgentCommandRoute } from '@/utils/agentCommandRoute';
 import { getAgentThreadId } from '@/utils/agentThread';
-import { normalizeSymbolKey } from '@/utils/iconResolution';
-import { navigateToHref } from '@/utils/hardNavigation';
-import { HardNavLink } from '@/components/ui/HardNavLink';
+import { normalizeNameKey, normalizeSymbolKey, resolveAgentAvatarUri } from '@/utils/iconResolution';
 import {
   SidebarActivityCard,
   SidebarAgentAvatar,
   type SidebarActivityCardControlSlice,
+  type SidebarActivityCardTokenHolding,
   type SidebarActivityCardTokenSlice,
   type SidebarActivityCardView,
 } from '@/components/ui/SidebarActivityCard';
@@ -56,7 +51,6 @@ export interface AgentActivity {
   entry?: AgentListEntry;
 }
 
-const ETHEREUM_MAINNET_CHAIN_ID = 1;
 const PORTFOLIO_AGENT_ID = 'agent-portfolio-manager';
 const HIRE_AGENTS_HREF = '/hire-agents';
 const PORTFOLIO_AGENT_CHAT_HREF = `/hire-agents/${PORTFOLIO_AGENT_ID}?tab=chat`;
@@ -69,15 +63,20 @@ type SidebarProjectionCardData = {
   liabilitiesUsd: number;
   allocationShare: number;
   tokenBreakdown: SidebarActivityCardTokenSlice[];
+  tokenHoldings?: SidebarActivityCardTokenHolding[];
   controlBreakdown?: SidebarActivityCardControlSlice[];
   thirtyDayPnlPct?: number;
 };
 
-export function getWalletSelectorChains(chains: readonly Chain[]): Chain[] {
-  return chains.filter(
-    (chain) => chain.id === defaultEvmChain.id || chain.id === ETHEREUM_MAINNET_CHAIN_ID,
-  );
-}
+type FetchedPortfolioProjectionInput = {
+  walletAddress: string;
+  input: PortfolioProjectionInput;
+};
+
+type OptimisticActiveAgent = {
+  agentId: string;
+  sourcePathname: string | null;
+};
 
 export function getSidebarAgentHref(agentId: string): string {
   return agentId === PORTFOLIO_AGENT_ID ? PORTFOLIO_AGENT_CHAT_HREF : `/hire-agents/${agentId}`;
@@ -95,23 +94,16 @@ function getActiveSidebarAgentId(pathname: string | null): string | null {
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const [isAgentsExpanded, setIsAgentsExpanded] = useState(true);
+  const router = useRouter();
   const [isActivityRailCollapsed, setIsActivityRailCollapsed] = useState(false);
-  const [isChainMenuOpen, setIsChainMenuOpen] = useState(false);
-  const [isAddressPopoverOpen, setIsAddressPopoverOpen] = useState(false);
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const addressPopoverRef = useRef<HTMLDivElement | null>(null);
-  const copyResetTimeoutRef = useRef<number | null>(null);
-  const addressPopoverId = useId();
+  const [optimisticActiveAgent, setOptimisticActiveAgent] =
+    useState<OptimisticActiveAgent | null>(null);
   const privyConfigured = isPrivyConfigured();
 
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
-  const { logout } = useLogout();
   const {
     privyWallet,
-    chainId,
-    switchChain,
     isLoading: isWalletLoading,
     error: walletError,
   } = usePrivyWalletClient();
@@ -126,9 +118,16 @@ export function AppSidebar() {
   // Get agent activity data from shared context
   const agent = useAgent();
   const authoritativeSnapshotCache = useAuthoritativeAgentSnapshotCache();
+  const authoritativeSnapshotCacheVersion = useAuthoritativeAgentSnapshotCacheVersion();
   const { agents: listAgents } = useAgentList();
 
   const agentConfigs = useMemo(() => getVisibleAgents(), []);
+  useEffect(() => {
+    agentConfigs.forEach((config) => {
+      router.prefetch?.(getSidebarAgentHref(config.id));
+    });
+  }, [agentConfigs, router]);
+
   const isInactiveRuntime = agent.config.id === 'inactive-agent';
   const runtimeAgentId = isInactiveRuntime ? null : agent.config.id;
   const runtimeTaskId = agent.uiState.task?.id;
@@ -141,7 +140,8 @@ export function AppSidebar() {
     ? `${PORTFOLIO_AGENT_ID}:${portfolioManagerThreadId}`
     : null;
   const [fetchedPortfolioProjectionInput, setFetchedPortfolioProjectionInput] =
-    useState<PortfolioProjectionInput | null>(null);
+    useState<FetchedPortfolioProjectionInput | null>(null);
+  const [portfolioProjectionRequestRetry, setPortfolioProjectionRequestRetry] = useState(0);
   const requestedPortfolioProjectionKeyRef = useRef<string | null>(null);
   const debugStatus = process.env.NEXT_PUBLIC_AGENT_STATUS_DEBUG === 'true';
   const runtimeTaskMessage = extractTaskStatusMessage(agent.uiState.task?.taskStatus?.message);
@@ -220,6 +220,7 @@ export function AppSidebar() {
   });
 
   const cachedPortfolioProjectionInput = useMemo(() => {
+    void authoritativeSnapshotCacheVersion;
     const currentAgentProjectionInput =
       agent.config.id === PORTFOLIO_AGENT_ID
         ? readPortfolioProjectionInput(agent.domainProjection)
@@ -238,16 +239,12 @@ export function AppSidebar() {
     agent.config.id,
     agent.domainProjection,
     authoritativeSnapshotCache,
+    authoritativeSnapshotCacheVersion,
     portfolioManagerSnapshotCacheKey,
   ]);
 
   useEffect(() => {
-    requestedPortfolioProjectionKeyRef.current = null;
-    setFetchedPortfolioProjectionInput(null);
-  }, [privyWallet?.address]);
-
-  useEffect(() => {
-    if (cachedPortfolioProjectionInput || !portfolioManagerThreadId) {
+    if (cachedPortfolioProjectionInput || !portfolioManagerThreadId || !privyWallet?.address) {
       return;
     }
 
@@ -258,6 +255,16 @@ export function AppSidebar() {
     requestedPortfolioProjectionKeyRef.current = requestKey;
 
     let canceled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleRetry = () => {
+      if (canceled) {
+        return;
+      }
+      retryTimer = setTimeout(() => {
+        requestedPortfolioProjectionKeyRef.current = null;
+        setPortfolioProjectionRequestRetry((value) => value + 1);
+      }, 5_000);
+    };
 
     void (async () => {
       try {
@@ -275,22 +282,38 @@ export function AppSidebar() {
 
         const projectionInput = readPortfolioProjectionInput(response.domainProjection ?? null);
         if (projectionInput) {
-          setFetchedPortfolioProjectionInput(projectionInput);
+          setFetchedPortfolioProjectionInput({
+            walletAddress: privyWallet.address,
+            input: projectionInput,
+          });
+          return;
         }
+        scheduleRetry();
       } catch {
-        // Keep the existing metric-based fallback when the shared projection is unavailable.
+        scheduleRetry();
       }
     })();
 
     return () => {
       canceled = true;
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+      }
     };
-  }, [cachedPortfolioProjectionInput, portfolioManagerThreadId]);
+  }, [
+    cachedPortfolioProjectionInput,
+    portfolioManagerThreadId,
+    portfolioProjectionRequestRetry,
+    privyWallet?.address,
+  ]);
 
-  const walletSelectorChains = useMemo(() => getWalletSelectorChains(supportedEvmChains), []);
-  const selectedChain = walletSelectorChains.find((chain) => chain.id === chainId) ?? defaultEvmChain;
   const allActivityAgents = pinnedAgents;
-  const portfolioProjectionInput = cachedPortfolioProjectionInput ?? fetchedPortfolioProjectionInput;
+  const portfolioProjectionInput =
+    cachedPortfolioProjectionInput ??
+    (fetchedPortfolioProjectionInput &&
+    fetchedPortfolioProjectionInput.walletAddress === privyWallet?.address
+      ? fetchedPortfolioProjectionInput.input
+      : null);
   const portfolioProjection = useMemo<PortfolioProjectionPacket | null>(() => {
     if (!portfolioProjectionInput) {
       return null;
@@ -298,7 +321,11 @@ export function AppSidebar() {
 
     return buildPortfolioProjection(portfolioProjectionInput);
   }, [portfolioProjectionInput]);
-  const activeSidebarAgentId = getActiveSidebarAgentId(pathname);
+  const routeActiveSidebarAgentId = getActiveSidebarAgentId(pathname);
+  const activeSidebarAgentId =
+    optimisticActiveAgent?.sourcePathname === pathname
+      ? optimisticActiveAgent.agentId
+      : routeActiveSidebarAgentId;
   const totalKnownExposureUsd = allActivityAgents.reduce((total, activity) => {
     const nextValue = resolveGrossExposureUsd(activity.entry);
     return nextValue !== undefined ? total + nextValue : total;
@@ -312,15 +339,11 @@ export function AppSidebar() {
     activities: allActivityAgents,
     accentColorByAgentId,
   });
-  const projectionCardDataByAgentId = useMemo(
-    () =>
-      buildSidebarProjectionCardDataByAgentId({
-        portfolio: portfolioProjection,
-        activities: allActivityAgents,
-        accentColorByAgentId,
-      }),
-    [accentColorByAgentId, allActivityAgents, portfolioProjection],
-  );
+  const projectionCardDataByAgentId = buildSidebarProjectionCardDataByAgentId({
+    portfolio: portfolioProjection,
+    activities: allActivityAgents,
+    accentColorByAgentId,
+  });
   const baseActivityCardViewsById = useMemo(
     () =>
       Object.fromEntries(
@@ -336,27 +359,92 @@ export function AppSidebar() {
       ) as Record<string, SidebarActivityCardView>,
     [allActivityAgents, projectionCardDataByAgentId, specialistControlBreakdown, totalKnownExposureUsd],
   );
+  const sidebarChainNames = useMemo(() => {
+    const seen = new Set<string>();
+    const chains: string[] = [];
+
+    allActivityAgents.forEach((activity) => {
+      const activityChains = activity.entry?.profile?.chains ?? activity.config.chains ?? [];
+      activityChains.forEach((chain) => {
+        const name = chain.trim();
+        if (name.length === 0 || seen.has(name)) {
+          return;
+        }
+        seen.add(name);
+        chains.push(name);
+      });
+    });
+
+    return chains;
+  }, [allActivityAgents]);
   const sidebarTokenSymbols = useMemo(() => {
     const seen = new Set<string>();
     const tokens: string[] = [];
+    const addToken = (symbol: string | undefined) => {
+      const normalizedSymbol = symbol?.trim();
+      if (!normalizedSymbol || seen.has(normalizedSymbol)) {
+        return;
+      }
+      seen.add(normalizedSymbol);
+      tokens.push(normalizedSymbol);
+    };
 
     Object.values(baseActivityCardViewsById).forEach((card) => {
       card.tokenBreakdown.forEach((slice) => {
-        const symbol = slice.asset.trim();
-        if (symbol.length === 0 || seen.has(symbol)) {
-          return;
-        }
-        seen.add(symbol);
-        tokens.push(symbol);
+        addToken(slice.asset);
+      });
+      card.tokenHoldings?.forEach((holding) => {
+        addToken(holding.asset);
+      });
+    });
+    allActivityAgents.forEach((activity) => {
+      const protocols = activity.entry?.profile?.protocols ?? activity.config.protocols ?? [];
+      protocols.forEach((protocol) => {
+        addToken(PROTOCOL_TOKEN_FALLBACK[protocol]);
       });
     });
 
     return tokens;
-  }, [baseActivityCardViewsById]);
-  const { tokenIconBySymbol: sidebarTokenIconBySymbol } = useOnchainActionsIconMaps({
-    chainNames: [],
+  }, [allActivityAgents, baseActivityCardViewsById]);
+  const {
+    chainIconByName: sidebarChainIconByName,
+    tokenIconBySymbol: sidebarTokenIconBySymbol,
+  } = useOnchainActionsIconMaps({
+    chainNames: sidebarChainNames,
     tokenSymbols: sidebarTokenSymbols,
   });
+  const sidebarAvatarByAgentId = useMemo(
+    () =>
+      Object.fromEntries(
+        allActivityAgents.map((activity) => {
+          const protocols = activity.entry?.profile?.protocols ?? activity.config.protocols ?? [];
+          const chains = activity.entry?.profile?.chains ?? activity.config.chains ?? [];
+          const avatarUri =
+            resolveAgentAvatarUri({
+              imageUrl: activity.config.imageUrl,
+              protocols,
+              tokenIconBySymbol: sidebarTokenIconBySymbol,
+            }) ??
+            (chains.length > 0 ? sidebarChainIconByName[normalizeNameKey(chains[0])] ?? null : null);
+
+          return [
+            activity.id,
+            {
+              avatarUri,
+              avatarBackground:
+                activity.config.imageUrl && activity.config.avatarBg
+                  ? activity.config.avatarBg
+                  : undefined,
+              usesBrandedAvatar: Boolean(activity.config.imageUrl),
+            },
+          ];
+        }),
+      ) as Record<
+        string,
+        Pick<SidebarActivityCardView, 'avatarUri' | 'avatarBackground' | 'usesBrandedAvatar'>
+      >,
+    [allActivityAgents, sidebarChainIconByName, sidebarTokenIconBySymbol],
+  );
   const activityCardViewsById = useMemo(
     () =>
       Object.fromEntries(
@@ -364,6 +452,7 @@ export function AppSidebar() {
           agentId,
           {
             ...card,
+            ...sidebarAvatarByAgentId[agentId],
             tokenBreakdown: card.tokenBreakdown.map((slice) => ({
               ...slice,
               iconUri:
@@ -372,221 +461,55 @@ export function AppSidebar() {
                 null,
               fallbackIconSymbol: slice.fallbackIconSymbol ?? slice.asset,
             })),
+            tokenHoldings: card.tokenHoldings?.map((holding) => ({
+              ...holding,
+              iconUri:
+                holding.iconUri ??
+                sidebarTokenIconBySymbol[normalizeSymbolKey(holding.asset)] ??
+                null,
+              fallbackIconSymbol: holding.fallbackIconSymbol ?? holding.asset,
+            })),
           },
         ]),
       ) as Record<string, SidebarActivityCardView>,
-    [baseActivityCardViewsById, sidebarTokenIconBySymbol],
+    [baseActivityCardViewsById, sidebarAvatarByAgentId, sidebarTokenIconBySymbol],
   );
   const portfolioActivity = allActivityAgents.find((activity) => activity.id === PORTFOLIO_AGENT_ID) ?? null;
   const specialistActivities = allActivityAgents.filter((activity) => activity.id !== PORTFOLIO_AGENT_ID);
 
-  const formatAddress = (address: string) => `${address.slice(0, 6)}...${address.slice(-4)}`;
-
-  const clearCopyResetTimeout = () => {
-    if (copyResetTimeoutRef.current !== null) {
-      window.clearTimeout(copyResetTimeoutRef.current);
-      copyResetTimeoutRef.current = null;
-    }
-  };
-
-  const closeAddressPopover = () => {
-    setIsAddressPopoverOpen(false);
-    setCopyStatus('idle');
-  };
-
-  const handleCopyAddress = async () => {
-    if (!privyWallet?.address) return;
-
-    try {
-      if (!navigator?.clipboard?.writeText) {
-        throw new Error('Clipboard unavailable');
-      }
-      await navigator.clipboard.writeText(privyWallet.address);
-      setCopyStatus('success');
-    } catch {
-      setCopyStatus('error');
-    }
-
-    clearCopyResetTimeout();
-    copyResetTimeoutRef.current = window.setTimeout(() => {
-      setCopyStatus('idle');
-    }, 2000);
-  };
-
-  const handleAddressFieldFocus: React.FocusEventHandler<HTMLInputElement> = (event) => {
-    event.currentTarget.select();
-  };
-
-  const handleAddressFieldClick: React.MouseEventHandler<HTMLInputElement> = (event) => {
-    event.currentTarget.select();
-  };
-
-  useEffect(() => {
-    if (!isAddressPopoverOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (addressPopoverRef.current?.contains(target)) return;
-      closeAddressPopover();
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        closeAddressPopover();
-      }
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isAddressPopoverOpen]);
-
-  useEffect(() => {
-    return () => {
-      clearCopyResetTimeout();
-    };
-  }, []);
-
-  useEffect(() => {
-    setCopyStatus('idle');
-  }, [privyWallet?.address]);
-
   // Navigate to agent detail page when clicking on an agent in the sidebar
   const handleAgentClick = (agentId: string) => {
-    navigateToHref(getSidebarAgentHref(agentId));
+    setOptimisticActiveAgent({
+      agentId,
+      sourcePathname: pathname,
+    });
+    router.push(getSidebarAgentHref(agentId));
   };
 
-  const canSelectChain =
-    privyConfigured && ready && authenticated && Boolean(privyWallet) && !isWalletLoading;
+  const shouldShowSmartAccountUpgrade =
+    privyConfigured &&
+    authenticated &&
+    Boolean(privyWallet) &&
+    !walletError &&
+    (isSmartAccountLoading || Boolean(smartAccountError) || isSmartAccountDeployed === false);
+  const shouldShowWalletConnectionFooter =
+    Boolean(walletError) || !privyConfigured || !authenticated || !privyWallet;
+  const shouldShowFooter = shouldShowSmartAccountUpgrade || shouldShowWalletConnectionFooter;
 
-  const isPortfolioAgentActive = pathname?.startsWith(`/hire-agents/${PORTFOLIO_AGENT_ID}`);
-  const isHireAgentsActive =
-    pathname === '/hire-agents' || (pathname?.startsWith('/hire-agents/') && !isPortfolioAgentActive);
-  const isAcquireActive = pathname === '/acquire';
-  const isLeaderboardActive = pathname === '/leaderboard';
+  const sidebarWidthClassName = isActivityRailCollapsed ? 'w-[72px]' : 'w-[312px]';
+  const sidebarPaddingClassName = isActivityRailCollapsed ? 'p-3' : 'p-4';
 
   return (
-    <div className="flex flex-col h-full w-[312px] flex-shrink-0 bg-[#F7EFE3] border-r border-[#DDC8B3] text-[#3C2A21]">
-      {/* Header */}
-      <div className="px-4 py-3.5 border-b border-[#DDC8B3]">
-        <div className="flex items-center gap-2.5">
-          <Image
-            src="/ember-sidebar-logo.png"
-            alt="Ember Logo"
-            width={10}
-            height={16}
-            className="w-auto h-4 object-contain"
-          />
-          <div className="flex items-center gap-2">
-            <Image src="/ember-name.svg" alt="Ember" width={76} height={15} className="h-[15px] w-auto" />
-            <span className="text-[10px] font-mono font-medium text-[#8A6F58] px-1.5 py-0.5 bg-[#FFF8F0] border border-[#D8C0A7] rounded-[5px]">
-              AI
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Navigation */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {/* Platform Section */}
-        <div className="mb-6">
-          <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em] px-2 mb-3">
-            Platform
-          </div>
-          <div className="space-y-1">
-            <HardNavLink
-              href={PORTFOLIO_AGENT_CHAT_HREF}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
-                isPortfolioAgentActive
-                  ? 'text-[#241813]'
-                  : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-              }`}
-            >
-              {isPortfolioAgentActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-              )}
-              <MessageSquare className="w-4 h-4 text-[#9B7C63]" />
-              <span className="text-sm font-medium text-[#2C1E17]">Ember Portfolio Agent</span>
-            </HardNavLink>
-
-            {/* Agents */}
-            <div>
-              <button
-                onClick={() => setIsAgentsExpanded(!isAgentsExpanded)}
-                className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left transition-colors hover:bg-[#F0E2D2]"
-              >
-                <div className="flex items-center gap-3">
-                  <Bot className="w-4 h-4 text-[#9B7C63]" />
-                  <span className="text-sm font-medium text-[#2C1E17]">Agents</span>
-                </div>
-                {isAgentsExpanded ? (
-                  <ChevronDown className="w-4 h-4 text-[#9B7C63]" />
-                ) : (
-                  <ChevronRight className="w-4 h-4 text-[#9B7C63]" />
-                )}
-              </button>
-
-              {isAgentsExpanded && (
-                <div className="ml-7 mt-1.5 space-y-1">
-                  <HardNavLink
-                    href={HIRE_AGENTS_HREF}
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
-                      isHireAgentsActive
-                        ? 'text-[#241813]'
-                        : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-                    }`}
-                  >
-                    {isHireAgentsActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-                    )}
-                    Hire
-                  </HardNavLink>
-                  <HardNavLink
-                    href="/acquire"
-                    className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-sm transition-colors relative ${
-                      isAcquireActive
-                        ? 'text-[#241813]'
-                        : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-                    }`}
-                  >
-                    {isAcquireActive && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-                    )}
-                    Acquire
-                  </HardNavLink>
-                </div>
-              )}
-            </div>
-
-            {/* Leaderboard */}
-            <HardNavLink
-              href="/leaderboard"
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors relative ${
-                isLeaderboardActive
-                  ? 'text-[#241813]'
-                  : 'text-[#7B6758] hover:text-[#241813] hover:bg-[#F0E2D2]'
-              }`}
-            >
-              {isLeaderboardActive && (
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-px h-6 bg-[#fd6731]" />
-              )}
-              <Trophy className="w-4 h-4 text-[#9B7C63]" />
-              <span className="text-sm font-medium text-[#2C1E17]">Leaderboard</span>
-            </HardNavLink>
-          </div>
-        </div>
-
-        {/* Agent Activity Section */}
+    <div
+      className={`flex h-full flex-shrink-0 flex-col border-r border-[#DDC8B3] bg-[#F7EFE3] text-[#3C2A21] transition-[width] duration-200 ${sidebarWidthClassName}`}
+    >
+      <div className={`flex-1 overflow-y-auto ${sidebarPaddingClassName}`}>
         <div>
-          <div className="flex items-center justify-between gap-3 px-2">
-            <div className="text-[11px] font-mono font-medium text-[#A98C74] tracking-[0.12em]">
-              Agent Activity
-            </div>
+          <div
+            className={`flex items-center ${
+              isActivityRailCollapsed ? 'justify-center' : 'justify-end'
+            }`}
+          >
             <button
               type="button"
               aria-label={
@@ -597,7 +520,11 @@ export function AppSidebar() {
               onClick={() => setIsActivityRailCollapsed((value) => !value)}
               className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#E7DBD0] bg-[#FCF8F3] text-[#8C7F72] transition hover:text-[#D97B3D]"
             >
-              {isActivityRailCollapsed ? '›' : '‹'}
+              {isActivityRailCollapsed ? (
+                <PanelLeftOpen className="h-4 w-4" aria-hidden="true" />
+              ) : (
+                <PanelLeftClose className="h-4 w-4" aria-hidden="true" />
+              )}
             </button>
           </div>
 
@@ -605,6 +532,7 @@ export function AppSidebar() {
             <CollapsedActivityRail
               portfolioActivity={portfolioActivity}
               specialistActivities={specialistActivities}
+              cardViews={activityCardViewsById}
               activeAgentId={activeSidebarAgentId}
               onAgentClick={handleAgentClick}
               hireAgentsHref={HIRE_AGENTS_HREF}
@@ -636,196 +564,56 @@ export function AppSidebar() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="p-4 border-t border-[#DDC8B3] space-y-3">
-        {/* Network Selector */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsChainMenuOpen((open) => !open)}
-            disabled={!canSelectChain}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg transition-colors ${
-              canSelectChain
-                ? 'bg-[#FFF8F0] hover:bg-[#F4E6D8] border border-[#DDC8B3]'
-                : 'bg-[#EFE4D7] border border-[#DDC8B3] opacity-60'
-            }`}
-          >
-            <span className="text-sm">{selectedChain.name}</span>
-            <ChevronDown className="w-4 h-4 text-[#9B7C63] ml-auto" />
-          </button>
-
-          {isChainMenuOpen && canSelectChain && (
-            <div className="absolute bottom-full mb-2 w-full rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] overflow-hidden z-50 shadow-[0_12px_32px_rgba(81,49,30,0.12)]">
-              {walletSelectorChains.map((chain) => {
-                const isSelected = chain.id === selectedChain.id;
-                return (
+      {shouldShowFooter ? (
+        <div className="p-4 border-t border-[#DDC8B3] space-y-3">
+          {shouldShowSmartAccountUpgrade ? (
+            <>
+              {isSmartAccountLoading ? (
+                <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] text-xs text-[#6F5A4C]">
+                  Checking wallet status…
+                </div>
+              ) : smartAccountError ? (
+                <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+                  {smartAccountError.message}
+                </div>
+              ) : isSmartAccountDeployed === false ? (
+                <div className="w-full p-3 rounded-lg bg-[#FFF8F0] border border-[#DDC8B3]">
+                  <div className="text-xs text-[#6F5A4C]">
+                    Upgrade your wallet to a smart account to enable delegations.
+                  </div>
                   <button
-                    key={chain.id}
                     type="button"
-                    onClick={() => {
-                      setIsChainMenuOpen(false);
-                      void switchChain(chain.id);
-                    }}
-                    className={`w-full flex items-center px-3 py-2 text-sm text-left transition-colors ${
-                      isSelected
-                        ? 'bg-[#F0E2D2] text-[#241813]'
-                        : 'text-[#6F5A4C] hover:bg-[#FFF2E4]'
-                    }`}
+                    onClick={() => upgradeToSmartAccount()}
+                    disabled={isSmartAccountUpgrading || isWalletLoading}
+                    className="mt-2 w-full flex items-center justify-center px-3 py-2 rounded-lg bg-[#2F211B] hover:bg-[#241813] text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#2F211B]"
                   >
-                    {chain.name}
+                    {isSmartAccountUpgrading ? 'Upgrading…' : 'Upgrade wallet'}
                   </button>
-                );
-              })}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
+          {walletError ? (
+            <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
+              Wallet unavailable
             </div>
-          )}
+          ) : !privyConfigured ? (
+            <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#EFE4D7] text-xs text-[#8A6F58]">
+              Privy auth unavailable
+            </div>
+          ) : !authenticated || !privyWallet ? (
+            <button
+              type="button"
+              onClick={() => login()}
+              disabled={!ready || (ready && authenticated)}
+              className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#fd6731]"
+            >
+              {ready ? 'Login / Connect' : 'Loading...'}
+            </button>
+          ) : null}
         </div>
-
-        {/* Build Agent Button */}
-        <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] hover:bg-[#F4E6D8] text-[#2C1E17] font-medium transition-colors">
-          Build my Agent
-        </button>
-
-        {/* Smart Account Upgrade */}
-        {privyConfigured && authenticated && privyWallet && !walletError && (
-          <>
-            {isSmartAccountLoading ? (
-              <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] text-xs text-[#6F5A4C]">
-                Checking wallet status…
-              </div>
-            ) : smartAccountError ? (
-              <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
-                {smartAccountError.message}
-              </div>
-            ) : isSmartAccountDeployed === false ? (
-              <div className="w-full p-3 rounded-lg bg-[#FFF8F0] border border-[#DDC8B3]">
-                <div className="text-xs text-[#6F5A4C]">
-                  Upgrade your wallet to a smart account to enable delegations.
-                </div>
-                <button
-                  type="button"
-                  onClick={() => upgradeToSmartAccount()}
-                  disabled={isSmartAccountUpgrading || isWalletLoading}
-                  className="mt-2 w-full flex items-center justify-center px-3 py-2 rounded-lg bg-[#2F211B] hover:bg-[#241813] text-white text-sm font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#2F211B]"
-                >
-                  {isSmartAccountUpgrading ? 'Upgrading…' : 'Upgrade wallet'}
-                </button>
-              </div>
-            ) : null}
-          </>
-        )}
-
-        {/* Wallet Connection */}
-        {walletError ? (
-          <div className="w-full px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-200">
-            Wallet unavailable
-          </div>
-        ) : authenticated && privyWallet ? (
-          <div
-            ref={addressPopoverRef}
-            className="relative w-full rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] px-3 py-2.5"
-          >
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500" />
-              <button
-                type="button"
-                onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
-                className="flex-1 min-w-0 text-left text-sm font-mono truncate hover:text-[#241813]"
-                aria-haspopup="dialog"
-                aria-expanded={isAddressPopoverOpen}
-                aria-controls={addressPopoverId}
-              >
-                {formatAddress(privyWallet.address)}
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsAddressPopoverOpen((prev) => !prev)}
-                className="text-xs text-[#7B6758] hover:text-[#241813]"
-                aria-label={
-                  isAddressPopoverOpen ? 'Hide full wallet address' : 'Show full wallet address'
-                }
-              >
-                {isAddressPopoverOpen ? (
-                  <ChevronDown className="w-4 h-4 rotate-180" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => void logout()}
-                className="ml-auto text-xs text-[#7B6758] hover:text-[#241813]"
-                disabled={!ready || isWalletLoading}
-              >
-                Logout
-              </button>
-            </div>
-
-            <div className="mt-2 border-t border-[#DDC8B3] pt-2">
-              <HardNavLink
-                href="/wallet"
-                className="inline-flex text-xs text-[#7B6758] hover:text-[#241813] transition-colors"
-              >
-                Manage Wallet
-              </HardNavLink>
-            </div>
-
-            {isAddressPopoverOpen && (
-              <div
-                id={addressPopoverId}
-                role="dialog"
-                aria-label="Privy wallet address"
-                className="absolute left-3 bottom-full mb-2 z-30 w-max rounded-lg border border-[#DDC8B3] bg-[#FFF8F0] p-3 shadow-[0_12px_32px_rgba(81,49,30,0.12)]"
-              >
-                <div className="text-xs text-[#8A6F58]">Privy wallet address</div>
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={privyWallet.address}
-                    onFocus={handleAddressFieldFocus}
-                    onClick={handleAddressFieldClick}
-                    className="shrink-0 w-auto rounded-md border border-[#DDC8B3] bg-[#FCF5EC] px-2 py-1 text-xs font-mono text-[#2C1E17]"
-                    style={{
-                      width: `calc(${Math.max(privyWallet.address.length, 20)}ch + 1rem)`,
-                    }}
-                    aria-label="Full wallet address"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyAddress()}
-                    className="shrink-0 rounded-md border border-[#DDC8B3] bg-[#F0E2D2] px-2 py-1 text-xs text-[#2C1E17] hover:bg-[#E6D2BF]"
-                  >
-                    {copyStatus === 'success' ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                {copyStatus === 'error' && (
-                  <div className="mt-2 text-xs text-red-300" role="status" aria-live="polite">
-                    Clipboard unavailable. Select and copy manually.
-                  </div>
-                )}
-                {copyStatus === 'success' && (
-                  <div className="mt-2 text-xs text-green-300" role="status" aria-live="polite">
-                    Copied to clipboard.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        ) : !privyConfigured ? (
-          <div className="w-full px-3 py-2 rounded-lg border border-[#DDC8B3] bg-[#EFE4D7] text-xs text-[#8A6F58]">
-            Privy auth unavailable
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => login()}
-            disabled={!ready || (ready && authenticated)}
-            className="w-full flex items-center justify-center px-4 py-2.5 rounded-lg bg-[#fd6731] hover:bg-[#e55a28] text-white font-medium transition-colors disabled:opacity-60 disabled:hover:bg-[#fd6731]"
-          >
-            {ready ? 'Login / Connect' : 'Loading...'}
-          </button>
-        )}
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -886,13 +674,13 @@ function SpecialistActivitySection({
           Specialists
         </div>
         {addAgentHref ? (
-          <HardNavLink
+          <Link
             href={addAgentHref}
             aria-label="Hire agents"
             className="inline-flex h-6 w-6 items-center justify-center rounded-[8px] border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[11px] leading-none text-[#8C7F72] opacity-0 transition group-hover/specialists:opacity-100 group-focus-within/specialists:opacity-100 hover:border-[#E8C9AA] hover:text-[#D97B3D]"
           >
             +
-          </HardNavLink>
+          </Link>
         ) : null}
       </div>
 
@@ -928,6 +716,7 @@ function SpecialistActivitySection({
 function CollapsedActivityRail(props: {
   portfolioActivity: AgentActivity | null;
   specialistActivities: AgentActivity[];
+  cardViews: Record<string, SidebarActivityCardView>;
   activeAgentId: string | null;
   onAgentClick?: (agentId: string) => void;
   hireAgentsHref: string;
@@ -949,6 +738,9 @@ function CollapsedActivityRail(props: {
         >
           <SidebarAgentAvatar
             agentId={portfolioActivity.id}
+            avatarUri={props.cardViews[portfolioActivity.id]?.avatarUri}
+            avatarBackground={props.cardViews[portfolioActivity.id]?.avatarBackground}
+            usesBrandedAvatar={props.cardViews[portfolioActivity.id]?.usesBrandedAvatar}
             className="h-8 w-8 rounded-[10px]"
           />
         </button>
@@ -972,26 +764,32 @@ function CollapsedActivityRail(props: {
                   : 'hover:ring-1 hover:ring-[#E8C9AA]'
               }`}
             >
-              <SidebarAgentAvatar agentId={activity.id} className="h-8 w-8 rounded-[10px]" />
+              <SidebarAgentAvatar
+                agentId={activity.id}
+                avatarUri={props.cardViews[activity.id]?.avatarUri}
+                avatarBackground={props.cardViews[activity.id]?.avatarBackground}
+                usesBrandedAvatar={props.cardViews[activity.id]?.usesBrandedAvatar}
+                className="h-8 w-8 rounded-[10px]"
+              />
             </button>
           ))}
         </div>
       ) : null}
 
-      <HardNavLink
+      <Link
         href={props.hireAgentsHref}
         aria-label="Hire specialists"
         className="mt-3 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[#E7DBD0] bg-[#FCF8F3] font-mono text-[11px] leading-none text-[#8C7F72] transition hover:border-[#E8C9AA] hover:text-[#D97B3D]"
       >
         +
-      </HardNavLink>
+      </Link>
     </div>
   );
 }
 
 function AddAgentCard(props: { href: string }) {
   return (
-    <HardNavLink
+    <Link
       href={props.href}
       aria-label="Add agent"
       className="flex w-full items-center gap-3 rounded-[18px] border border-dashed border-[#E1D4C7] bg-[#FBF7F2] px-3 py-3 text-left transition hover:border-[#E8C9AA] hover:bg-[#FFF7F2]"
@@ -1007,7 +805,7 @@ function AddAgentCard(props: { href: string }) {
           Add specialist
         </span>
       </span>
-    </HardNavLink>
+    </Link>
   );
 }
 
@@ -1017,6 +815,10 @@ function buildFallbackCardView(activity: AgentActivity): SidebarActivityCardView
     label: activity.name,
     statusLabel: activity.subtitle,
     statusTone: activity.status,
+    avatarUri: activity.config.imageUrl ?? null,
+    avatarBackground:
+      activity.config.imageUrl && activity.config.avatarBg ? activity.config.avatarBg : undefined,
+    usesBrandedAvatar: Boolean(activity.config.imageUrl),
     tokenBreakdown: [],
   };
 }
@@ -1039,6 +841,12 @@ function buildSidebarActivityCardView(params: {
     label: params.activity.name,
     statusLabel: params.activity.subtitle,
     statusTone: params.activity.status,
+    avatarUri: params.activity.config.imageUrl ?? null,
+    avatarBackground:
+      params.activity.config.imageUrl && params.activity.config.avatarBg
+        ? params.activity.config.avatarBg
+        : undefined,
+    usesBrandedAvatar: Boolean(params.activity.config.imageUrl),
     valueUsd: grossExposureUsd,
     positiveAssetsUsd:
       params.projectionCardData?.positiveAssetsUsd ??
@@ -1054,6 +862,7 @@ function buildSidebarActivityCardView(params: {
         entry: params.activity.entry,
         config: params.activity.config,
       }),
+    tokenHoldings: params.projectionCardData?.tokenHoldings,
     controlBreakdown:
       params.projectionCardData?.controlBreakdown ??
       (params.activity.id === PORTFOLIO_AGENT_ID && params.portfolioControlBreakdown.length > 0
@@ -1215,7 +1024,7 @@ function buildPortfolioControlBreakdown(params: {
   if (unallocatedUsd > 0) {
     slices.push({
       id: 'unallocated',
-      label: 'Unallocated',
+      label: 'Unmanaged',
       share: unallocatedUsd / portfolioGrossExposureUsd,
       colorHex: UNALLOCATED_ACCENT_HEX,
     });
@@ -1316,11 +1125,15 @@ function buildSidebarProjectionCardDataByAgentId(params: {
     liabilitiesUsd: portfolio.agents.portfolio.liabilitiesUsd,
     allocationShare: 1,
     tokenBreakdown: buildProjectionTokenBreakdown(portfolio.agents.portfolio.tokenExposures),
+    tokenHoldings: buildProjectionTokenHoldings({
+      assetFamilies: portfolio.assetFamilies,
+      totalPortfolioUsd: portfolio.summary.positiveAssetsUsd,
+    }),
     controlBreakdown: [
       ...specialistSlices,
       {
         id: 'unallocated',
-        label: 'Unallocated',
+        label: 'Unmanaged',
         share: portfolioGrossExposureUsd > 0 ? unallocatedUsd / portfolioGrossExposureUsd : 0,
         colorHex: UNALLOCATED_ACCENT_HEX,
       },
@@ -1354,6 +1167,37 @@ function buildProjectionTokenBreakdown(
     asset: tokenExposure.asset,
     share: tokenExposure.share,
   }));
+}
+
+function buildProjectionTokenHoldings(params: {
+  assetFamilies: PortfolioProjectionPacket['assetFamilies'];
+  totalPortfolioUsd: number;
+}): SidebarActivityCardTokenHolding[] {
+  return params.assetFamilies
+    .filter((family) => family.positiveUsd > 0)
+    .map((family) => ({
+      asset: family.asset,
+      amount: family.observedAssets
+        .filter((observedAsset) => observedAsset.sourceKind !== 'debt')
+        .reduce((sum, observedAsset) => sum + resolveObservedAssetDisplayQuantity(observedAsset), 0),
+      share: params.totalPortfolioUsd > 0 ? family.positiveUsd / params.totalPortfolioUsd : 0,
+      valueUsd: family.positiveUsd,
+    }))
+    .filter((holding) => holding.amount > 0 && holding.valueUsd > 0)
+    .sort((left, right) => right.valueUsd - left.valueUsd)
+    .slice(0, 5);
+}
+
+function resolveObservedAssetDisplayQuantity(
+  observedAsset: PortfolioProjectionPacket['assetFamilies'][number]['observedAssets'][number],
+): number {
+  const displayQuantity =
+    observedAsset.displayQuantity === undefined ? null : Number(observedAsset.displayQuantity);
+  if (displayQuantity !== null && Number.isFinite(displayQuantity) && displayQuantity > 0) {
+    return displayQuantity;
+  }
+
+  return observedAsset.quantity;
 }
 
 function formatAgentIdLabel(agentId: string): string {

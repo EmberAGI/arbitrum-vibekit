@@ -323,6 +323,91 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     },
   );
 
+  it('renders automation run details in the generic activity stream', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-clmm',
+      agentName: 'Camelot CLMM',
+      isHired: true,
+      initialTab: 'transactions',
+      events: [
+        {
+          type: 'status',
+          message: 'Manual rebalance finished.',
+          task: { id: 'task-1', taskStatus: { state: 'completed' } },
+        },
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'automation-artifact-1',
+            data: {
+              type: 'automation-status',
+              automationId: 'automation-1',
+              runId: 'run-automation-1',
+              rootThreadId: 'thread-1',
+              status: 'completed',
+              command: 'rebalance',
+              detail: 'Automation rebalance executed successfully.',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Manual rebalance finished.');
+    expect(html).toContain('Automation completed');
+    expect(html).toContain('rebalance: Automation rebalance executed successfully.');
+    expect(html).toContain('Run run-automation-1');
+    expect(html).toContain('Artifact automation-artifact-1');
+    expect(html).toContain('Inspect run run-automation-1');
+    expect(html).toContain('Open artifact automation-artifact-1');
+    expect(html).toContain(
+      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;threadId=thread-1&amp;runId=run-automation-1"',
+    );
+    expect(html).toContain(
+      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;threadId=thread-1&amp;artifactId=automation-artifact-1"',
+    );
+  });
+
+  it('renders persisted automation run snapshots with inline inspection affordances', () => {
+    const html = renderAgentDetail({
+      agentId: 'agent-clmm',
+      agentName: 'Camelot CLMM',
+      isHired: true,
+      initialTab: 'transactions',
+      events: [
+        {
+          type: 'artifact',
+          artifact: {
+            artifactId: 'automation-run-snapshot-artifact-1',
+            type: 'automation-run-snapshot',
+            data: {
+              automationRunId: 'run-automation-1',
+              runThreadKey: 'automation:automation-1:run:run-automation-1',
+              rootThreadId: 'thread-1',
+              snapshot: {
+                summary: 'Rebalanced 120 USDC.',
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(html).toContain('Activity Stream');
+    expect(html).toContain('Automation run snapshot');
+    expect(html).toContain('Rebalanced 120 USDC.');
+    expect(html).toContain('Inspect run run-automation-1');
+    expect(html).toContain('Open artifact automation-run-snapshot-artifact-1');
+    expect(html).toContain('Run thread automation:automation-1:run:run-automation-1');
+    expect(html).toContain(
+      'href="/api/copilotkit/control/automation-runs?agentId=agent-clmm&amp;threadId=thread-1&amp;runId=run-automation-1"',
+    );
+    expect(html).toContain(
+      'href="/api/copilotkit/control/artifacts?agentId=agent-clmm&amp;threadId=thread-1&amp;artifactId=automation-run-snapshot-artifact-1"',
+    );
+  });
+
   it.each(AGENTS)('does not render Activity Stream panel in Metrics tab for $name', ({ id, name }) => {
     const html = renderAgentDetail({
       agentId: id,
@@ -445,8 +530,9 @@ describe('AgentDetailPage (cross-agent contracts)', () => {
     });
 
     expect(html).toContain('Ember Portfolio Agent Setup');
-    expect(html).toContain('Root delegation setup');
-    expect(html).toContain('live wallet observation');
+    expect(html).toContain('Portfolio manager mandate');
+    expect(html).not.toContain('Root delegation setup');
+    expect(html).not.toContain('live wallet observation');
     expect(html).not.toContain('USDC Allocation');
     expect(html).not.toContain('Portfolio policy bootstrap');
   });

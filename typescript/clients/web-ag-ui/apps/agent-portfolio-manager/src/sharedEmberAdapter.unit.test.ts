@@ -12,26 +12,22 @@ function createRuntimeSigningStub(signPayload: AgentRuntimeSigningService['signP
   };
 }
 
-function decodeDelegationArtifactRef(
-  artifactRef: string,
-): Record<string, unknown> {
+function decodeDelegationArtifactRef(artifactRef: string): Record<string, unknown> {
   const prefix = 'metamask-delegation:';
 
   if (!artifactRef.startsWith(prefix)) {
     throw new Error(`Unsupported delegation artifact ref: ${artifactRef}`);
   }
 
-  return JSON.parse(Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8')) as Record<
-    string,
-    unknown
-  >;
+  return JSON.parse(
+    Buffer.from(artifactRef.slice(prefix.length), 'base64url').toString('utf8'),
+  ) as Record<string, unknown>;
 }
 
 function encodeDelegationArtifactRef(delegation: Record<string, unknown>): string {
-  return `metamask-delegation:${Buffer.from(
-    JSON.stringify(delegation),
-    'utf8',
-  ).toString('base64url')}`;
+  return `metamask-delegation:${Buffer.from(JSON.stringify(delegation), 'utf8').toString(
+    'base64url',
+  )}`;
 }
 
 function createSignedRootDelegation(delegate: `0x${string}`) {
@@ -48,8 +44,7 @@ function createSignedRootDelegation(delegate: `0x${string}`) {
 const TEST_REDELEGATION_SIGNATURE =
   '0x464a27f0b9166323a2d686a053ac34e74c318b59854dcc7de4221837437214870c365e2d8e5060f092656d3bd06f78c324ed296792df9c60f76c68bca5551eb601';
 const TEST_DELEGATION_MANAGER = '0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3';
-const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS =
-  '0x00000000000000000000000000000000000000c2' as const;
+const TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS = '0x00000000000000000000000000000000000000c2' as const;
 
 function createAgentServiceIdentityResponse(input: {
   agentId: string;
@@ -112,12 +107,23 @@ type PortfolioManagerSetupInputFixture = {
       };
     };
   };
+  portfolioManagerMandate?: Record<string, unknown>;
 };
 
 type ManagedMandateFixture =
   PortfolioManagerSetupInputFixture['firstManagedMandate']['managedMandate'];
 
-function createManagedLendingPolicy(overrides: Partial<ManagedMandateFixture['lending_policy']> = {}) {
+function createPortfolioManagerMandatePayload() {
+  return {
+    betaExposureCapPct: 65,
+    minimumCashUsd: 5000,
+    riskBudgetBps: 1800,
+  } as const;
+}
+
+function createManagedLendingPolicy(
+  overrides: Partial<ManagedMandateFixture['lending_policy']> = {},
+) {
   return {
     collateral_policy: {
       assets: [
@@ -283,6 +289,12 @@ function createLiveManagedAgentPortfolioState() {
         value_usd: '10',
       },
       {
+        asset: 'WBTC',
+        network: 'arbitrum',
+        quantity: '2736',
+        value_usd: '2.1084539253125922',
+      },
+      {
         asset: 'WETH',
         network: 'arbitrum',
         quantity: '0.01',
@@ -302,6 +314,8 @@ function createLiveManagedAgentPortfolioState() {
         network: 'arbitrum',
         protocol_system: 'aave',
         container_ref: 'aave:position-scope-aave-arbitrum-usdc',
+        owner_type: 'agent',
+        owner_id: 'ember-lending',
         status: 'active',
         market_state: {
           available_borrows_usd: '18',
@@ -454,7 +468,8 @@ describe('createPortfolioManagerDomain', () => {
       outputs: {
         status: {
           executionStatus: 'interrupted',
-          statusMessage: 'Review and sign the delegation needed to activate your portfolio manager.',
+          statusMessage:
+            'Review and sign the delegation needed to activate your portfolio manager.',
         },
         interrupt: {
           type: 'portfolio-manager-delegation-signing-request',
@@ -465,7 +480,9 @@ describe('createPortfolioManagerDomain', () => {
             delegatorAddress: '0x00000000000000000000000000000000000000a1',
             delegateeAddress: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
             delegationManager: TEST_DELEGATION_MANAGER,
-            descriptions: ['Authorize the portfolio manager to operate through your root delegation.'],
+            descriptions: [
+              'Authorize the portfolio manager to operate through your root delegation.',
+            ],
             delegationsToSign: [
               expect.objectContaining({
                 delegate: TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS,
@@ -525,7 +542,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -859,14 +878,14 @@ describe('createPortfolioManagerDomain', () => {
       (mandate) => mandate.agent_id === 'ember-lending',
     )?.mandate_ref;
     expect(managedMandateRef).toEqual(expect.any(String));
-    expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(managedMandateRef);
+    expect(rootedBootstrapRequest.params?.onboarding?.activation?.mandateRef).toBe(
+      managedMandateRef,
+    );
     expect(rootedBootstrapRequest.params?.handoff).toMatchObject({
       artifact_ref: expect.stringMatching(/^metamask-delegation:/),
     });
     expect(
-      decodeDelegationArtifactRef(
-        rootedBootstrapRequest.params?.handoff?.artifact_ref as string,
-      ),
+      decodeDelegationArtifactRef(rootedBootstrapRequest.params?.handoff?.artifact_ref as string),
     ).toEqual(signedDelegation);
 
     expect(rootedBootstrapRequest.params?.onboarding).not.toHaveProperty('capitalObservation');
@@ -880,7 +899,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1084,7 +1105,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
 
         if (jsonRpcRequest?.['method'] === 'orchestrator.readAgentServiceIdentity.v1') {
           const params =
@@ -1092,10 +1115,7 @@ describe('createPortfolioManagerDomain', () => {
               ? (jsonRpcRequest['params'] as Record<string, unknown>)
               : null;
 
-          if (
-            params?.['agent_id'] === 'portfolio-manager' &&
-            params['role'] === 'orchestrator'
-          ) {
+          if (params?.['agent_id'] === 'portfolio-manager' && params['role'] === 'orchestrator') {
             return {
               jsonrpc: '2.0',
               id: 'rpc-agent-service-identity-read',
@@ -1225,14 +1245,15 @@ describe('createPortfolioManagerDomain', () => {
     const firstSignedDelegation = createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS);
     const secondSignedDelegation = {
       ...createSignedRootDelegation(TEST_CONTROLLER_SMART_ACCOUNT_ADDRESS),
-      signature:
-        '0x5678' as const,
+      signature: '0x5678' as const,
     };
     const rootedBootstrapKeys: string[] = [];
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1256,7 +1277,9 @@ describe('createPortfolioManagerDomain', () => {
           }
         }
 
-        if (jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1') {
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1'
+        ) {
           const idempotencyKey = params?.['idempotency_key'];
           if (typeof idempotencyKey !== 'string') {
             throw new Error('expected rooted-bootstrap idempotency key');
@@ -1413,7 +1436,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1437,7 +1462,9 @@ describe('createPortfolioManagerDomain', () => {
           }
         }
 
-        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+        throw new Error(
+          `Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`,
+        );
       }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
@@ -1532,7 +1559,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1553,7 +1582,9 @@ describe('createPortfolioManagerDomain', () => {
           };
         }
 
-        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+        throw new Error(
+          `Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`,
+        );
       }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
@@ -1651,7 +1682,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1669,7 +1702,9 @@ describe('createPortfolioManagerDomain', () => {
           });
         }
 
-        throw new Error(`Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`);
+        throw new Error(
+          `Unexpected Shared Ember JSON-RPC method: ${String(jsonRpcRequest?.['method'])}`,
+        );
       }),
       readCommittedEventOutbox: vi.fn(async () => ({
         protocol_version: 'v1',
@@ -1767,7 +1802,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -1952,7 +1989,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -2106,7 +2145,9 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
@@ -2716,13 +2757,17 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as Record<string, unknown>) : null;
+          typeof request === 'object' && request !== null
+            ? (request as Record<string, unknown>)
+            : null;
         const params =
           typeof jsonRpcRequest?.['params'] === 'object' && jsonRpcRequest['params'] !== null
             ? (jsonRpcRequest['params'] as Record<string, unknown>)
             : null;
 
-        if (jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1') {
+        if (
+          jsonRpcRequest?.['method'] === 'orchestrator.completeRootedBootstrapFromUserSigning.v1'
+        ) {
           const idempotencyKey = params?.['idempotency_key'];
           if (typeof idempotencyKey !== 'string') {
             throw new Error('expected rooted-bootstrap idempotency key');
@@ -3062,9 +3107,13 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as { params?: unknown }) : null;
+          typeof request === 'object' && request !== null
+            ? (request as { params?: unknown })
+            : null;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -3182,7 +3231,15 @@ describe('createPortfolioManagerDomain', () => {
               asset: 'USDC',
               network: 'arbitrum',
               quantity: '10',
+              displayQuantity: '0.00001',
               valueUsd: 10,
+            }),
+            expect.objectContaining({
+              asset: 'WBTC',
+              network: 'arbitrum',
+              quantity: '2736',
+              displayQuantity: '0.00002736',
+              valueUsd: 2.1084539253125922,
             }),
             expect.objectContaining({
               asset: 'WETH',
@@ -3230,6 +3287,8 @@ describe('createPortfolioManagerDomain', () => {
               network: 'arbitrum',
               protocolSystem: 'aave',
               containerRef: 'aave:position-scope-aave-arbitrum-usdc',
+              ownerType: 'agent',
+              ownerId: 'ember-lending',
               status: 'active',
               marketState: {
                 availableBorrowsUsd: '18',
@@ -3272,9 +3331,13 @@ describe('createPortfolioManagerDomain', () => {
     const protocolHost = {
       handleJsonRpc: vi.fn(async (request: unknown) => {
         const jsonRpcRequest =
-          typeof request === 'object' && request !== null ? (request as { params?: unknown }) : null;
+          typeof request === 'object' && request !== null
+            ? (request as { params?: unknown })
+            : null;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -3383,6 +3446,143 @@ describe('createPortfolioManagerDomain', () => {
     });
   });
 
+  it('refreshes the persisted PM mandate projection from local lifecycle state', async () => {
+    const protocolHost = {
+      handleJsonRpc: vi.fn(async () => ({
+        jsonrpc: '2.0',
+        id: 'shared-ember-thread-1-read-portfolio-state',
+        result: {
+          protocol_version: 'v1',
+          revision: 3,
+          portfolio_state: {
+            agent_id: 'portfolio-manager',
+          },
+        },
+      })),
+      readCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        events: [],
+      })),
+      acknowledgeCommittedEventOutbox: vi.fn(async () => ({
+        protocol_version: 'v1',
+        revision: 3,
+        consumer_id: 'portfolio-manager',
+        acknowledged_through_sequence: 0,
+      })),
+    };
+
+    const domain = createPortfolioManagerDomain({
+      protocolHost,
+      agentId: 'portfolio-manager',
+    });
+    const portfolioManagerMandate = createPortfolioManagerMandatePayload();
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'prehire',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 2,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: null,
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          portfolioManagerMandate,
+        },
+        operation: {
+          source: 'tool',
+          name: 'refresh_portfolio_state',
+        },
+      }),
+    ).resolves.toMatchObject({
+      domainProjectionUpdate: {
+        portfolioManagerMandateEditor: {
+          ownerAgentId: 'agent-portfolio-manager',
+          targetAgentId: 'agent-portfolio-manager',
+          targetAgentRouteId: 'agent-portfolio-manager',
+          targetAgentKey: 'portfolio-manager-primary',
+          targetAgentTitle: 'Portfolio Manager Mandate',
+          mandateRef: 'mandate-portfolio-manager',
+          managedMandate: portfolioManagerMandate,
+          agentWallet: '0x00000000000000000000000000000000000000a1',
+          rootUserWallet: '0x00000000000000000000000000000000000000a1',
+          rootedWalletContextId: 'rwc-user-protocol-001',
+          reservation: null,
+        },
+      },
+    });
+  });
+
+  it('saves portfolio-manager mandate updates to local lifecycle state without Shared Ember', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+    const updatedPortfolioManagerMandate = {
+      ...createPortfolioManagerMandatePayload(),
+      minimumCashUsd: 6100,
+    };
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 12,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          portfolioManagerMandate: {
+            betaExposureCapPct: 50,
+            minimumCashUsd: 2500,
+            riskBudgetBps: 1400,
+          },
+        },
+        operation: {
+          source: 'command',
+          name: 'update_managed_mandate',
+          input: {
+            targetAgentId: 'agent-portfolio-manager',
+            managedMandate: updatedPortfolioManagerMandate,
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 12,
+        portfolioManagerMandate: updatedPortfolioManagerMandate,
+      },
+      domainProjectionUpdate: {
+        portfolioManagerMandateEditor: {
+          ownerAgentId: 'agent-portfolio-manager',
+          targetAgentId: 'agent-portfolio-manager',
+          targetAgentRouteId: 'agent-portfolio-manager',
+          targetAgentKey: 'portfolio-manager-primary',
+          targetAgentTitle: 'Portfolio Manager Mandate',
+          mandateRef: 'mandate-portfolio-manager',
+          managedMandate: updatedPortfolioManagerMandate,
+          agentWallet: '0x00000000000000000000000000000000000000a1',
+          rootUserWallet: '0x00000000000000000000000000000000000000a1',
+          rootedWalletContextId: 'rwc-user-protocol-001',
+          reservation: null,
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage:
+            'Portfolio manager mandate updated for local execution and persisted in session state.',
+        },
+      },
+    });
+  });
+
   it('routes post-activation managed-mandate edits through the PM-owned protocol command and rehydrates live state', async () => {
     let managedAgentReadCount = 0;
     const protocolHost = {
@@ -3393,7 +3593,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -3518,6 +3720,767 @@ describe('createPortfolioManagerDomain', () => {
         mandate_ref: 'mandate-ember-lending-live-001',
         managed_mandate: createUpdatedManagedMandate(),
       },
+    });
+  });
+
+  it('dispatches structured spot swaps through the hidden OCA executor with the selected rooted wallet context', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'submitted' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        transactionHash: '0xsubmittedswap',
+        committedEventIds: ['evt-hidden-swap-1'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            slippageTolerance: '0.5',
+            idempotencyKey: 'idem-hidden-swap-001',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        phase: 'active',
+        lastSharedEmberRevision: 8,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap submitted through the portfolio manager.',
+        },
+        artifacts: [
+          {
+            data: {
+              type: 'hidden-oca-spot-swap',
+              status: 'submitted',
+              transactionPlanId: 'txplan-hidden-swap-001',
+              requestId: 'req-hidden-swap-001',
+              transactionHash: '0xsubmittedswap',
+            },
+          },
+        ],
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 8,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '1000000',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'USDC',
+        toToken: 'WETH',
+        slippageTolerance: '0.5',
+        idempotencyKey: 'idem-hidden-swap-001',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+      },
+    });
+  });
+
+  it('rejects initial spot swap dispatches that try to pre-authorize reserved-capital conflict handling', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            reservationConflictHandling: {
+              kind: 'allow_reserved_for_other_agent',
+            },
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Spot swap reserved-capital conflict handling can only be supplied by the portfolio-manager conflict confirmation retry.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).not.toHaveBeenCalled();
+  });
+
+  it('interrupts before execution when the selected swap pool includes reserved capital', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'submitted' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'USDC',
+          amount: '680295188055654',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.000680295188055654',
+          displayToAmount: '2.1',
+        },
+        transactionPlanId: 'txplan-hidden-swap-should-not-run',
+        requestId: 'req-hidden-swap-should-not-run',
+        committedEventIds: ['evt-hidden-swap-should-not-run'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 9,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '680295188055654',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'USDC',
+            capitalPool: 'reserved_or_assigned',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: {
+          dispatch: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '680295188055654',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'USDC',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+            capitalPool: 'reserved_or_assigned',
+          },
+          conflict: {
+            kind: 'reserved_for_other_agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            reservationId: null,
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage:
+            'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-swap-reservation-conflict-request',
+          mirroredToActivity: false,
+          payload: {
+            swap: {
+              fromToken: 'WETH',
+              toToken: 'USDC',
+              amount: '680295188055654',
+              amountType: 'exactIn',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: null,
+            },
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).not.toHaveBeenCalled();
+  });
+
+  it('interrupts for PM-routed reserved-capital confirmation and stores the exact swap retry', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'conflict' as const,
+        idempotencyKey: 'idem-generated-hidden-swap-001',
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        committedEventIds: ['evt-hidden-swap-conflict-1'],
+        conflict: {
+          kind: 'reserved_for_other_agent' as const,
+          blockingReasonCode: 'reserved_for_other_agent',
+          reservationId: 'res-ember-lending-001',
+          message: 'USDC is reserved for another agent.',
+          retryOptions: ['allow_reserved_for_other_agent' as const, 'unassigned_only' as const],
+        },
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: {
+          dispatch: {
+            idempotencyKey: 'idem-generated-hidden-swap-001',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+          },
+          conflict: {
+            reservationId: 'res-ember-lending-001',
+          },
+        },
+      },
+      outputs: {
+        status: {
+          executionStatus: 'interrupted',
+          statusMessage:
+            'This swap would touch capital reserved for another agent. Confirm whether to proceed or retry with unassigned capital only.',
+        },
+        interrupt: {
+          type: 'portfolio-manager-swap-reservation-conflict-request',
+          mirroredToActivity: false,
+          payload: {
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+    });
+  });
+
+  it('does not report hidden spot swaps as completed while executor redelegation remains pending', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'awaiting_redelegation' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        committedEventIds: ['evt-hidden-swap-redelegation-1'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+        },
+        operation: {
+          source: 'command',
+          name: 'dispatch_spot_swap',
+          input: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '1000000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'USDC',
+            toToken: 'WETH',
+            idempotencyKey: 'idem-hidden-swap-001',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      outputs: {
+        status: {
+          executionStatus: 'failed',
+          statusMessage:
+            'Spot swap execution is waiting for Shared Ember redelegation readiness and was not completed.',
+        },
+      },
+    });
+  });
+
+  it('re-dispatches the exact pending swap after conflict-only user confirmation', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'USDC',
+          toToken: 'WETH',
+          amount: '1000000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '1',
+          displayToAmount: '0.0003',
+        },
+        transactionPlanId: 'txplan-hidden-swap-001',
+        requestId: 'req-hidden-swap-001',
+        transactionHash: '0xconfirmed',
+        committedEventIds: ['evt-hidden-swap-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 8,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingSpotSwapConflict: {
+            dispatch: {
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+              amount: '1000000',
+              amountType: 'exactIn',
+              fromChain: 'arbitrum',
+              toChain: 'arbitrum',
+              fromToken: 'USDC',
+              toToken: 'WETH',
+              idempotencyKey: 'idem-hidden-swap-001',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: 'res-ember-lending-001',
+              message: 'USDC is reserved for another agent.',
+              retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+            },
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-swap-reservation-conflict-request',
+          input: {
+            outcome: 'unassigned_only',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap completed through the portfolio manager.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 8,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '1000000',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'USDC',
+        toToken: 'WETH',
+        idempotencyKey: 'idem-hidden-swap-001:reserved-capital-confirmation:unassigned_only',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+        reservationConflictHandling: {
+          kind: 'unassigned_only',
+        },
+      },
+    });
+  });
+
+  it('re-dispatches reserved-capital confirmations with the privileged executor allowance', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'USDC',
+          amount: '680295188055654',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.000680295188055654',
+          displayToAmount: '2.1',
+        },
+        transactionPlanId: 'txplan-hidden-swap-reserved-001',
+        requestId: 'req-hidden-swap-reserved-001',
+        transactionHash: '0xconfirmedreserved',
+        committedEventIds: ['evt-hidden-swap-reserved-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 9,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingSpotSwapConflict: {
+            dispatch: {
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+              amount: '680295188055654',
+              amountType: 'exactIn',
+              fromChain: 'arbitrum',
+              toChain: 'arbitrum',
+              fromToken: 'WETH',
+              toToken: 'USDC',
+              capitalPool: 'reserved_or_assigned',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: 'res-ember-lending-weth-001',
+              message: 'WETH is reserved for another agent.',
+              retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+            },
+          },
+        },
+        operation: {
+          source: 'interrupt',
+          name: 'portfolio-manager-swap-reservation-conflict-request',
+          input: {
+            outcome: 'allow_reserved_for_other_agent',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap completed through the portfolio manager.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 9,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '680295188055654',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'WETH',
+        toToken: 'USDC',
+        capitalPool: 'reserved_or_assigned',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+        reservationConflictHandling: {
+          kind: 'allow_reserved_for_other_agent',
+        },
+      },
+    });
+  });
+
+  it('re-dispatches reserved-capital confirmations through the tool-callable confirmation command', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'WBTC',
+          amount: '680295188055654',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.000680295188055654',
+          displayToAmount: '0.000005',
+        },
+        transactionPlanId: 'txplan-hidden-swap-reserved-002',
+        requestId: 'req-hidden-swap-reserved-002',
+        transactionHash: '0xconfirmedreservedcommand',
+        committedEventIds: ['evt-hidden-swap-reserved-command-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await expect(
+      domain.handleOperation?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 9,
+          lastRootDelegation: null,
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          pendingSpotSwapConflict: {
+            dispatch: {
+              walletAddress: '0x00000000000000000000000000000000000000a1',
+              amount: '680295188055654',
+              amountType: 'exactIn',
+              fromChain: 'arbitrum',
+              toChain: 'arbitrum',
+              fromToken: 'WETH',
+              toToken: 'WBTC',
+              capitalPool: 'reserved_or_assigned',
+              rootedWalletContextId: 'rwc-user-protocol-001',
+            },
+            conflict: {
+              kind: 'reserved_for_other_agent',
+              blockingReasonCode: 'reserved_for_other_agent',
+              reservationId: 'res-ember-lending-weth-001',
+              message: 'WETH is reserved for another agent.',
+              retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+            },
+          },
+        },
+        operation: {
+          source: 'tool',
+          name: 'confirm_spot_swap_reserved_capital',
+          input: {
+            outcome: 'allow_reserved_for_other_agent',
+          },
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: {
+        pendingSpotSwapConflict: null,
+      },
+      outputs: {
+        status: {
+          executionStatus: 'completed',
+          statusMessage: 'Spot swap completed through the portfolio manager.',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 9,
+      input: {
+        walletAddress: '0x00000000000000000000000000000000000000a1',
+        amount: '680295188055654',
+        amountType: 'exactIn',
+        fromChain: 'arbitrum',
+        toChain: 'arbitrum',
+        fromToken: 'WETH',
+        toToken: 'WBTC',
+        capitalPool: 'reserved_or_assigned',
+        rootedWalletContextId: 'rwc-user-protocol-001',
+        reservationConflictHandling: {
+          kind: 'allow_reserved_for_other_agent',
+        },
+      },
+    });
+  });
+
+  it('uses a distinct idempotency key for confirmed reserved-capital retries', async () => {
+    const hiddenExecutor = {
+      executeSpotSwap: vi.fn(async () => ({
+        status: 'completed' as const,
+        swapSummary: {
+          fromToken: 'WETH',
+          toToken: 'USDC',
+          amount: '100000',
+          amountType: 'exactIn' as const,
+          displayFromAmount: '0.0001',
+          displayToAmount: '0.22',
+        },
+        transactionPlanId: 'txplan-hidden-swap-confirmed-idem-001',
+        requestId: 'req-hidden-swap-confirmed-idem-001',
+        transactionHash: '0xconfirmedreservedidem',
+        committedEventIds: ['evt-hidden-swap-confirmed-idem-2'],
+      })),
+    };
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+      hiddenOcaSpotSwapExecutor: hiddenExecutor,
+    });
+
+    await domain.handleOperation?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'active',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 9,
+        lastRootDelegation: null,
+        lastOnboardingBootstrap: createOnboardingBootstrap(),
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: null,
+        pendingSpotSwapConflict: {
+          dispatch: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '100000',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'USDC',
+            capitalPool: 'all',
+            idempotencyKey: 'idem-hidden-oca-swap-user-selected-001',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+          },
+          conflict: {
+            kind: 'reserved_for_other_agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            reservationId: 'res-ember-lending-weth-001',
+            message: 'WETH is reserved for another agent.',
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+      operation: {
+        source: 'tool',
+        name: 'confirm_spot_swap_reserved_capital',
+        input: {
+          outcome: 'allow_reserved_for_other_agent',
+        },
+      },
+    });
+
+    expect(hiddenExecutor.executeSpotSwap).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      currentRevision: 9,
+      input: expect.objectContaining({
+        idempotencyKey:
+          'idem-hidden-oca-swap-user-selected-001:reserved-capital-confirmation:allow_reserved_for_other_agent',
+        reservationConflictHandling: {
+          kind: 'allow_reserved_for_other_agent',
+        },
+      }),
     });
   });
 
@@ -3752,8 +4715,7 @@ describe('createPortfolioManagerDomain', () => {
       },
     });
 
-    const signedRedelegation =
-      registerSignedRedelegationRequest.params.signed_redelegation;
+    const signedRedelegation = registerSignedRedelegationRequest.params.signed_redelegation;
     const decodedArtifact = decodeDelegationArtifactRef(
       signedRedelegation['artifact_ref'] as string,
     );
@@ -4056,7 +5018,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -4179,7 +5143,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -4328,6 +5294,104 @@ describe('createPortfolioManagerDomain', () => {
     );
   });
 
+  it('surfaces pending reserved-capital swap confirmation instructions in system context', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    const context = await domain.systemContext?.({
+      threadId: 'thread-1',
+      state: {
+        phase: 'active',
+        lastPortfolioState: null,
+        lastSharedEmberRevision: 9,
+        lastRootDelegation: {
+          root_delegation_id: 'root-a1',
+        },
+        lastOnboardingBootstrap: createOnboardingBootstrap(),
+        lastRootedWalletContextId: 'rwc-user-protocol-001',
+        activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+        pendingOnboardingWalletAddress: null,
+        pendingSpotSwapConflict: {
+          dispatch: {
+            walletAddress: '0x00000000000000000000000000000000000000a1',
+            amount: '680295188055654',
+            amountType: 'exactIn',
+            fromChain: 'arbitrum',
+            toChain: 'arbitrum',
+            fromToken: 'WETH',
+            toToken: 'WBTC',
+            capitalPool: 'reserved_or_assigned',
+            rootedWalletContextId: 'rwc-user-protocol-001',
+          },
+          conflict: {
+            kind: 'reserved_for_other_agent',
+            blockingReasonCode: 'reserved_for_other_agent',
+            reservationId: 'res-ember-lending-weth-001',
+            message: 'WETH is reserved for another agent.',
+            retryOptions: ['allow_reserved_for_other_agent', 'unassigned_only'],
+          },
+        },
+      },
+    });
+
+    expect(context).toEqual(
+      expect.arrayContaining([
+        '  <pending_spot_swap_conflict>',
+        '    <confirmation_operation>portfolio-manager-swap-reservation-conflict-request</confirmation_operation>',
+        '    <tool_command>confirm_spot_swap_reserved_capital</tool_command>',
+        '    <affirmative_user_reply_outcome>allow_reserved_for_other_agent</affirmative_user_reply_outcome>',
+        '    <unassigned_only_user_reply_outcome>unassigned_only</unassigned_only_user_reply_outcome>',
+        '    <cancel_user_reply_outcome>cancel</cancel_user_reply_outcome>',
+        '    <instruction>Do not call dispatch_spot_swap again for yes/confirm/proceed replies. Use confirm_spot_swap_reserved_capital with outcome allow_reserved_for_other_agent.</instruction>',
+        '    <dispatch>',
+        '      <fromToken>WETH</fromToken>',
+        '      <toToken>WBTC</toToken>',
+        '      <capitalPool>reserved_or_assigned</capitalPool>',
+        '    <conflict>',
+        '      <reservationId>res-ember-lending-weth-001</reservationId>',
+        '  </pending_spot_swap_conflict>',
+      ]),
+    );
+  });
+
+  it('uses portfolio-manager mandate state directly in system context hydration', async () => {
+    const domain = createPortfolioManagerDomain({
+      agentId: 'portfolio-manager',
+    });
+
+    await expect(
+      domain.systemContext?.({
+        threadId: 'thread-1',
+        state: {
+          phase: 'active',
+          lastPortfolioState: null,
+          lastSharedEmberRevision: 4,
+          lastRootDelegation: {
+            root_delegation_id: 'root-a1',
+          },
+          lastOnboardingBootstrap: createOnboardingBootstrap(),
+          lastRootedWalletContextId: 'rwc-user-protocol-001',
+          activeWalletAddress: '0x00000000000000000000000000000000000000a1',
+          pendingOnboardingWalletAddress: null,
+          portfolioManagerMandate: createPortfolioManagerMandatePayload(),
+        },
+      }),
+    ).resolves.toEqual(
+      expect.arrayContaining([
+        '  <managed_agent_mandates>',
+        '    <managed_agent agent_key="portfolio-manager-primary" agent_type="agent-portfolio-manager" approved="true" mandate_ref="mandate-portfolio-manager">',
+        '      <managed_mandate>',
+        '        <betaExposureCapPct>65</betaExposureCapPct>',
+        '        <minimumCashUsd>5000</minimumCashUsd>',
+        '        <riskBudgetBps>1800</riskBudgetBps>',
+        '      </managed_mandate>',
+        '    </managed_agent>',
+        '  </managed_agent_mandates>',
+      ]),
+    );
+  });
+
   it('appends aggregated live Shared Ember accounting context to the system prompt context when a wallet is active', async () => {
     const onboardingBootstrap = {
       ...createOnboardingBootstrap(),
@@ -4362,7 +5426,9 @@ describe('createPortfolioManagerDomain', () => {
             : null;
         const method = jsonRpcRequest?.method;
         const params =
-          jsonRpcRequest && typeof jsonRpcRequest.params === 'object' && jsonRpcRequest.params !== null
+          jsonRpcRequest &&
+          typeof jsonRpcRequest.params === 'object' &&
+          jsonRpcRequest.params !== null
             ? (jsonRpcRequest.params as { agent_id?: unknown })
             : null;
 
@@ -4370,7 +5436,10 @@ describe('createPortfolioManagerDomain', () => {
           throw new Error('managed-agent portfolio state unavailable');
         }
 
-        if (method === 'orchestrator.readOnboardingState.v1' && params?.agent_id === 'ember-lending') {
+        if (
+          method === 'orchestrator.readOnboardingState.v1' &&
+          params?.agent_id === 'ember-lending'
+        ) {
           return {
             jsonrpc: '2.0',
             id: 'shared-ember-wallet-accounting-ember-lending-0x00000000000000000000000000000000000000a1',
@@ -4445,7 +5514,10 @@ describe('createPortfolioManagerDomain', () => {
           };
         }
 
-        if (method === 'orchestrator.readOnboardingState.v1' && params?.agent_id === 'ember-rebalance') {
+        if (
+          method === 'orchestrator.readOnboardingState.v1' &&
+          params?.agent_id === 'ember-rebalance'
+        ) {
           return {
             jsonrpc: '2.0',
             id: 'shared-ember-wallet-accounting-ember-rebalance-0x00000000000000000000000000000000000000a1',

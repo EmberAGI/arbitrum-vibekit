@@ -6,20 +6,21 @@ import {
 } from 'agent-runtime/internal';
 
 import {
+  derivePortfolioManagerControllerSmartAccountAddress,
+  ensurePortfolioManagerControllerSmartAccountDeployed,
+} from './controllerIdentity.js';
+import {
   createPortfolioManagerAgentConfig,
   type PortfolioManagerAgentConfig,
   type PortfolioManagerGatewayEnv,
   resolvePortfolioManagerGatewayDependencies,
 } from './portfolioManagerFoundation.js';
-import {
-  derivePortfolioManagerControllerSmartAccountAddress,
-  ensurePortfolioManagerControllerSmartAccountDeployed,
-} from './controllerIdentity.js';
-import { ensurePortfolioManagerServiceIdentity } from './serviceIdentityPreflight.js';
+import { ensurePortfolioManagerServiceIdentities } from './serviceIdentityPreflight.js';
 
 export const PORTFOLIO_MANAGER_AGENT_ID = 'agent-portfolio-manager';
 export const PORTFOLIO_MANAGER_AG_UI_BASE_PATH = '/ag-ui';
 export const PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF = 'controller-wallet';
+export const HIDDEN_OCA_EXECUTOR_RUNTIME_SIGNER_REF = 'oca-executor-wallet';
 export type PortfolioManagerGatewayService = AgentRuntimeService;
 const CONTROLLER_DEPLOYMENT_INSUFFICIENT_FUNDS_PATTERN =
   /insufficient funds for gas \* price \+ value/i;
@@ -55,7 +56,7 @@ type PortfolioManagerGatewayServiceOptions = {
 
 type PortfolioManagerGatewayInternalOptions = PortfolioManagerGatewayServiceOptions & {
   __internalCreateAgentRuntimeKernel?: typeof createAgentRuntimeKernel;
-  __internalEnsureServiceIdentity?: typeof ensurePortfolioManagerServiceIdentity;
+  __internalEnsureServiceIdentity?: typeof ensurePortfolioManagerServiceIdentities;
   __internalDeriveControllerSmartAccountAddress?: typeof derivePortfolioManagerControllerSmartAccountAddress;
   __internalEnsureControllerSmartAccountDeployed?: typeof ensurePortfolioManagerControllerSmartAccountDeployed;
   __internalPostgres?: AgentRuntimeInternalPostgresHooks;
@@ -89,6 +90,34 @@ async function readRequiredControllerSignerAddress(input: {
   }
 }
 
+async function readHiddenOcaExecutorSignerAddress(input: {
+  signing: {
+    readAddress(input: { signerRef: string }): Promise<`0x${string}`>;
+  };
+}): Promise<`0x${string}`> {
+  try {
+    return await input.signing.readAddress({
+      signerRef: HIDDEN_OCA_EXECUTOR_RUNTIME_SIGNER_REF,
+    });
+  } catch (error) {
+    if (error instanceof AgentRuntimeSigningError) {
+      if (error.code === 'signer_not_declared' || error.code === 'signer_not_configured') {
+        throw new Error(
+          'Hidden Onchain Actions executor identity readiness requires PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME to resolve the configured executor wallet.',
+        );
+      }
+
+      if (error.code === 'wallet_lookup_failed' || error.code === 'identity_address_missing') {
+        throw new Error(
+          'Hidden Onchain Actions executor identity readiness failed because the configured OWS wallet did not resolve an EVM address.',
+        );
+      }
+    }
+
+    throw error;
+  }
+}
+
 export async function createPortfolioManagerGatewayService(
   options?: PortfolioManagerGatewayServiceOptions,
 ): Promise<AgentRuntimeService>;
@@ -107,6 +136,12 @@ export async function createPortfolioManagerGatewayService(
         passphraseEnvVar: 'PORTFOLIO_MANAGER_OWS_PASSPHRASE',
         vaultPathEnvVar: 'PORTFOLIO_MANAGER_OWS_VAULT_PATH',
       },
+      {
+        signerRef: HIDDEN_OCA_EXECUTOR_RUNTIME_SIGNER_REF,
+        walletNameOrIdEnvVar: 'PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME',
+        passphraseEnvVar: 'PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE',
+        vaultPathEnvVar: 'PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH',
+      },
     ],
     createRuntimeOptions: async ({ signing }) => {
       if (options.runtimeConfig) {
@@ -120,6 +155,7 @@ export async function createPortfolioManagerGatewayService(
       const dependencies = resolvePortfolioManagerGatewayDependencies(options.env);
       let controllerWalletAddress: `0x${string}` | undefined;
       let controllerSignerAddress: `0x${string}` | undefined;
+      let hiddenOcaExecutorWalletAddress: `0x${string}` | undefined;
 
       if (dependencies.protocolHost) {
         controllerSignerAddress = await readRequiredControllerSignerAddress({
@@ -152,13 +188,17 @@ export async function createPortfolioManagerGatewayService(
 
           throw error;
         }
-        const ensuredIdentity = await (
-          options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentity
+        const ensuredIdentities = await (
+          options.__internalEnsureServiceIdentity ?? ensurePortfolioManagerServiceIdentities
         )({
           protocolHost: dependencies.protocolHost,
-          readControllerWalletAddress: async () => controllerSmartAccountAddress,
+          readControllerWalletAddress: () => Promise.resolve(controllerSmartAccountAddress),
+          readExecutorWalletAddress: async () =>
+            await readHiddenOcaExecutorSignerAddress({
+              signing,
+            }),
         });
-        const walletAddress = ensuredIdentity.identity.wallet_address;
+        const walletAddress = ensuredIdentities.orchestrator.identity.wallet_address;
         if (!walletAddress.startsWith('0x')) {
           throw new Error(
             'Portfolio-manager startup identity preflight failed because Shared Ember did not return a confirmed orchestrator wallet address.',
@@ -166,14 +206,25 @@ export async function createPortfolioManagerGatewayService(
         }
 
         controllerWalletAddress = walletAddress;
+        if (
+          ensuredIdentities.hiddenOcaExecutor &&
+          'identity' in ensuredIdentities.hiddenOcaExecutor
+        ) {
+          const executorWalletAddress = ensuredIdentities.hiddenOcaExecutor.identity.wallet_address;
+          if (executorWalletAddress.startsWith('0x')) {
+            hiddenOcaExecutorWalletAddress = executorWalletAddress;
+          }
+        }
       }
 
       return {
         ...createPortfolioManagerAgentConfig(options.env, {
           runtimeSigning: signing,
           runtimeSignerRef: PORTFOLIO_MANAGER_RUNTIME_SIGNER_REF,
+          hiddenOcaExecutorRuntimeSignerRef: HIDDEN_OCA_EXECUTOR_RUNTIME_SIGNER_REF,
           ...(controllerSignerAddress ? { controllerSignerAddress } : {}),
           ...(controllerWalletAddress ? { controllerWalletAddress } : {}),
+          ...(hiddenOcaExecutorWalletAddress ? { hiddenOcaExecutorWalletAddress } : {}),
         }),
         ...(options.now ? { now: options.now } : {}),
         ...(options.__internalPostgres ? { __internalPostgres: options.__internalPostgres } : {}),

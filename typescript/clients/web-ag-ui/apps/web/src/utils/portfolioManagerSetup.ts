@@ -1,4 +1,4 @@
-import type { PortfolioManagerSetupInput } from '../types/agent';
+import type { PortfolioManagerMandateInput, PortfolioManagerSetupInput } from '../types/agent';
 import {
   buildManagedLendingPolicy,
   DEFAULT_MANAGED_LENDING_COLLATERAL_ASSET,
@@ -13,6 +13,7 @@ const DEFAULT_PORTFOLIO_MANAGER_SETUP = {
     approved: true,
     riskLevel: 'medium',
   },
+  portfolioManagerMandate: {} satisfies PortfolioManagerMandateInput,
   firstManagedMandate: {
     targetAgentId: 'ember-lending',
     targetAgentKey: 'ember-lending-primary',
@@ -56,6 +57,7 @@ export function buildPortfolioManagerSetupInput(
   return {
     walletAddress,
     portfolioMandate: DEFAULT_PORTFOLIO_MANAGER_SETUP.portfolioMandate,
+    portfolioManagerMandate: DEFAULT_PORTFOLIO_MANAGER_SETUP.portfolioManagerMandate,
     firstManagedMandate: {
       targetAgentId: DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.targetAgentId,
       targetAgentKey: DEFAULT_PORTFOLIO_MANAGER_SETUP.firstManagedMandate.targetAgentKey,

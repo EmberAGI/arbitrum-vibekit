@@ -84,6 +84,14 @@ function readThrownErrorMessage(error: unknown): string {
   return 'Agent command failed.';
 }
 
+function serializeResumePayloadForRuntime(resume: unknown): string {
+  if (typeof resume === 'string') {
+    return resume;
+  }
+
+  return JSON.stringify(resume) ?? 'null';
+}
+
 async function readAuthoritativeStateDocument(params: {
   threadId: string;
   events: readonly BaseEvent[];
@@ -207,7 +215,7 @@ export async function POST(req: NextRequest): Promise<Response> {
               : {}),
           }
         : {
-            resume: parsedPayload.data.resume,
+            resume: serializeResumePayloadForRuntime(parsedPayload.data.resume),
           };
     const runEvents = await lastValueFrom(
       agent

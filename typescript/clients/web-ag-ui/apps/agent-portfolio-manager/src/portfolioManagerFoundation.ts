@@ -3,20 +3,28 @@ import type { AgentRuntimeSigningService } from 'agent-runtime/internal';
 
 import {
   createPortfolioManagerDomain,
+  refreshPortfolioManagerRedelegationWork,
   type PortfolioManagerLifecycleState,
 } from './sharedEmberAdapter.js';
+import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
+import { createHiddenOcaSpotSwapExecutor } from './hiddenOcaSwapExecutor.js';
 import {
   createPortfolioManagerSharedEmberHttpHost,
   resolvePortfolioManagerSharedEmberBaseUrl,
 } from './sharedEmberHttpHost.js';
-import { createPortfolioManagerDiagnosticTool } from './diagnosticTool.js';
-import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 import { PORTFOLIO_MANAGER_DEFAULT_ACCOUNTING_AGENT_ID } from './sharedEmberOnboardingState.js';
+import { createPortfolioManagerWalletAccountingTool } from './walletAccountingTool.js';
 
 const DEFAULT_PORTFOLIO_MANAGER_MODEL = 'openai/gpt-5.4';
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
-const PORTFOLIO_MANAGER_SYSTEM_PROMPT =
-  'You are the portfolio manager orchestrator running on agent-runtime. Stay concise, keep onboarding state explicit, and use read_wallet_accounting_state whenever the user asks about wallet contents, reservations, or account status in Shared Ember.';
+const PORTFOLIO_MANAGER_SYSTEM_PROMPT = [
+  'You are the portfolio manager orchestrator running on agent-runtime.',
+  'Stay concise, keep onboarding state explicit, and use read_wallet_accounting_state whenever the user asks about wallet contents, reservations, or account status in Shared Ember.',
+  'For spot swaps, when the user asks to use reserved or assigned units, or when their selected asset pool includes reserved units, dispatch with the appropriate capitalPool so the reserved-capital confirmation interrupt can run.',
+  'Never suggest releasing or adjusting a reservation for a spot swap; confirmed reserved-capital execution belongs to the hidden executor path.',
+  'After dispatch_spot_swap returns a reserved-capital confirmation, stop and ask the user to confirm; do not call confirm_spot_swap_reserved_capital in the same assistant turn that opened the confirmation.',
+  'When a pending_spot_swap_conflict is present and the user replies yes, confirm, or proceed, Do not call dispatch_spot_swap again; use confirm_spot_swap_reserved_capital with outcome allow_reserved_for_other_agent.',
+].join(' ');
 
 export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   OPENROUTER_API_KEY?: string;
@@ -27,6 +35,12 @@ export type PortfolioManagerGatewayEnv = NodeJS.ProcessEnv & {
   PORTFOLIO_MANAGER_OWS_WALLET_NAME?: string;
   PORTFOLIO_MANAGER_OWS_PASSPHRASE?: string;
   PORTFOLIO_MANAGER_OWS_VAULT_PATH?: string;
+  PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME?: string;
+  PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE?: string;
+  PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH?: string;
+  ONCHAIN_ACTIONS_API_URL?: string;
+  ARBITRUM_RPC_URL?: string;
+  ETHEREUM_RPC_URL?: string;
 };
 
 type PortfolioManagerAgentRuntimeOptions = CreateAgentRuntimeOptions<PortfolioManagerLifecycleState>;
@@ -47,6 +61,8 @@ type CreatePortfolioManagerAgentConfigOptions = {
   controllerSignerAddress?: `0x${string}`;
   runtimeSigning?: AgentRuntimeSigningService;
   runtimeSignerRef?: string;
+  hiddenOcaExecutorWalletAddress?: `0x${string}`;
+  hiddenOcaExecutorRuntimeSignerRef?: string;
 };
 
 function requireEnvValue(
@@ -129,6 +145,41 @@ export function createPortfolioManagerAgentConfig(
       ...(options.controllerSignerAddress
         ? {
             controllerSignerAddress: options.controllerSignerAddress,
+          }
+        : {}),
+      ...(protocolHost && options.runtimeSigning
+        ? {
+            hiddenOcaSpotSwapExecutor: createHiddenOcaSpotSwapExecutor({
+              protocolHost,
+              env,
+              runtimeSigning: options.runtimeSigning,
+              ...(options.hiddenOcaExecutorRuntimeSignerRef
+                ? { runtimeSignerRef: options.hiddenOcaExecutorRuntimeSignerRef }
+                : {}),
+              ...(options.hiddenOcaExecutorWalletAddress
+                ? { executorWalletAddress: options.hiddenOcaExecutorWalletAddress }
+                : {}),
+              requestRedelegationRefresh: async ({ threadId, transactionPlanId, requestId }) => {
+                const result = await refreshPortfolioManagerRedelegationWork({
+                  protocolHost,
+                  threadId,
+                  agentId: 'portfolio-manager',
+                  runtimeSigning: options.runtimeSigning,
+                  runtimeSignerRef: options.runtimeSignerRef,
+                  controllerWalletAddress: options.controllerWalletAddress,
+                  controllerSignerAddress: options.controllerSignerAddress,
+                  expectedRequestId: requestId,
+                  expectedTransactionPlanId: transactionPlanId,
+                });
+
+                if (result.status !== 'completed') {
+                  throw new Error(result.statusMessage);
+                }
+              },
+              ...(env.ONCHAIN_ACTIONS_API_URL
+                ? { onchainActionsBaseUrl: env.ONCHAIN_ACTIONS_API_URL }
+                : {}),
+            }),
           }
         : {}),
     }),

@@ -16,7 +16,6 @@ const RPC_RETRY_COUNT = 2;
 const RPC_TIMEOUT_MS = 8_000;
 const SIGNING_RESOLUTION_ATTEMPTS = 2;
 const SIGNING_RESOLUTION_RETRY_DELAY_MS = 500;
-const MAX_UINT256 = ((1n << 256n) - 1n).toString();
 const AAVE_RESERVE_FROZEN_ERROR_SELECTOR = '0x6d305815';
 const AAVE_COLLATERAL_CANNOT_COVER_NEW_BORROW_ERROR_SELECTOR = '0x911ceb81';
 
@@ -138,10 +137,7 @@ type OnchainActionsApiEnv = NodeJS.ProcessEnv & {
 type LendingOperation = 'supply' | 'withdraw' | 'borrow' | 'repay';
 type SupportedExecutionNetwork = 'arbitrum' | 'mainnet';
 type EmberLendingExecutionPublicClient = {
-  getTransactionCount: (input: {
-    address: `0x${string}`;
-    blockTag?: 'pending';
-  }) => Promise<number>;
+  getTransactionCount: (input: { address: `0x${string}`; blockTag?: 'pending' }) => Promise<number>;
   estimateFeesPerGas: () => Promise<{
     gasPrice?: bigint;
     maxFeePerGas?: bigint;
@@ -230,9 +226,7 @@ export function resolveEmberLendingOnchainActionsApiUrl(
     env.ONCHAIN_ACTIONS_API_URL?.trim() || DEFAULT_ONCHAIN_ACTIONS_API_URL,
   );
 
-  return endpoint.endsWith('/openapi.json')
-    ? endpoint.slice(0, -'/openapi.json'.length)
-    : endpoint;
+  return endpoint.endsWith('/openapi.json') ? endpoint.slice(0, -'/openapi.json'.length) : endpoint;
 }
 
 function resolveChainId(network: string): string {
@@ -259,10 +253,7 @@ function resolveSupportedExecutionNetwork(network: string): SupportedExecutionNe
   }
 }
 
-function resolvePlannerAssetAlias(input: {
-  network: string;
-  asset: string;
-}): string | null {
+function resolvePlannerAssetAlias(input: { network: string; asset: string }): string | null {
   const normalizedAsset = input.asset.trim().toLowerCase();
 
   switch (input.network.trim().toLowerCase()) {
@@ -290,10 +281,7 @@ function resolveArbitrumAaveAssetAlias(normalizedAsset: string): string | null {
   return null;
 }
 
-function resolveRpcUrl(
-  network: SupportedExecutionNetwork,
-  env: OnchainActionsApiEnv,
-): string {
+function resolveRpcUrl(network: SupportedExecutionNetwork, env: OnchainActionsApiEnv): string {
   switch (network) {
     case 'arbitrum':
       return env.ARBITRUM_RPC_URL?.trim() || DEFAULT_ARBITRUM_RPC_URL;
@@ -365,13 +353,15 @@ async function resolveToken(input: {
   const chainId = resolveChainId(input.network);
   const normalizedAsset = input.asset.trim().toLowerCase();
   const candidateAssets = Array.from(
-    new Set([
-      normalizedAsset,
-      resolvePlannerAssetAlias({
-        network: input.network,
-        asset: input.asset,
-      }),
-    ].filter((asset): asset is string => asset !== null && asset.length > 0)),
+    new Set(
+      [
+        normalizedAsset,
+        resolvePlannerAssetAlias({
+          network: input.network,
+          asset: input.asset,
+        }),
+      ].filter((asset): asset is string => asset !== null && asset.length > 0),
+    ),
   );
   let page = 1;
 
@@ -394,19 +384,13 @@ async function resolveToken(input: {
     const match = candidateAssets
       .flatMap((candidateAsset) => [
         response.tokens.find(
-          (token) =>
-            token.symbol.trim().toLowerCase() === candidateAsset && token.isVetted,
+          (token) => token.symbol.trim().toLowerCase() === candidateAsset && token.isVetted,
         ),
+        response.tokens.find((token) => token.symbol.trim().toLowerCase() === candidateAsset),
         response.tokens.find(
-          (token) => token.symbol.trim().toLowerCase() === candidateAsset,
+          (token) => token.name.trim().toLowerCase() === candidateAsset && token.isVetted,
         ),
-        response.tokens.find(
-          (token) =>
-            token.name.trim().toLowerCase() === candidateAsset && token.isVetted,
-        ),
-        response.tokens.find(
-          (token) => token.name.trim().toLowerCase() === candidateAsset,
-        ),
+        response.tokens.find((token) => token.name.trim().toLowerCase() === candidateAsset),
       ])
       .find((token): token is z.infer<typeof TokenSchema> => token !== undefined);
 
@@ -423,9 +407,7 @@ async function resolveToken(input: {
     page = currentPage + 1;
   }
 
-  throw new Error(
-    `Onchain Actions did not return a token for ${input.asset} on ${input.network}.`,
-  );
+  throw new Error(`Onchain Actions did not return a token for ${input.asset} on ${input.network}.`);
 }
 
 function resolveAmountForOnchainActions(input: {
@@ -434,10 +416,6 @@ function resolveAmountForOnchainActions(input: {
   decimals: number;
   useMaxRepayAmount: boolean;
 }): string {
-  if (input.operation === 'repay' && input.useMaxRepayAmount) {
-    return MAX_UINT256;
-  }
-
   const normalizedAmount = input.amount.trim();
   return parseUnits(normalizedAmount, input.decimals).toString();
 }
@@ -461,10 +439,7 @@ function decodeDelegationArtifactRef(artifactRef: string): Delegation {
   return decoded;
 }
 
-function requireDelegationArtifactRef(input: {
-  label: string;
-  value?: string | null;
-}): string {
+function requireDelegationArtifactRef(input: { label: string; value?: string | null }): string {
   if (typeof input.value === 'string' && input.value.trim().length > 0) {
     return input.value;
   }
@@ -533,8 +508,9 @@ async function resolvePreparedUnsignedTransactionHex(input: {
     }
   }
 
-  const delegationManager =
-    getDeleGatorEnvironment(chainId).DelegationManager.toLowerCase() as `0x${string}`;
+  const delegationManager = getDeleGatorEnvironment(
+    chainId,
+  ).DelegationManager.toLowerCase() as `0x${string}`;
   const executions = input.transactions.map((transaction) =>
     createExecution({
       target: transaction.to.toLowerCase() as `0x${string}`,
@@ -690,10 +666,7 @@ function resolveAnchoredPayloadRecord(input: {
   anchoredPayloads: Map<string, EmberLendingAnchoredPayloadRecord>;
   anchoredPayloadRef: string;
 }): EmberLendingAnchoredPayloadRecord | null {
-  const allRecords = [
-    ...(input.anchoredPayloadRecords ?? []),
-    ...input.anchoredPayloads.values(),
-  ];
+  const allRecords = [...(input.anchoredPayloadRecords ?? []), ...input.anchoredPayloads.values()];
   const exactRecord =
     allRecords.find((record) => record.anchoredPayloadRef === input.anchoredPayloadRef) ?? null;
   if (exactRecord) {
@@ -754,9 +727,7 @@ export function createEmberLendingOnchainActionsAnchoredPayloadResolver(input?: 
 }): EmberLendingAnchoredPayloadResolver {
   const fetchImpl = input?.fetch ?? fetch;
   const env = input?.env ?? process.env;
-  const baseUrl = trimTrailingSlash(
-    input?.baseUrl ?? resolveEmberLendingOnchainActionsApiUrl(env),
-  );
+  const baseUrl = trimTrailingSlash(input?.baseUrl ?? resolveEmberLendingOnchainActionsApiUrl(env));
   const resolvePublicClient =
     input?.resolvePublicClient ?? createDefaultExecutionPublicClientResolver(env);
   const anchoredPayloads = new Map<string, EmberLendingAnchoredPayloadRecord>();

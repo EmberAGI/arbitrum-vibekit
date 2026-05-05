@@ -110,6 +110,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('bg-[linear-gradient(180deg,#fffdf9_0%,#f7efe4_100%)]');
     expect(html).toContain('border-[#eadac7]');
+    expect(html).not.toContain('<nav');
     expect(html).not.toContain('bg-[#1e1e1e]');
   });
 
@@ -239,6 +240,52 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     expect(html).toContain('Analyzing the request before answering.');
   });
 
+  it('renders message-plane artifact activity in the chat transcript', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-ember-lending',
+        agentName: 'Ember Lending',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: true,
+        isHiring: false,
+        hasLoadedView: true,
+        lifecycleState: {
+          phase: 'active',
+        } as never,
+        messages: [
+          {
+            id: 'automation-scheduled-artifact',
+            role: 'activity',
+            activityType: 'artifact',
+            content: {
+              title: 'Automation scheduled',
+              text: 'Every 5 minutes, run the lending health check.',
+            },
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        onSendChatMessage: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('Artifact');
+    expect(html).toContain('Automation scheduled');
+    expect(html).toContain('Every 5 minutes, run the lending health check.');
+  });
+
   it('renders linked reasoning in the order supplied by the runtime transcript', () => {
     const messages: Message[] = [
       {
@@ -287,7 +334,48 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
     );
   });
 
-  it('renders automation status artifacts and A2UI cards in the Ember Portfolio Agent chat transcript', () => {
+  it('renders simple markdown emphasis in chat transcript messages', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        messages: [
+          {
+            id: 'assistant-markdown-1',
+            role: 'assistant',
+            content: 'Use **reserved WETH** only after *confirmation*.',
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).toContain('<strong');
+    expect(html).toContain('reserved WETH');
+    expect(html).toContain('<em');
+    expect(html).toContain('confirmation');
+    expect(html).not.toContain('**reserved WETH**');
+    expect(html).not.toContain('*confirmation*');
+  });
+
+  it('keeps automation status artifacts and A2UI cards out of the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-portfolio-manager',
@@ -345,12 +433,79 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toContain('Artifact');
-    expect(html).toContain('A2UI');
-    expect(html).toContain('pi-example-a2ui-view');
+    expect(html).not.toContain('Artifact');
+    expect(html).not.toContain('A2UI');
+    expect(html).not.toContain('Automation scheduled');
+    expect(html).not.toContain('Scheduled refresh every 5 minutes.');
+    expect(html).not.toContain('pi-example-a2ui-view');
   });
 
-  it('renders interrupt A2UI controls in the Ember Portfolio Agent chat transcript', () => {
+  it('keeps thread activity-only cards out of the Ember Portfolio Agent chat transcript', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AgentDetailPage, {
+        agentId: 'agent-portfolio-manager',
+        agentName: 'Ember Portfolio Agent',
+        agentDescription: 'desc',
+        creatorName: 'Ember AI Team',
+        creatorVerified: true,
+        profile: {
+          chains: [],
+          protocols: [],
+          tokens: [],
+        },
+        metrics: {},
+        initialTab: 'chat',
+        isHired: false,
+        isHiring: false,
+        hasLoadedView: true,
+        events: [
+          {
+            type: 'artifact',
+            artifact: {
+              artifactId: 'lifecycle-artifact',
+              data: {
+                type: 'lifecycle-status',
+                phase: 'onboarding',
+                onboardingStep: 'delegation-note',
+                operatorNote: 'activity-only note',
+              },
+            },
+          },
+          {
+            type: 'dispatch-response',
+            parts: [
+              {
+                kind: 'a2ui',
+                data: {
+                  payload: {
+                    kind: 'interrupt',
+                    payload: {
+                      message: 'Activity-only interrupt.',
+                      submitLabel: 'Continue from activity',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+        onHire: () => {},
+        onFire: () => {},
+        onSync: () => {},
+        onBack: () => {},
+        onSendChatMessage: () => {},
+        allowedPools: [],
+      }),
+    );
+
+    expect(html).not.toContain('Artifact');
+    expect(html).not.toContain('A2UI');
+    expect(html).not.toContain('Lifecycle onboarding');
+    expect(html).not.toContain('Activity-only interrupt.');
+    expect(html).not.toContain('pi-example-a2ui-view');
+  });
+
+  it('keeps interrupt A2UI activity out of the Ember Portfolio Agent chat transcript', () => {
     const html = renderToStaticMarkup(
       React.createElement(AgentDetailPage, {
         agentId: 'agent-portfolio-manager',
@@ -396,8 +551,9 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
       }),
     );
 
-    expect(html).toContain('A2UI');
-    expect(html).toContain('pi-example-a2ui-view');
+    expect(html).not.toContain('A2UI');
+    expect(html).not.toContain('Please provide a short operator note to continue.');
+    expect(html).not.toContain('pi-example-a2ui-view');
   });
 
   it('keeps the Ember Lending chat tab visible while the thread is input-required', () => {
@@ -468,7 +624,7 @@ describe('AgentDetailPage (pre-hire + onboarding affordances)', () => {
 
     expect(html).toContain('Create an automation every minute.');
     expect(html).toContain('What should the automation do every minute?');
-    expect(html).toContain('pi-example-a2ui-view');
+    expect(html).not.toContain('pi-example-a2ui-view');
     expect(html).toContain('Send message');
   });
 

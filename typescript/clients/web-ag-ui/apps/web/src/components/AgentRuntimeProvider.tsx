@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { CopilotKit } from '@copilotkit/react-core';
 
 import { isRegisteredAgentId } from '../config/agents';
-import { AuthoritativeAgentSnapshotCacheProvider } from '../contexts/AuthoritativeAgentSnapshotCache';
 import { AgentProvider, InactiveAgentProvider, useAgent } from '../contexts/AgentContext';
 import { projectAgentListUpdate } from '../contexts/agentListProjection';
 import type { ThreadSnapshot, ThreadState } from '../types/agent';
@@ -175,9 +174,5 @@ export function AgentRuntimeProvider({ children }: { children: ReactNode }) {
     </CopilotKit>
   );
 
-  return (
-    <AuthoritativeAgentSnapshotCacheProvider>
-      {content}
-    </AuthoritativeAgentSnapshotCacheProvider>
-  );
+  return content;
 }

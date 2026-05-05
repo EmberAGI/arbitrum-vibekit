@@ -8,6 +8,7 @@ import {
   readManagedAgentAccountingState,
   type PortfolioManagerWalletAccountingDetails,
 } from './sharedEmberOnboardingState.js';
+import { formatTokenQuantityForAgentSummary } from './tokenQuantityDisplay.js';
 
 type PortfolioManagerAgentTool = NonNullable<CreateAgentRuntimeOptions['tools']>[number];
 
@@ -44,12 +45,15 @@ function buildWalletAccountingSummary(
   }
 
   const assetSummary = details.assets
-    .map((asset) => `${asset.quantity} ${asset.asset} (${asset.status}, ${asset.controlPath})`)
+    .map(
+      (asset) =>
+        `${formatTokenQuantityForAgentSummary(asset)} (${asset.status}, ${asset.controlPath})`,
+    )
     .join(', ');
   const reservationSummary = details.reservations
     .map((reservation) => {
       const allocationSummary = reservation.allocations
-        .map((allocation) => `${allocation.quantity} ${allocation.asset}`)
+        .map((allocation) => formatTokenQuantityForAgentSummary(allocation))
         .join(', ');
       return `${allocationSummary} reserved for ${reservation.agentId} (${reservation.status}, ${reservation.controlPath})`;
     })

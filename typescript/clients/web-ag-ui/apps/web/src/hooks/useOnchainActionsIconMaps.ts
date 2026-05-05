@@ -128,6 +128,19 @@ function buildRefreshedTokenIconMap(params: {
   return refreshed;
 }
 
+function buildRequestedSymbolKeys(symbols: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const symbol of symbols) {
+    const key = normalizeSymbolKey(symbol);
+    if (key.length === 0) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
 function resetIconMapsCachesForTests(): void {
   chainIconByNameCache = null;
   chainIconLoadPromise = null;
@@ -140,18 +153,11 @@ export function useOnchainActionsIconMaps(params: {
   tokenSymbols: string[];
 }): IconMapsState {
   const { tokenSymbols } = params;
-  const requestedSymbolKeys = useMemo(() => {
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const symbol of tokenSymbols) {
-      const key = normalizeSymbolKey(symbol);
-      if (key.length === 0) continue;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(key);
-    }
-    return out;
-  }, [tokenSymbols]);
+  const requestedSymbolKey = buildRequestedSymbolKeys(tokenSymbols).join('|');
+  const requestedSymbolKeys = useMemo(
+    () => (requestedSymbolKey.length > 0 ? requestedSymbolKey.split('|') : []),
+    [requestedSymbolKey],
+  );
 
   const [tokenIconBySymbol, setTokenIconBySymbol] = useState<Record<string, string>>(() => ({}));
   const [tokenIconsLoaded, setTokenIconsLoaded] = useState<boolean>(() => true);
@@ -244,5 +250,6 @@ export const __useOnchainActionsIconMapsTestOnly = {
   loadTokenIcons,
   buildTokenIconResolutionSnapshot,
   buildRefreshedTokenIconMap,
+  buildRequestedSymbolKeys,
   resetIconMapsCachesForTests,
 };

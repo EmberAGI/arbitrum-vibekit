@@ -57,7 +57,7 @@ function renderChatFirstPage(
   return root;
 }
 
-describe('AgentDetailPage chat-first A2UI rendering', () => {
+describe('AgentDetailPage chat-first thread activity boundary', () => {
   let container: HTMLDivElement;
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
   const previousActEnvironment = (globalThis as typeof globalThis & {
@@ -85,7 +85,7 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
     container.remove();
   });
 
-  it('renders automation status cards through the A2UI renderer', () => {
+  it('keeps automation status events out of the chat transcript', () => {
     const root = renderChatFirstPage(container, {
       events: [
         {
@@ -121,16 +121,16 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
       ] as never,
     });
 
-    expect(container.querySelector('.a2ui-card')).not.toBeNull();
-    expect(container.textContent).toContain('Automation scheduled');
-    expect(container.textContent).toContain('Scheduled refresh every 5 minutes.');
+    expect(container.querySelector('.a2ui-card')).toBeNull();
+    expect(container.textContent).not.toContain('Automation scheduled');
+    expect(container.textContent).not.toContain('Scheduled refresh every 5 minutes.');
 
     act(() => {
       root.unmount();
     });
   });
 
-  it('renders the interrupt flow through an A2UI text field and button, then resolves through interrupt submit', () => {
+  it('keeps interrupt activity out of the chat transcript', () => {
     const onInterruptSubmit = vi.fn();
     const root = renderChatFirstPage(container, {
       events: [
@@ -158,44 +158,19 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
       onInterruptSubmit,
     });
 
-    expect(container.querySelector('.a2ui-textfield')).not.toBeNull();
-    expect(container.querySelector('.a2ui-button')).not.toBeNull();
-
-    const interruptTextarea = Array.from(container.querySelectorAll('textarea')).find((textarea) =>
-      textarea.parentElement?.textContent?.includes('Operator note'),
-    );
-    expect(interruptTextarea).toBeDefined();
-
-    act(() => {
-      const setValue = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype,
-        'value',
-      )?.set;
-      setValue?.call(interruptTextarea, 'Use the safe automation window');
-      interruptTextarea!.dispatchEvent(
-        new InputEvent('input', { bubbles: true, data: 'Use the safe automation window' }),
-      );
-    });
-
-    const submitButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Continue agent loop'),
-    );
-    expect(submitButton).toBeDefined();
-
-    act(() => {
-      submitButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(onInterruptSubmit).toHaveBeenCalledWith({
-      operatorNote: 'Use the safe automation window',
-    });
+    expect(container.querySelector('.a2ui-card')).toBeNull();
+    expect(container.querySelector('.a2ui-textfield')).toBeNull();
+    expect(container.querySelector('.a2ui-button')).toBeNull();
+    expect(container.textContent).not.toContain('Please provide a short operator note to continue.');
+    expect(container.textContent).not.toContain('Continue agent loop');
+    expect(onInterruptSubmit).not.toHaveBeenCalled();
 
     act(() => {
       root.unmount();
     });
   });
 
-  it('renders repeated automation artifact history without duplicate React child keys', () => {
+  it('keeps repeated automation artifact history out of chat without duplicate React child keys', () => {
     const root = renderChatFirstPage(container, {
       events: [
         {
@@ -225,8 +200,8 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
       ] as never,
     });
 
-    expect(container.textContent).toContain('Running automation refresh.');
-    expect(container.textContent).toContain('Automation refresh executed successfully.');
+    expect(container.textContent).not.toContain('Running automation refresh.');
+    expect(container.textContent).not.toContain('Automation refresh executed successfully.');
     expect(consoleErrorSpy).not.toHaveBeenCalledWith(
       expect.stringContaining('Encountered two children with the same key'),
     );
@@ -236,7 +211,7 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
     });
   });
 
-  it('renders lifecycle artifact updates after operator-note submission', () => {
+  it('keeps lifecycle artifact updates out of the chat transcript', () => {
     const root = renderChatFirstPage(container, {
       events: [
         {
@@ -254,9 +229,10 @@ describe('AgentDetailPage chat-first A2UI rendering', () => {
       ] as never,
     });
 
-    expect(container.textContent).toContain('Lifecycle onboarding');
-    expect(container.textContent).toContain('Step: delegation-note');
-    expect(container.textContent).toContain('Operator note: 5');
+    expect(container.querySelector('.a2ui-card')).toBeNull();
+    expect(container.textContent).not.toContain('Lifecycle onboarding');
+    expect(container.textContent).not.toContain('Step: delegation-note');
+    expect(container.textContent).not.toContain('Operator note: 5');
 
     act(() => {
       root.unmount();

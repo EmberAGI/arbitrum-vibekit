@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { projectDetailConnectAgentListUpdate } from './AgentRuntimeProvider';
+
+const providerPath = path.resolve(process.cwd(), 'src/components/AgentRuntimeProvider.tsx');
 
 describe('projectDetailConnectAgentListUpdate', () => {
   it('propagates lifecycle and onboarding status into the list update', () => {
@@ -52,5 +56,14 @@ describe('projectDetailConnectAgentListUpdate', () => {
       taskState: 'working',
       taskMessage: 'Processing managed onboarding.',
     });
+  });
+});
+
+describe('AgentRuntimeProvider shell stability', () => {
+  it('keeps the CopilotKit remount key scoped to the page runtime boundary', () => {
+    const source = fs.readFileSync(providerPath, 'utf8');
+
+    expect(source).toContain('threadId={threadId}');
+    expect(source).toContain('key={threadId}');
   });
 });
