@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -71,9 +71,9 @@ function createInternalPostgresHooks() {
   };
 }
 
-function createOwsTestSignerEnv() {
+function createOwsTestSignerEnv(options?: { passphrase?: string }) {
   const vaultPath = mkdtempSync(path.join(os.tmpdir(), 'agent-runtime-ows-'));
-  importWalletPrivateKey(TEST_WALLET_NAME, TEST_PRIVATE_KEY, undefined, vaultPath, 'evm');
+  importWalletPrivateKey(TEST_WALLET_NAME, TEST_PRIVATE_KEY, options?.passphrase, vaultPath, 'evm');
 
   return {
     vaultPath,
@@ -97,6 +97,8 @@ function createSigningService(env: NodeJS.ProcessEnv) {
       {
         signerRef: TEST_SIGNER_REF,
         walletNameOrIdEnvVar: 'TEST_OWS_WALLET_NAME',
+        passphraseEnvVar: 'TEST_OWS_PASSPHRASE',
+        passphraseFileEnvVar: 'TEST_OWS_PASSPHRASE_FILE',
         vaultPathEnvVar: 'TEST_OWS_VAULT_PATH',
       },
     ],
@@ -124,6 +126,36 @@ describe('agent-runtime internal signing surface', () => {
         signerRef: TEST_SIGNER_REF,
       }),
     ).resolves.toBe(TEST_EVM_ADDRESS);
+  });
+
+  it('uses a configured passphrase file when signing with an encrypted OWS wallet', async () => {
+    const passphrase = 'correct horse battery staple';
+    const fixture = createOwsTestSignerEnv({ passphrase });
+    cleanupFns.add(fixture.cleanup);
+    const passphraseFile = path.join(fixture.vaultPath, 'service-wallet-passphrase');
+    writeFileSync(passphraseFile, `${passphrase}\n`, { mode: 0o600 });
+
+    const signing = createSigningService({
+      ...fixture.env,
+      TEST_OWS_PASSPHRASE_FILE: passphraseFile,
+    });
+
+    await expect(
+      signing.signPayload({
+        signerRef: TEST_SIGNER_REF,
+        expectedAddress: TEST_EVM_ADDRESS,
+        payloadKind: 'transaction',
+        payload: {
+          chain: 'evm',
+          unsignedTransactionHex: TEST_UNSIGNED_TRANSACTION_HEX,
+        },
+      }),
+    ).resolves.toMatchObject({
+      confirmedAddress: TEST_EVM_ADDRESS,
+      signedPayload: {
+        signature: expect.stringMatching(/^0x[0-9a-f]+$/),
+      },
+    });
   });
 
   it('signs prepared transaction payloads through OWS core and returns a normalized signature envelope', async () => {
