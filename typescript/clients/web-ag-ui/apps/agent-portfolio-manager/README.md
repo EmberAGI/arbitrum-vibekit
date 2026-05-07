@@ -28,6 +28,9 @@ Runtime wiring:
   should use for the orchestrator identity.
 - `PORTFOLIO_MANAGER_OWS_PASSPHRASE` optionally unlocks that wallet when the
   vault requires it.
+- `PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE` points at a mounted passphrase file
+  such as `/run/secrets/portfolio_manager_ows_passphrase`; prefer this over
+  the plain passphrase env var for Docker deployments.
 - `PORTFOLIO_MANAGER_OWS_VAULT_PATH` points the runtime at the vault containing
   the configured controller wallet.
 - `ONCHAIN_ACTIONS_API_URL` optionally overrides the Onchain Actions API origin
@@ -36,7 +39,8 @@ Runtime wiring:
   used when the hidden executor wraps OCA swap calls in the delegated execution
   transaction signed by the runtime-owned signer.
 - `PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_WALLET_NAME`,
-  `PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE`, and
+  `PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE`,
+  `PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE_FILE`, and
   `PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_VAULT_PATH` select the direct OWS wallet
   for the hidden Onchain Actions executor identity and signing path.
 - when `SHARED_EMBER_BASE_URL` is set for the live managed-onboarding path,

@@ -1,0 +1,87 @@
+name: web-ag-ui
+
+services:
+  traefik:
+    volumes: !override
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${WEB_AG_UI_AUTH_HOST_PATH:-/opt/web-ag-ui/runtime/auth}/users.htpasswd:/etc/traefik/users.htpasswd:ro
+      - ${WEB_AG_UI_TRAEFIK_HOST_PATH:-/opt/web-ag-ui/runtime/traefik}/acme.json:/acme/acme.json
+
+  web:
+    ports: !override
+      - "127.0.0.1:3000:3000"
+
+  agent:
+    ports: !override
+      - "127.0.0.1:8123:8123"
+
+  agent-clmm:
+    ports: !override
+      - "127.0.0.1:8124:8124"
+
+  agent-pendle:
+    ports: !override
+      - "127.0.0.1:8125:8125"
+
+  agent-gmx-allora:
+    ports: !override
+      - "127.0.0.1:8126:8126"
+
+  pi-runtime-postgres:
+    ports: !override
+      - "127.0.0.1:55432:5432"
+
+  shared-ember:
+    environment:
+      PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_ows_passphrase
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_oca_executor_ows_passphrase
+      EMBER_LENDING_OWS_PASSPHRASE_FILE: /run/secrets/ember_lending_ows_passphrase
+    ports: !override
+      - "127.0.0.1:4010:4010"
+    secrets:
+      - portfolio_manager_ows_passphrase
+      - portfolio_manager_oca_executor_ows_passphrase
+      - ember_lending_ows_passphrase
+
+  agent-portfolio-manager:
+    environment:
+      PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_ows_passphrase
+      PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_oca_executor_ows_passphrase
+    ports: !override
+      - "127.0.0.1:3420:3420"
+    secrets:
+      - portfolio_manager_ows_passphrase
+      - portfolio_manager_oca_executor_ows_passphrase
+
+  agent-ember-lending:
+    environment:
+      EMBER_LENDING_OWS_PASSPHRASE_FILE: /run/secrets/ember_lending_ows_passphrase
+    ports: !override
+      - "127.0.0.1:3430:3430"
+    secrets:
+      - ember_lending_ows_passphrase
+
+secrets:
+  portfolio_manager_ows_passphrase:
+    file: ${PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE_PATH:-/opt/web-ag-ui/runtime/secrets/portfolio-manager-ows-passphrase}
+  portfolio_manager_oca_executor_ows_passphrase:
+    file: ${PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE_FILE_PATH:-/opt/web-ag-ui/runtime/secrets/portfolio-manager-oca-executor-ows-passphrase}
+  ember_lending_ows_passphrase:
+    file: ${EMBER_LENDING_OWS_PASSPHRASE_FILE_PATH:-/opt/web-ag-ui/runtime/secrets/ember-lending-ows-passphrase}
+
+volumes:
+  agent_langgraph_api:
+    external: true
+    name: web-ag-ui_agent_langgraph_api
+  agent_clmm_langgraph_api:
+    external: true
+    name: web-ag-ui_agent_clmm_langgraph_api
+  agent_pendle_langgraph_api:
+    external: true
+    name: web-ag-ui_agent_pendle_langgraph_api
+  agent_gmx_allora_langgraph_api:
+    external: true
+    name: web-ag-ui_agent_gmx_allora_langgraph_api
+  pi_runtime_postgres_data:
+    external: true
+    name: web-ag-ui_pi_runtime_postgres_data
