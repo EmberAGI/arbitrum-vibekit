@@ -8,10 +8,10 @@ function validConfig(overrides = {}) {
     name: 'web-ag-ui',
     services: {
       web: {
-        ports: [{ target: 3000, published: '3000', host_ip: '127.0.0.1' }],
+        ports: [],
       },
       agent: {
-        ports: [{ target: 8123, published: '8123', host_ip: '127.0.0.1' }],
+        ports: [],
         volumes: [
           {
             type: 'volume',
@@ -21,7 +21,7 @@ function validConfig(overrides = {}) {
         ],
       },
       'agent-clmm': {
-        ports: [{ target: 8124, published: '8124', host_ip: '127.0.0.1' }],
+        ports: [],
         volumes: [
           {
             type: 'volume',
@@ -31,7 +31,7 @@ function validConfig(overrides = {}) {
         ],
       },
       'agent-pendle': {
-        ports: [{ target: 8125, published: '8125', host_ip: '127.0.0.1' }],
+        ports: [],
         volumes: [
           {
             type: 'volume',
@@ -41,7 +41,7 @@ function validConfig(overrides = {}) {
         ],
       },
       'agent-gmx-allora': {
-        ports: [{ target: 8126, published: '8126', host_ip: '127.0.0.1' }],
+        ports: [],
         volumes: [
           {
             type: 'volume',
@@ -51,7 +51,7 @@ function validConfig(overrides = {}) {
         ],
       },
       'pi-runtime-postgres': {
-        ports: [{ target: 5432, published: '55432', host_ip: '127.0.0.1' }],
+        ports: [],
         volumes: [
           {
             type: 'volume',
@@ -61,7 +61,7 @@ function validConfig(overrides = {}) {
         ],
       },
       'agent-portfolio-manager': {
-        ports: [{ target: 3420, published: '3420', host_ip: '127.0.0.1' }],
+        ports: [],
         environment: {
           PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE:
             '/run/secrets/portfolio_manager_ows_passphrase',
@@ -70,13 +70,13 @@ function validConfig(overrides = {}) {
         },
       },
       'agent-ember-lending': {
-        ports: [{ target: 3430, published: '3430', host_ip: '127.0.0.1' }],
+        ports: [],
         environment: {
           EMBER_LENDING_OWS_PASSPHRASE_FILE: '/run/secrets/ember_lending_ows_passphrase',
         },
       },
       'shared-ember': {
-        ports: [{ target: 4010, published: '4010', host_ip: '127.0.0.1' }],
+        ports: [],
       },
       traefik: {
         ports: [
@@ -118,9 +118,11 @@ test('fails when the compose project name is not fixed', () => {
 
 test('fails when an internal service port is publicly bound', () => {
   const config = validConfig();
-  config.services['shared-ember'].ports = [{ target: 4010, published: '4010' }];
+  config.services['shared-ember'].ports = [
+    { target: 4010, published: '4010', host_ip: '127.0.0.1' },
+  ];
 
-  assert.match(validateProductionComposeConfig(config).join('\n'), /shared-ember.*4010.*public/i);
+  assert.match(validateProductionComposeConfig(config).join('\n'), /shared-ember.*4010.*remove/i);
 });
 
 test('fails when LangGraph state is not mounted from the expected named volume', () => {

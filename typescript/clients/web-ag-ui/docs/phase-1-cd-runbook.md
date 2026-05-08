@@ -26,8 +26,10 @@ Keep these paths server-local and outside GitHub Actions secrets:
 - `/opt/web-ag-ui/runtime/auth`
 - `/opt/web-ag-ui/runtime/traefik`
 
-The OWS vault directories are mounted read-only. Passphrase files are mounted as
-Compose secrets and read in the containers from `/run/secrets/...`.
+The OWS vault directories are mounted from server-local runtime state and must
+not be written by CD. Runtime containers may need read/write access to the vault
+directory for OWS lock/metadata updates. Passphrase files are mounted as Compose
+secrets and read in the containers from `/run/secrets/...`.
 
 ## Required Volumes
 
@@ -60,7 +62,7 @@ docker compose \
 The validator fails when:
 
 - the Compose project name is not `web-ag-ui`
-- internal service ports are not bound to localhost
+- internal service ports have any host publishing
 - LangGraph `.langgraph_api` state is not backed by the expected named volumes
 - PI runtime Postgres data is not backed by the expected named volume
 - PM or lending wallet passphrases are not read from `/run/secrets/...`

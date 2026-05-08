@@ -4,8 +4,6 @@ import { readFileSync } from 'node:fs';
 import { stdin } from 'node:process';
 
 const EXPECTED_PROJECT_NAME = 'web-ag-ui';
-const LOCALHOST_HOST_IPS = new Set(['127.0.0.1', '::1', 'localhost']);
-
 const INTERNAL_PORTS = new Map([
   ['web', new Set(['3000'])],
   ['agent', new Set(['8123'])],
@@ -147,12 +145,9 @@ function validateInternalPorts(services, errors) {
     const service = asObject(services[serviceName]);
     for (const port of Array.isArray(service.ports) ? service.ports : []) {
       const normalized = normalizePort(port);
-      if (
-        internalPorts.has(normalized.published) &&
-        !LOCALHOST_HOST_IPS.has(normalized.hostIp ?? '')
-      ) {
+      if (internalPorts.has(normalized.published) || internalPorts.has(normalized.target)) {
         errors.push(
-          `${serviceName} publishes internal port ${normalized.published} publicly; bind it to 127.0.0.1 or remove host publishing.`,
+          `${serviceName} publishes internal port ${normalized.published}; remove host publishing and keep it on the Compose network.`,
         );
       }
     }

@@ -8,58 +8,56 @@ services:
       - ${WEB_AG_UI_TRAEFIK_HOST_PATH:-/opt/web-ag-ui/runtime/traefik}/acme.json:/acme/acme.json
 
   web:
-    ports: !override
-      - "127.0.0.1:3000:3000"
+    ports: !override []
 
   agent:
-    ports: !override
-      - "127.0.0.1:8123:8123"
+    ports: !override []
 
   agent-clmm:
-    ports: !override
-      - "127.0.0.1:8124:8124"
+    ports: !override []
 
   agent-pendle:
-    ports: !override
-      - "127.0.0.1:8125:8125"
+    ports: !override []
 
   agent-gmx-allora:
-    ports: !override
-      - "127.0.0.1:8126:8126"
+    ports: !override []
 
   pi-runtime-postgres:
-    ports: !override
-      - "127.0.0.1:55432:5432"
+    ports: !override []
 
   shared-ember:
     environment:
       PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_ows_passphrase
       PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_oca_executor_ows_passphrase
       EMBER_LENDING_OWS_PASSPHRASE_FILE: /run/secrets/ember_lending_ows_passphrase
-    ports: !override
-      - "127.0.0.1:4010:4010"
+    ports: !override []
     secrets:
       - portfolio_manager_ows_passphrase
       - portfolio_manager_oca_executor_ows_passphrase
       - ember_lending_ows_passphrase
+    volumes: !override
+      - ${PORTFOLIO_MANAGER_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/portfolio-manager}:/runtime/ows/portfolio-manager
+      - ${EMBER_LENDING_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/ember-lending}:/runtime/ows/ember-lending
 
   agent-portfolio-manager:
     environment:
       PORTFOLIO_MANAGER_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_ows_passphrase
       PORTFOLIO_MANAGER_OCA_EXECUTOR_OWS_PASSPHRASE_FILE: /run/secrets/portfolio_manager_oca_executor_ows_passphrase
-    ports: !override
-      - "127.0.0.1:3420:3420"
+    ports: !override []
     secrets:
       - portfolio_manager_ows_passphrase
       - portfolio_manager_oca_executor_ows_passphrase
+    volumes: !override
+      - ${PORTFOLIO_MANAGER_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/portfolio-manager}:/runtime/ows/portfolio-manager
 
   agent-ember-lending:
     environment:
       EMBER_LENDING_OWS_PASSPHRASE_FILE: /run/secrets/ember_lending_ows_passphrase
-    ports: !override
-      - "127.0.0.1:3430:3430"
+    ports: !override []
     secrets:
       - ember_lending_ows_passphrase
+    volumes: !override
+      - ${EMBER_LENDING_OWS_HOST_PATH:-/opt/web-ag-ui/runtime/ows/ember-lending}:/runtime/ows/ember-lending
 
 secrets:
   portfolio_manager_ows_passphrase:
