@@ -157,6 +157,7 @@ export async function createEmberLendingGatewayService(
         signerRef: EMBER_LENDING_RUNTIME_SIGNER_REF,
         walletNameOrIdEnvVar: 'EMBER_LENDING_OWS_WALLET_NAME',
         passphraseEnvVar: 'EMBER_LENDING_OWS_PASSPHRASE',
+        passphraseFileEnvVar: 'EMBER_LENDING_OWS_PASSPHRASE_FILE',
         vaultPathEnvVar: 'EMBER_LENDING_OWS_VAULT_PATH',
       },
     ],

@@ -86,17 +86,35 @@ EMBER_LENDING_OWS_VAULT_PATH=/abs/path/to/ows/ember-lending \
 - That startup contract is the default expectation for local QA. Use the
   in-memory Shared Ember fallback only for intentionally short-lived smoke
   isolation.
-- The managed compose overlay also mounts the OWS vault directories read-only
-  into the managed containers. By default it expects host paths:
+- The managed compose overlay mounts the OWS vault directories into the managed
+  containers. By default it expects host paths:
   - `/opt/web-ag-ui/runtime/ows/portfolio-manager`
   - `/opt/web-ag-ui/runtime/ows/ember-lending`
   and the managed agent env files should point `*_OWS_VAULT_PATH` at the
   mounted in-container paths under `/runtime/ows/...`.
 - Example:
   - `SHARED_EMBER_REPO_ROOT=/abs/path/to/ember-orchestration-v1-spec docker compose -f compose.yaml -f compose.managed.yaml config`
+- `compose.production.yaml` is the production-safety overlay intended for the
+  private CD control plane. It fixes the Compose project name to `web-ag-ui`,
+  removes host publishing for internal service ports, mounts LangGraph and
+  Postgres state from fixed external Docker volumes, keeps Traefik
+  auth/certificate state under `/opt/web-ag-ui/runtime`, and supplies OWS
+  passphrase file paths through Compose secrets under `/run/secrets/...`.
+- Before any production container recreation, render the final Compose config
+  and run the preflight validator:
+
+```bash
+SHARED_EMBER_REPO_ROOT=/abs/path/to/ember-orchestration-v1-spec \
+docker compose -f compose.yaml -f compose.managed.yaml -f compose.production.yaml config --format json \
+  | pnpm cd:validate-compose
+```
+- The production CD flow must keep the OWS vault directories and secret files
+  server-local. Do not commit them, copy them from the public repo, or render
+  wallet passphrases through GitHub Actions secrets.
 
 ## Key Docs
 
+- [Phase 1 CD Runbook](./docs/phase-1-cd-runbook.md)
 - [C4 Target Architecture: web-ag-ui + Agents (AG-UI-only)](./docs/c4-target-architecture-web-ag-ui-agents.md)
 - [C4 Target Architecture: Pi Runtime + AG-UI + Automations](./docs/c4-pi-runtime-architecture-and-boundaries.md)
 - [AG-UI Client Runtime Invariants](./docs/ag-ui-client-runtime-invariants.md)

@@ -87,6 +87,9 @@ Runtime wiring:
   should use for startup identity proof, redelegation, and execution signing
 - `EMBER_LENDING_OWS_PASSPHRASE` optionally unlocks that wallet when the vault
   requires it
+- `EMBER_LENDING_OWS_PASSPHRASE_FILE` points at a mounted passphrase file such
+  as `/run/secrets/ember_lending_ows_passphrase`; prefer this over the plain
+  passphrase env var for Docker deployments
 - `EMBER_LENDING_OWS_VAULT_PATH` points the runtime at the vault containing the
   configured wallet
 - when `SHARED_EMBER_BASE_URL` is set for the live managed path, startup now

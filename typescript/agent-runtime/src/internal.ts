@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import {
   getWallet,
   signMessage as signMessageWithOwsCore,
@@ -86,6 +88,7 @@ export type AgentRuntimePrivateOwsSignerConfig = {
   signerRef: AgentRuntimeSignerRef;
   walletNameOrIdEnvVar: string;
   passphraseEnvVar?: string;
+  passphraseFileEnvVar?: string;
   vaultPathEnvVar?: string;
   addressChainIdPrefix?: string;
 };
@@ -199,6 +202,10 @@ function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function readStringFile(path: string): string | null {
+  return readString(readFileSync(path, 'utf8'));
+}
+
 function readNormalizedHex(value: unknown): `0x${string}` | null {
   const normalized = readString(value);
   if (!normalized?.startsWith('0x')) {
@@ -232,10 +239,15 @@ function resolveConfiguredOwsSigners(
   const resolved = new Map<AgentRuntimeSignerRef, ResolvedAgentRuntimePrivateOwsSignerConfig>();
 
   for (const signer of signers) {
+    const passphraseFilePath = signer.passphraseFileEnvVar
+      ? readString(env[signer.passphraseFileEnvVar])
+      : null;
     resolved.set(signer.signerRef, {
       ...signer,
       walletNameOrId: readString(env[signer.walletNameOrIdEnvVar]),
-      passphrase: signer.passphraseEnvVar ? readString(env[signer.passphraseEnvVar]) : null,
+      passphrase:
+        (signer.passphraseEnvVar ? readString(env[signer.passphraseEnvVar]) : null) ??
+        (passphraseFilePath ? readStringFile(passphraseFilePath) : null),
       vaultPath: signer.vaultPathEnvVar ? readString(env[signer.vaultPathEnvVar]) : null,
     });
   }

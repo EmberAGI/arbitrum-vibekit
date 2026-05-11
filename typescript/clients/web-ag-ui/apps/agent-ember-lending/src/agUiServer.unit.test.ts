@@ -195,6 +195,19 @@ describe('createEmberLendingGatewayService', () => {
 
     expect(ensureServiceIdentity).toHaveBeenCalledOnce();
     expect(createAgentRuntimeKernel).toHaveBeenCalledOnce();
+    expect(createAgentRuntimeKernel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owsSigners: [
+          {
+            signerRef: 'service-wallet',
+            walletNameOrIdEnvVar: 'EMBER_LENDING_OWS_WALLET_NAME',
+            passphraseEnvVar: 'EMBER_LENDING_OWS_PASSPHRASE',
+            passphraseFileEnvVar: 'EMBER_LENDING_OWS_PASSPHRASE_FILE',
+            vaultPathEnvVar: 'EMBER_LENDING_OWS_VAULT_PATH',
+          },
+        ],
+      }),
+    );
     const ensureCallOrder = ensureServiceIdentity.mock.invocationCallOrder.at(0);
     const runtimeCallOrder = runtimeCreated.mock.invocationCallOrder.at(0);
     expect(ensureCallOrder).toBeDefined();
