@@ -22,3 +22,4 @@ export { type ChainConfig, PublicEmberPluginRegistry };
 export { EndpointInterfaces } from './endpoint-interfaces/index.js';
 export * as PluginInterfaces from './core/index.js';
 export * from './core/index.js';
+export * from './polymarket-perpetuals-plugin/index.js';
