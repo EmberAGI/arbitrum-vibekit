@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>External Data Evidence Contract</title>
+  <link rel="stylesheet" href="../.style/spec.css">
+  <script defer src="../.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="evidence-title">
+    <p class="eyebrow">Domain contract · EMB-1145</p>
+    <h1>External data evidence</h1>
+    <p class="lede">Every externally sourced value carries enough evidence for a consumer to decide whether it is current, partial, stale, or unavailable.</p>
+  </header>
+
+  <section data-anchor="evidence-intended-behavior">
+    <h2>Intended behavior</h2>
+    <div class="flow" role="img" aria-label="Provider payload becomes a validated item result inside a versioned snapshot">
+      <article class="node"><strong>Provider payload</strong><p>Untrusted value and timing metadata.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>Adapter validation</strong><p>Normalize identity, value, time, and provenance.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>Item result</strong><p>One valid discriminated state.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>Snapshot envelope</strong><p>Stable identity and batch completeness.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-domain-concepts">
+    <h2>Domain concepts</h2>
+    <div class="grid">
+      <article class="card" data-anchor="evidence-concept-snapshot"><h3>Snapshot</h3><p>A versioned observation set with stable ID, quote currency, completeness, and creation context.</p></article>
+      <article class="card" data-anchor="evidence-concept-provenance"><h3>Provenance</h3><p>The provider, capability, asset identity, and optional safe source artifact that produced a field or item.</p></article>
+      <article class="card" data-anchor="evidence-concept-freshness"><h3>Freshness</h3><p>Observation, receipt, expiry, refresh, and retry timing with an explicit timestamp source.</p></article>
+      <article class="card" data-anchor="evidence-concept-completeness"><h3>Completeness</h3><p>Whether the requested coverage is complete, partial, stale, rate-limited, or unavailable.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-rules">
+    <h2>Rules and invariants</h2>
+    <ul>
+      <li data-anchor="evidence-rule-state">Every item validates as exactly one discriminated result state.</li>
+      <li data-anchor="evidence-rule-value">A current available result contains its value; an unavailable result cannot pretend to contain a current value.</li>
+      <li data-anchor="evidence-rule-stale">A stale last-known value may be preserved only as evidence and retains its original observation time.</li>
+      <li data-anchor="evidence-rule-clock">Receipt time never rewrites or extends provider observation time.</li>
+      <li data-anchor="evidence-rule-source">When provider observation time is absent, the fallback timestamp and its source are explicit.</li>
+      <li data-anchor="evidence-rule-partial">Batch completeness is derived from item results and cannot hide a failed item.</li>
+      <li data-anchor="evidence-rule-errors">Public warnings use stable safe codes; raw diagnostics and credentials never enter the contract.</li>
+      <li data-anchor="evidence-rule-version">Breaking semantic changes require a new contract version.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-contract">
+    <h2>Interfaces/contracts</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Required meaning</th></tr></thead>
+      <tbody>
+        <tr data-anchor="evidence-contract-snapshot"><td><code>SnapshotEnvelopeV1</code></td><td><code>schemaVersion</code>, <code>snapshotId</code>, quote currency, completeness, items, and structured warnings.</td></tr>
+        <tr data-anchor="evidence-contract-freshness"><td><code>FreshnessEvidenceV1</code></td><td><code>observedAt</code>, <code>receivedAt</code>, <code>freshUntil</code>, optional <code>refreshAfter</code>/<code>retryAfter</code>, and <code>observedAtSource</code>.</td></tr>
+        <tr data-anchor="evidence-contract-provenance"><td><code>ProvenanceV1</code></td><td>Provider ID, capability, canonical subject, source class, and optional safe digest/artifact reference.</td></tr>
+        <tr data-anchor="evidence-contract-result"><td><code>DataResultV1</code></td><td>Discriminated states for available, stale, rate-limited, not-found, and unavailable outcomes.</td></tr>
+        <tr data-anchor="evidence-contract-warning"><td><code>PublicWarningV1</code></td><td>Stable code, safe message, affected subject, and retry guidance without internal exception text.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section data-anchor="evidence-state-map">
+    <h2>Result-state map</h2>
+    <div class="grid">
+      <article class="card" data-anchor="evidence-state-available"><h3 class="good">Available</h3><p>Current value plus complete freshness and provenance evidence.</p></article>
+      <article class="card" data-anchor="evidence-state-stale"><h3 class="warn">Stale</h3><p>Optional last-known value remains evidence-only after <code>freshUntil</code>.</p></article>
+      <article class="card" data-anchor="evidence-state-rate"><h3 class="warn">Rate limited</h3><p>No fabricated current value; retry guidance may be supplied.</p></article>
+      <article class="card" data-anchor="evidence-state-missing"><h3 class="bad">Not found / unavailable</h3><p>The subject was unsupported, absent, invalid, or could not be observed.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-edge-cases">
+    <h2>Edge cases</h2>
+    <ul>
+      <li data-anchor="evidence-edge-mixed">A partial batch contains healthy and failed item results under one partial envelope.</li>
+      <li data-anchor="evidence-edge-clock">Clock order and duration invariants reject impossible timing such as <code>freshUntil &lt; observedAt</code>.</li>
+      <li data-anchor="evidence-edge-receipt">A cached value keeps its original provider observation time across later HTTP receipts.</li>
+      <li data-anchor="evidence-edge-fields">Aggregated records may attach provenance per field when one item-level provider would be misleading.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-constraints">
+    <h2>Constraints</h2>
+    <ul>
+      <li data-anchor="evidence-constraint-package">The package is lightweight and has no Aave, protocol SDK, network client, cache, or server dependency.</li>
+      <li data-anchor="evidence-constraint-zod">Zod schemas are the runtime validation authority and exported TypeScript types are inferred from them.</li>
+      <li data-anchor="evidence-constraint-neutral">The contract describes evidence rather than product-specific authorization policy.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li data-anchor="evidence-nongoal-fetch">No provider fetching, retry, cache, or rate-limit implementation.</li>
+      <li data-anchor="evidence-nongoal-registry">No plugin discovery lifecycle redesign; EMB-1148 owns that work.</li>
+      <li data-anchor="evidence-nongoal-wallet">No wallet aggregation implementation; EMB-1146 consumes this contract.</li>
+      <li data-anchor="evidence-nongoal-transactions">No transaction or action authorization types.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-open-questions">
+    <h2>Open questions about system behavior</h2>
+    <p data-anchor="evidence-open-compatibility">Final package version and compatibility export strategy must preserve existing registry consumers and will be settled during acceptance review.</p>
+  </section>
+
+  <section data-anchor="evidence-decisions">
+    <h2>Decision log or links to ADRs</h2>
+    <ul>
+      <li><a href="../adr/0001-neutral-data-contract-package.spec.html">ADR 0001 — neutral data-contract package</a>.</li>
+      <li data-anchor="evidence-decision-union">2026-07-15: result states use a discriminated union rather than optional values plus loosely related flags.</li>
+      <li data-anchor="evidence-decision-fields">2026-07-15: field-level provenance is supported for aggregated wallet records.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-references">
+    <h2>References to source issues</h2>
+    <ul>
+      <li><a href="https://linear.app/emberai/issue/EMB-1145">EMB-1145 — versioned evidence contracts</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1144">EMB-1144 — cached batch token prices</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1146">EMB-1146 — transparent wallet snapshots</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
