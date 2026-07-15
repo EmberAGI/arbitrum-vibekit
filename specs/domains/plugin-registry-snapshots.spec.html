@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Public Plugin Registry Snapshots</title>
+  <link rel="stylesheet" href="../.style/spec.css">
+  <script defer src="../.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="registry-title">
+    <p class="eyebrow">Domain contract · EMB-1148</p>
+    <h1>Public plugin registry snapshots</h1>
+    <p class="lede">Plugin discovery publishes one deterministic, validated snapshot instead of exposing mutable arrays and iterator side effects.</p>
+  </header>
+
+  <section data-anchor="registry-intended-behavior">
+    <h2>Intended behavior</h2>
+    <div class="flow" role="img" aria-label="Explicit plugin sources load into validation before one immutable snapshot is published">
+      <article class="node"><strong>Plugin sources</strong><p>Protocol factories, local sources, and deferred imports.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>Load phase</strong><p>Resolve with explicit timeout and failure behavior.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>Validation</strong><p>Unique IDs, supported types, and lifecycle ownership.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>RegistrySnapshot</strong><p>Read-only identities and deterministic ordering for every consumer.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="registry-domain-concepts">
+    <h2>Domain concepts</h2>
+    <div class="grid">
+      <article class="card" data-anchor="registry-concept-source"><h3>Plugin source</h3><p>An explicit factory or loader that can produce zero or more action/query plugins.</p></article>
+      <article class="card" data-anchor="registry-concept-snapshot"><h3>Registry snapshot</h3><p>The stable ordered plugin set published after load and validation.</p></article>
+      <article class="card" data-anchor="registry-concept-deferred"><h3>Deferred load</h3><p>An asynchronous plugin source whose success and failure policy is part of the interface.</p></article>
+      <article class="card" data-anchor="registry-concept-lifecycle"><h3>Lifecycle capability</h3><p>Refreshable topology owned by one stable plugin/provider ID.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="registry-rules">
+    <h2>Rules and invariants</h2>
+    <ul>
+      <li data-anchor="registry-rule-unique">One plugin ID identifies exactly one plugin in a published snapshot.</li>
+      <li data-anchor="registry-rule-order">Source order and plugin ordering are deterministic and documented.</li>
+      <li data-anchor="registry-rule-repeat">Repeated reads return the same snapshot without resolving, registering, or duplicating plugins again.</li>
+      <li data-anchor="registry-rule-validation">Duplicate IDs, unsupported types, and lifecycle ownership conflicts fail validation.</li>
+      <li data-anchor="registry-rule-source">The generic registry accepts explicit sources and does not hardcode Aave or another protocol initializer.</li>
+      <li data-anchor="registry-rule-deferred">Deferred source timeout and failure behavior are explicit rather than iterator-dependent.</li>
+      <li data-anchor="registry-rule-lifecycle">Lifecycle capabilities cannot silently overwrite another owner.</li>
+      <li data-anchor="registry-rule-separation">Market-data providers remain outside the DeFi action/query <code>PluginType</code> model.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="registry-contract">
+    <h2>Interfaces/contracts</h2>
+    <table>
+      <thead><tr><th>Interface</th><th>Responsibility</th></tr></thead>
+      <tbody>
+        <tr data-anchor="registry-contract-source"><td><code>PluginSource</code></td><td>Stable source ID and an explicit asynchronous load operation.</td></tr>
+        <tr data-anchor="registry-contract-result"><td><code>PluginSourceResult</code></td><td>Loaded plugins plus safe warnings for skipped or failed optional sources.</td></tr>
+        <tr data-anchor="registry-contract-snapshot"><td><code>RegistrySnapshot</code></td><td>Version, creation time, ordered read-only plugins, lifecycle capabilities, and source results.</td></tr>
+        <tr data-anchor="registry-contract-init"><td>Registry initialization</td><td>Load sources once, validate globally, then publish or fail readiness.</td></tr>
+        <tr data-anchor="registry-contract-compat"><td>Compatibility seam</td><td>Existing iteration consumers receive an explicit migration path backed by the stable snapshot.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section data-anchor="registry-state-map">
+    <h2>Load-state map</h2>
+    <div class="grid">
+      <article class="card" data-anchor="registry-state-loading"><h3>Loading</h3><p>No incomplete mutable plugin set is published.</p></article>
+      <article class="card" data-anchor="registry-state-ready"><h3 class="good">Ready</h3><p>One validated snapshot is available to every reader.</p></article>
+      <article class="card" data-anchor="registry-state-degraded"><h3 class="warn">Degraded</h3><p>Only explicitly optional source failures may publish with structured warnings.</p></article>
+      <article class="card" data-anchor="registry-state-failed"><h3 class="bad">Failed</h3><p>Required-source, duplicate-ID, or lifecycle conflicts prevent publication.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="registry-edge-cases">
+    <h2>Edge cases</h2>
+    <ul>
+      <li data-anchor="registry-edge-duplicate">The same plugin ID from two sources is an error even when the implementations appear identical.</li>
+      <li data-anchor="registry-edge-late">A deferred plugin that resolves after timeout cannot mutate an already published snapshot.</li>
+      <li data-anchor="registry-edge-empty">A source returning no plugins is distinguishable from a source failure.</li>
+      <li data-anchor="registry-edge-repeat">Multiple consumers can read concurrently without triggering multiple load cycles.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="registry-constraints">
+    <h2>Constraints</h2>
+    <ul>
+      <li data-anchor="registry-constraint-compatibility">Existing plugin action/query typing remains supported during migration.</li>
+      <li data-anchor="registry-constraint-tests">The registry package gains substantive contract tests; a no-op CI command is insufficient.</li>
+      <li data-anchor="registry-constraint-diagnostics">Public diagnostics contain no RPC credentials or raw provider exceptions.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="registry-non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li data-anchor="registry-nongoal-server">No server wrapper migration; EMB-1149 consumes this contract.</li>
+      <li data-anchor="registry-nongoal-data">No market-data adapter or provider-catalog implementation.</li>
+      <li data-anchor="registry-nongoal-contracts">No external-data evidence DTO redesign; EMB-1145 owns it.</li>
+      <li data-anchor="registry-nongoal-actions">No protocol action semantics change.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="registry-open-questions">
+    <h2>Open questions about system behavior</h2>
+    <p data-anchor="registry-open-timeout">Acceptance review must decide which sources are required and the bounded timeout/skip policy for optional deferred sources.</p>
+  </section>
+
+  <section data-anchor="registry-decisions">
+    <h2>Decision log or links to ADRs</h2>
+    <ul>
+      <li><a href="../adr/0002-deterministic-plugin-registry.spec.html">ADR 0002 — deterministic plugin registry snapshots</a>.</li>
+      <li data-anchor="registry-decision-snapshot">2026-07-15: discovery publishes a stable snapshot rather than a mutable one-shot iterator.</li>
+      <li data-anchor="registry-decision-separation">2026-07-15: data providers remain orthogonal to action/query plugins.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="registry-references">
+    <h2>References to source issues</h2>
+    <ul>
+      <li><a href="https://linear.app/emberai/issue/EMB-1148">EMB-1148 — deterministic public plugin discovery</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1149">EMB-1149 — server snapshot consumption</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>

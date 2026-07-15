@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR 0002 — Deterministic Plugin Registry</title>
+  <link rel="stylesheet" href="../.style/spec.css">
+  <script defer src="../.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="registry-adr-title">
+    <p class="eyebrow">Proposed architecture decision · EMB-1148</p>
+    <h1>Deterministic plugin registry snapshots</h1>
+    <p class="lede">Load and validate plugin sources once, then publish one read-only snapshot for the process lifecycle.</p>
+  </header>
+  <section data-anchor="registry-adr-context">
+    <h2>Context</h2>
+    <p>Mutable arrays and deferred promises currently make discovery depend on which consumer iterates first.</p>
+    <p>The server duplicates this behavior and copies yielded plugins into another registry.</p>
+  </section>
+  <section data-anchor="registry-adr-decision">
+    <h2>Decision</h2>
+    <p>The public registry becomes the owner of source loading, global identity validation, and immutable snapshot publication.</p>
+    <p>Protocol initializers become explicit sources instead of hardcoded generic-registry behavior.</p>
+  </section>
+  <section data-anchor="registry-adr-tradeoffs">
+    <h2>Trade-offs</h2>
+    <table>
+      <thead><tr><th>Alternative</th><th>Why rejected</th></tr></thead>
+      <tbody>
+        <tr><td>Continue lazy iterator mutation</td><td>Reader order remains observable and duplicate registration remains possible.</td></tr>
+        <tr><td>Let every consumer cache independently</td><td>Lifecycle, errors, and ordering drift across consumers.</td></tr>
+        <tr><td>Use a general capability bag for actions and data</td><td>Weakens domain typing and conflates transaction generation with read evidence.</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-anchor="registry-adr-consequences">
+    <h2>Consequences</h2>
+    <ul>
+      <li>Readiness waits for required sources and validation.</li>
+      <li>Optional failures must have an explicit degraded-state contract.</li>
+      <li>Consumers migrate from ownership of loading to consumption of the published snapshot.</li>
+      <li>Registry package CI must test lifecycle and concurrency semantics.</li>
+    </ul>
+  </section>
+  <section data-anchor="registry-adr-references">
+    <h2>References</h2>
+    <p><a href="../domains/plugin-registry-snapshots.spec.html">Public plugin registry snapshots domain spec</a> · <a href="https://linear.app/emberai/issue/EMB-1148">EMB-1148</a></p>
+  </section>
+</main>
+</body>
+</html>
