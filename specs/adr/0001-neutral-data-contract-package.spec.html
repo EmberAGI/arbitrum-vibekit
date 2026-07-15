@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR 0001 — Neutral Data-contract Package</title>
+  <link rel="stylesheet" href="../.style/spec.css">
+  <script defer src="../.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="contracts-adr-title">
+    <p class="eyebrow">Accepted architecture decision · EMB-1145</p>
+    <h1>Neutral data-contract package</h1>
+    <p class="lede">Public evidence schemas live below both the plugin registry and the server, not inside either implementation.</p>
+  </header>
+  <section data-anchor="contracts-adr-context">
+    <h2>Context</h2>
+    <p>The registry package already owns endpoint schemas but also bundles protocol implementations and Aave dependencies.</p>
+    <p>The server must share exactly the same validated DTOs without depending on plugin implementations.</p>
+  </section>
+  <section data-anchor="contracts-adr-decision">
+    <h2>Decision</h2>
+    <div class="flow" role="img" aria-label="Neutral contracts package is depended on by registry and server">
+      <article class="node"><strong>@emberai/onchain-actions-registry</strong><p>Plugin interfaces and public plugin discovery.</p></article>
+      <div class="arrow">←</div>
+      <article class="node"><strong>@emberai/onchain-actions-contracts</strong><p>Versioned Zod evidence schemas only.</p></article>
+      <div class="arrow">→</div>
+      <article class="node"><strong>onchain-actions</strong><p>Provider orchestration and HTTP/MCP delivery.</p></article>
+    </div>
+  </section>
+  <section data-anchor="contracts-adr-tradeoffs">
+    <h2>Trade-offs</h2>
+    <table>
+      <thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
+      <tbody>
+        <tr><td>Keep schemas only in the registry package</td><td>Generic consumers inherit protocol implementation dependencies and ownership ambiguity.</td></tr>
+        <tr><td>Define schemas only in the server</td><td>Plugin/query authors lose the public source of truth and drift becomes likely.</td></tr>
+        <tr><td>Duplicate DTOs</td><td>Compile-time similarity cannot enforce runtime semantic compatibility.</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-anchor="contracts-adr-consequences">
+    <h2>Consequences</h2>
+    <ul>
+      <li>The contracts package must remain dependency-light and side-effect free.</li>
+      <li>The registry and server publish migrations against a shared versioned seam.</li>
+      <li>Provider implementations, cache behavior, and product authorization remain outside the package.</li>
+    </ul>
+  </section>
+  <section data-anchor="contracts-adr-references">
+    <h2>References</h2>
+    <p><a href="../domains/external-data-evidence-contract.spec.html">External data evidence domain spec</a> · <a href="https://linear.app/emberai/issue/EMB-1145">EMB-1145</a></p>
+  </section>
+</main>
+</body>
+</html>
