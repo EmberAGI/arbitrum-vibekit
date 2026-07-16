@@ -31,10 +31,10 @@
   <section data-anchor="evidence-domain-concepts">
     <h2>Domain concepts</h2>
     <div class="grid">
-      <article class="card" data-anchor="evidence-concept-snapshot"><h3>Snapshot</h3><p>A versioned observation set with stable ID, quote currency, completeness, and creation context.</p></article>
+      <article class="card" data-anchor="evidence-concept-snapshot"><h3>Snapshot</h3><p>A versioned wire-format observation set with stable ID, quote currency, completeness, and creation context.</p></article>
       <article class="card" data-anchor="evidence-concept-provenance"><h3>Provenance</h3><p>The provider, capability, asset identity, and optional safe source artifact that produced a field or item.</p></article>
       <article class="card" data-anchor="evidence-concept-freshness"><h3>Freshness</h3><p>Observation, receipt, expiry, refresh, and retry timing with an explicit timestamp source.</p></article>
-      <article class="card" data-anchor="evidence-concept-completeness"><h3>Completeness</h3><p>Whether the requested coverage is complete, partial, stale, rate-limited, or unavailable.</p></article>
+      <article class="card" data-anchor="evidence-concept-completeness"><h3>Completeness</h3><p>Whether current values cover every requested subject, some requested subjects, or none. Item states independently explain stale, rate-limited, not-found, and unavailable outcomes.</p></article>
     </div>
   </section>
 
@@ -49,6 +49,8 @@
       <li data-anchor="evidence-rule-partial">Batch completeness is derived from item results and cannot hide a failed item.</li>
       <li data-anchor="evidence-rule-errors">Public warnings use stable safe codes; raw diagnostics and credentials never enter the contract.</li>
       <li data-anchor="evidence-rule-version">Breaking semantic changes require a new contract version.</li>
+      <li data-anchor="evidence-rule-wire">Wire properties use <code>snake_case</code>; timestamps are RFC 3339 UTC strings and decimal quantities are strings.</li>
+      <li data-anchor="evidence-rule-digest">A source digest is <code>sha256:&lt;lowercase hex&gt;</code> over the validated public provider observation after deterministic JSON key ordering; secrets and internal diagnostics are excluded.</li>
     </ul>
   </section>
 
@@ -57,11 +59,12 @@
     <table>
       <thead><tr><th>Type</th><th>Required meaning</th></tr></thead>
       <tbody>
-        <tr data-anchor="evidence-contract-snapshot"><td><code>SnapshotEnvelopeV1</code></td><td><code>schemaVersion</code>, <code>snapshotId</code>, quote currency, completeness, items, and structured warnings.</td></tr>
-        <tr data-anchor="evidence-contract-freshness"><td><code>FreshnessEvidenceV1</code></td><td><code>observedAt</code>, <code>receivedAt</code>, <code>freshUntil</code>, optional <code>refreshAfter</code>/<code>retryAfter</code>, and <code>observedAtSource</code>.</td></tr>
-        <tr data-anchor="evidence-contract-provenance"><td><code>ProvenanceV1</code></td><td>Provider ID, capability, canonical subject, source class, and optional safe digest/artifact reference.</td></tr>
-        <tr data-anchor="evidence-contract-result"><td><code>DataResultV1</code></td><td>Discriminated states for available, stale, rate-limited, not-found, and unavailable outcomes.</td></tr>
-        <tr data-anchor="evidence-contract-warning"><td><code>PublicWarningV1</code></td><td>Stable code, safe message, affected subject, and retry guidance without internal exception text.</td></tr>
+        <tr data-anchor="evidence-contract-snapshot"><td><code>createSnapshotEnvelopeV1Schema(subjectSchema, valueSchema)</code></td><td><code>schema_version: "1"</code>, <code>snapshot_id</code>, <code>quote_currency</code>, <code>completeness</code>, items, and structured warnings. The factory validates caller-owned subject and value shapes without weakening the envelope invariants.</td></tr>
+        <tr data-anchor="evidence-contract-freshness"><td><code>FreshnessEvidenceV1Schema</code></td><td><code>observed_at</code>, <code>received_at</code>, <code>fresh_until</code>, optional <code>refresh_after</code>/<code>retry_after</code>, and <code>observed_at_source</code>. Clock ordering is validated.</td></tr>
+        <tr data-anchor="evidence-contract-provenance"><td><code>ProvenanceV1Schema</code></td><td>Provider ID, capability, canonical subject reference, source class, and optional safe digest/artifact reference.</td></tr>
+        <tr data-anchor="evidence-contract-result"><td><code>createDataResultV1Schema(subjectSchema, valueSchema)</code></td><td>Discriminated states for <code>available</code>, <code>stale</code>, <code>rate_limited</code>, <code>not_found</code>, and <code>unavailable</code>. Only <code>available</code> carries a current value; <code>stale</code> may carry an evidence-only last-known value.</td></tr>
+        <tr data-anchor="evidence-contract-field"><td><code>createEvidencedFieldV1Schema(valueSchema)</code></td><td>Value plus field-level provenance and freshness for aggregated records whose fields originate from different providers.</td></tr>
+        <tr data-anchor="evidence-contract-warning"><td><code>PublicWarningV1Schema</code></td><td>Stable safe code, bounded safe message, affected subject reference, and retry guidance without internal exception text. V1 codes are <code>partial_result</code>, <code>timestamp_fallback</code>, <code>stale_observation</code>, <code>rate_limited</code>, <code>not_found</code>, <code>unsupported_subject</code>, <code>provider_unavailable</code>, and <code>provider_payload_invalid</code>.</td></tr>
       </tbody>
     </table>
   </section>
@@ -80,9 +83,11 @@
     <h2>Edge cases</h2>
     <ul>
       <li data-anchor="evidence-edge-mixed">A partial batch contains healthy and failed item results under one partial envelope.</li>
-      <li data-anchor="evidence-edge-clock">Clock order and duration invariants reject impossible timing such as <code>freshUntil &lt; observedAt</code>.</li>
+      <li data-anchor="evidence-edge-clock">Clock order and duration invariants reject impossible timing such as <code>fresh_until &lt; observed_at</code>, <code>received_at &lt; observed_at</code>, or <code>refresh_after &gt; fresh_until</code>.</li>
       <li data-anchor="evidence-edge-receipt">A cached value keeps its original provider observation time across later HTTP receipts.</li>
       <li data-anchor="evidence-edge-fields">Aggregated records may attach provenance per field when one item-level provider would be misleading.</li>
+      <li data-anchor="evidence-edge-request">Structurally invalid requests fail at the consuming HTTP or module interface. A valid subject whose provider payload is malformed returns an item-level <code>unavailable</code> result with a safe <code>provider_payload_invalid</code> code.</li>
+      <li data-anchor="evidence-edge-completeness">Envelope completeness is <code>complete</code> when every item is available, <code>partial</code> when some are available, and <code>unavailable</code> when none are currently usable.</li>
     </ul>
   </section>
 
@@ -91,7 +96,10 @@
     <ul>
       <li data-anchor="evidence-constraint-package">The package is lightweight and has no Aave, protocol SDK, network client, cache, or server dependency.</li>
       <li data-anchor="evidence-constraint-zod">Zod schemas are the runtime validation authority and exported TypeScript types are inferred from them.</li>
+      <li data-anchor="evidence-constraint-zod-version">V1 uses a Zod 3 peer dependency so the registry and server share one compatible runtime schema instance.</li>
       <li data-anchor="evidence-constraint-neutral">The contract describes evidence rather than product-specific authorization policy.</li>
+      <li data-anchor="evidence-constraint-adoption">Consumers import the contracts package directly. The registry does not re-export it, and existing registry exports remain unchanged.</li>
+      <li data-anchor="evidence-constraint-release">The package follows the repository's existing <code>0.0.0</code> semantic-release source version, public npm provenance, stable <code>main</code> channel, and prerelease <code>next</code> channel.</li>
     </ul>
   </section>
 
@@ -107,7 +115,7 @@
 
   <section data-anchor="evidence-open-questions">
     <h2>Open questions about system behavior</h2>
-    <p data-anchor="evidence-open-compatibility">Final package version and compatibility export strategy must preserve existing registry consumers and will be settled during acceptance review.</p>
+    <p data-anchor="evidence-open-none">None. First publication still requires the package-specific npm trusted-publisher registration described in the release readiness notes.</p>
   </section>
 
   <section data-anchor="evidence-decisions">
@@ -116,6 +124,9 @@
       <li><a href="../adr/0001-neutral-data-contract-package.spec.html">ADR 0001 — neutral data-contract package</a>.</li>
       <li data-anchor="evidence-decision-union">2026-07-15: result states use a discriminated union rather than optional values plus loosely related flags.</li>
       <li data-anchor="evidence-decision-fields">2026-07-15: field-level provenance is supported for aggregated wallet records.</li>
+      <li data-anchor="evidence-decision-wire">2026-07-15: the public wire contract uses snake_case, RFC 3339 UTC timestamps, and decimal strings.</li>
+      <li data-anchor="evidence-decision-compatibility">2026-07-15: consumers import the neutral package directly; preserving registry compatibility means leaving current registry exports unchanged.</li>
+      <li data-anchor="evidence-decision-architecture-approved">2026-07-15: the operator approved the neutral package Module, Zod 3 Interface, generic schema factories, and OIDC release integration.</li>
     </ul>
   </section>
 
