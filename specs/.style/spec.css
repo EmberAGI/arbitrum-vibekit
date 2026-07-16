@@ -55,8 +55,47 @@ th { color: var(--ink); }
 .callout { border-left: 4px solid var(--accent); padding: 0.35rem 1rem; background: rgba(125, 211, 252, 0.07); border-radius: 0 12px 12px 0; }
 ul { padding-left: 1.2rem; }
 .meta { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.architecture-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
+.architecture-figure {
+  margin: 1rem 0 0;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(7, 11, 24, 0.76);
+  overflow: hidden;
+}
+.architecture-figure svg { display: block; width: 100%; height: auto; min-width: 760px; }
+.architecture-figure figcaption { border-top: 1px solid var(--line); color: var(--muted); padding: 0.8rem 1rem; }
+.arch-zone { fill: rgba(24, 35, 61, 0.62); stroke: var(--line); stroke-width: 2; }
+.arch-zone.public { fill: rgba(125, 211, 252, 0.06); stroke: rgba(125, 211, 252, 0.65); }
+.arch-zone.private { fill: rgba(134, 239, 172, 0.04); stroke: rgba(134, 239, 172, 0.5); }
+.arch-zone.external { fill: rgba(253, 230, 138, 0.04); stroke: rgba(253, 230, 138, 0.55); }
+.arch-box { fill: #121a2f; stroke: #526482; stroke-width: 2; rx: 12; }
+.arch-box.module { stroke: var(--good); stroke-width: 3; }
+.arch-box.interface { stroke: var(--accent); }
+.arch-box.adapter { stroke: #d8b4fe; }
+.arch-box.later { stroke: var(--warn); stroke-dasharray: 8 6; }
+.arch-box.warning { stroke: var(--bad); }
+.arch-edge { fill: none; stroke: var(--accent); stroke-width: 2.5; }
+.arch-edge.good { stroke: var(--good); }
+.arch-edge.warn { stroke: var(--warn); }
+.arch-edge.muted { stroke: #71809e; }
+.arch-edge.dashed { stroke-dasharray: 8 6; }
+.arch-edge.blocked { stroke: var(--bad); stroke-dasharray: 6 5; }
+.arch-title { fill: var(--ink); font-size: 17px; font-weight: 750; }
+.arch-copy { fill: var(--muted); font-size: 13px; }
+.arch-small { fill: var(--muted); font-size: 11px; }
+.arch-zone-title { fill: var(--accent); font-size: 14px; font-weight: 750; letter-spacing: 0.08em; text-transform: uppercase; }
+.arch-label { fill: var(--ink); font-size: 12px; font-weight: 700; }
+.architecture-legend { display: flex; flex-wrap: wrap; gap: 0.6rem 1rem; margin-top: 0.8rem; color: var(--muted); font-size: 0.82rem; }
+.legend-key { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend-swatch { width: 1.2rem; height: 0.75rem; border: 2px solid var(--line); border-radius: 4px; background: var(--surface); }
+.legend-swatch.module { border-color: var(--good); }
+.legend-swatch.interface { border-color: var(--accent); }
+.legend-swatch.adapter { border-color: #d8b4fe; }
+.legend-swatch.later { border-color: var(--warn); border-style: dashed; }
 @media (max-width: 700px) {
   main { width: min(100% - 1rem, 1120px); padding-top: 1rem; }
   header, section { border-radius: 13px; }
   .arrow { flex: 0 0 100%; text-align: center; transform: rotate(90deg); }
+  .architecture-figure { border-radius: 12px; }
 }

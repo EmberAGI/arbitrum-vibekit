@@ -22,12 +22,30 @@
   </section>
   <section data-anchor="contracts-adr-decision">
     <h2>Decision</h2>
-    <div class="flow" role="img" aria-label="Registry and server depend on the neutral contracts package">
-      <article class="node"><strong>@emberai/onchain-actions-registry</strong><p>Registry runtime, discovery, and bundled plugin implementations.</p></article>
-      <div class="arrow">→</div>
-      <article class="node"><strong>@emberai/onchain-actions-contracts</strong><p>Neutral core, plugin, endpoint, and evidence schemas.</p></article>
-      <div class="arrow">←</div>
-      <article class="node"><strong>onchain-actions</strong><p>Provider orchestration and HTTP/MCP delivery.</p></article>
+    <div class="architecture-scroll">
+      <figure class="architecture-figure">
+        <svg viewBox="0 0 1180 410" role="img" aria-labelledby="contracts-adr-diagram-title contracts-adr-diagram-desc">
+          <title id="contracts-adr-diagram-title">Neutral contracts package below registry and server implementations</title>
+          <desc id="contracts-adr-diagram-desc">The public registry runtime and private onchain-actions server both depend on a public neutral contracts module. The contracts module does not depend back on either implementation.</desc>
+          <defs><marker id="contracts-adr-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc"/></marker></defs>
+          <rect class="arch-box adapter" x="70" y="56" width="400" height="112"/>
+          <text class="arch-title" x="94" y="88">@emberai/onchain-actions-registry</text>
+          <text class="arch-copy" x="94" y="117">Registry runtime + discovery</text>
+          <text class="arch-copy" x="94" y="141">Bundled protocol implementations</text>
+          <rect class="arch-box adapter" x="710" y="56" width="400" height="112"/>
+          <text class="arch-title" x="734" y="88">EmberAGI/onchain-actions</text>
+          <text class="arch-copy" x="734" y="117">Provider orchestration + server delivery</text>
+          <text class="arch-copy" x="734" y="141">Host implementations of public ports</text>
+          <rect class="arch-box module" x="285" y="240" width="610" height="124"/>
+          <text class="arch-title" x="310" y="273">@emberai/onchain-actions-contracts</text>
+          <text class="arch-copy" x="310" y="301">/core · /plugins · /endpoints · /evidence</text>
+          <text class="arch-small" x="310" y="329">One neutral source · Zod 3 peer · no registry/server/network/protocol dependency</text>
+          <path class="arch-edge" d="M270 168 V209 H480 V240" marker-end="url(#contracts-adr-arrow)"/>
+          <path class="arch-edge" d="M910 168 V209 H700 V240" marker-end="url(#contracts-adr-arrow)"/>
+          <text class="arch-label" x="500" y="214">both implementations depend downward on contracts</text>
+        </svg>
+        <figcaption>The arrows are intentionally one-way. Compatibility re-exports preserve the registry’s existing surface while new consumers import contract entrypoints directly.</figcaption>
+      </figure>
     </div>
     <p>The contracts package uses a Zod 3 peer dependency and exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./evidence</code> entrypoints. Neutral definitions move from the registry into those entrypoints and have one source of truth. The <code>./plugins</code> entrypoint also owns neutral host-capability ports such as <code>TokenPriceReader</code>, allowing a public plugin to request evidence-bearing token prices without importing a server service. The registry imports contracts and temporarily re-exports only its existing symbols for source compatibility; it does not re-export new evidence or host-capability contracts. New consumers import the contracts package directly.</p>
   </section>
