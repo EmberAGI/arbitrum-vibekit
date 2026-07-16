@@ -11,25 +11,25 @@
 <main>
   <header data-anchor="contracts-adr-title">
     <p class="eyebrow">Accepted architecture decision · EMB-1145</p>
-    <h1>Neutral data-contract package</h1>
-    <p class="lede">Public evidence schemas live below both the plugin registry and the server, not inside either implementation.</p>
+    <h1>Neutral onchain-action contract kernel</h1>
+    <p class="lede">Public core, plugin, endpoint, and evidence contracts live below both the plugin registry and the server, not inside either implementation.</p>
   </header>
   <section data-anchor="contracts-adr-context">
     <h2>Context</h2>
-    <p>The registry package already owns endpoint schemas but also bundles protocol implementations and Aave dependencies.</p>
-    <p>The server must share exactly the same validated DTOs without depending on plugin implementations.</p>
+    <p>The registry package already owns neutral token, chain, transaction, plugin, action, query, lifecycle, and endpoint schemas but also bundles registry runtime, protocol implementations, and Aave dependencies.</p>
+    <p>The server imports the registry from 97 source and test files, frequently only to obtain these shared schemas and interfaces. It must share exactly the same validated contracts without depending on registry or plugin implementations.</p>
     <p><code>EmberAGI/arbitrum-vibekit</code> is the public repository that already owns public plugin contracts and npm release automation. <code>EmberAGI/onchain-actions</code> is a private server repository and is one consumer of the contract.</p>
   </section>
   <section data-anchor="contracts-adr-decision">
     <h2>Decision</h2>
-    <div class="flow" role="img" aria-label="Neutral contracts package is depended on by registry and server">
-      <article class="node"><strong>@emberai/onchain-actions-registry</strong><p>Plugin interfaces and public plugin discovery.</p></article>
-      <div class="arrow">←</div>
-      <article class="node"><strong>@emberai/onchain-actions-contracts</strong><p>Versioned Zod evidence schemas only.</p></article>
+    <div class="flow" role="img" aria-label="Registry and server depend on the neutral contracts package">
+      <article class="node"><strong>@emberai/onchain-actions-registry</strong><p>Registry runtime, discovery, and bundled plugin implementations.</p></article>
       <div class="arrow">→</div>
+      <article class="node"><strong>@emberai/onchain-actions-contracts</strong><p>Neutral core, plugin, endpoint, and evidence schemas.</p></article>
+      <div class="arrow">←</div>
       <article class="node"><strong>onchain-actions</strong><p>Provider orchestration and HTTP/MCP delivery.</p></article>
     </div>
-    <p>The contracts package is imported directly by each consumer, uses a Zod 3 peer dependency, and owns the generic evidence schema factories. The registry does not re-export the package.</p>
+    <p>The contracts package uses a Zod 3 peer dependency and exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./evidence</code> entrypoints. Neutral definitions move from the registry into those entrypoints and have one source of truth. The registry imports them and temporarily re-exports only its existing symbols for source compatibility; it does not re-export new evidence contracts. New consumers import the contracts package directly.</p>
   </section>
   <section data-anchor="contracts-adr-tradeoffs">
     <h2>Trade-offs</h2>
@@ -39,7 +39,8 @@
         <tr><td>Keep schemas only in the registry package</td><td>Generic consumers inherit protocol implementation dependencies and ownership ambiguity.</td></tr>
         <tr><td>Define schemas only in the server</td><td>Plugin/query authors lose the public source of truth and drift becomes likely.</td></tr>
         <tr><td>Duplicate DTOs</td><td>Compile-time similarity cannot enforce runtime semantic compatibility.</td></tr>
-        <tr><td>Re-export contracts through the registry</td><td>Reintroduces the dependency direction this package exists to remove and makes a protocol-heavy package the compatibility gateway.</td></tr>
+        <tr><td>Keep the registry as the permanent contract gateway</td><td>Retains the dependency direction this package exists to remove. Compatibility re-exports are a migration bridge, not the preferred import surface.</td></tr>
+        <tr><td>Move every registry concern into contracts</td><td>Registry runtime, configuration, discovery, and protocol implementations are behavior rather than neutral contracts and would recreate the same coupling under a new name.</td></tr>
         <tr><td>Use Zod 4 for V1</td><td>The registry and server currently consume Zod 3 schemas, including OpenAPI generation; a second incompatible schema runtime would break the shared seam.</td></tr>
       </tbody>
     </table>
@@ -48,7 +49,8 @@
     <h2>Consequences</h2>
     <ul>
       <li>The contracts package must remain dependency-light and side-effect free.</li>
-      <li>The registry and server publish migrations against a shared versioned seam.</li>
+      <li>The registry depends on contracts and keeps its current public API source-compatible through tested re-exports; moved definitions are not duplicated.</li>
+      <li>New server work imports the appropriate contracts entrypoint directly. Repository-wide migration of the server's existing registry imports is separate linked work.</li>
       <li>Provider implementations, cache behavior, and product authorization remain outside the package.</li>
       <li>The existing private <code>ember-api</code> MCP client remains a separate consumer-facing Module; this decision neither replaces it nor migrates its broad endpoint schemas.</li>
       <li>The existing multi-package release detector, dry-run validation, build/test steps, and OIDC publisher configuration must include the new package.</li>
