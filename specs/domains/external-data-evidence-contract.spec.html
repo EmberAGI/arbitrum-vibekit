@@ -11,8 +11,8 @@
 <main>
   <header data-anchor="evidence-title">
     <p class="eyebrow">Domain contract · EMB-1145</p>
-    <h1>External data evidence</h1>
-    <p class="lede">Every externally sourced value carries enough evidence for a consumer to decide whether it is current, partial, stale, or unavailable.</p>
+    <h1>Onchain-action contracts and external data evidence</h1>
+    <p class="lede">A dependency-light contract kernel owns the neutral onchain-action schemas, while every externally sourced value carries enough evidence for a consumer to decide whether it is current, partial, stale, or unavailable.</p>
   </header>
 
   <section data-anchor="evidence-intended-behavior">
@@ -35,6 +35,7 @@
       <article class="card" data-anchor="evidence-concept-provenance"><h3>Provenance</h3><p>The provider, capability, asset identity, and optional safe source artifact that produced a field or item.</p></article>
       <article class="card" data-anchor="evidence-concept-freshness"><h3>Freshness</h3><p>Observation, receipt, expiry, refresh, and retry timing with an explicit timestamp source.</p></article>
       <article class="card" data-anchor="evidence-concept-completeness"><h3>Completeness</h3><p>Whether current values cover every requested subject, some requested subjects, or none. Item states independently explain stale, rate-limited, not-found, and unavailable outcomes.</p></article>
+      <article class="card" data-anchor="evidence-concept-kernel"><h3>Contract kernel</h3><p>Neutral token, chain, transaction, plugin, action, query, lifecycle, endpoint, and evidence schemas shared by registry implementations and service consumers.</p></article>
     </div>
   </section>
 
@@ -59,6 +60,10 @@
     <table>
       <thead><tr><th>Type</th><th>Required meaning</th></tr></thead>
       <tbody>
+        <tr data-anchor="evidence-contract-core"><td><code>@emberai/onchain-actions-contracts/core</code></td><td>Dependency-light token and chain identities, transaction plans and errors, fee breakdowns, and provider tracking schemas currently defined by the registry package.</td></tr>
+        <tr data-anchor="evidence-contract-plugins"><td><code>@emberai/onchain-actions-contracts/plugins</code></td><td>Neutral plugin, action, query, and lifecycle interfaces. Registry classes, registry configuration, and bundled protocol implementations are excluded.</td></tr>
+        <tr data-anchor="evidence-contract-endpoints"><td><code>@emberai/onchain-actions-contracts/endpoints</code></td><td>Shared Zod request/response and pagination contracts for the public onchain-action interface.</td></tr>
+        <tr data-anchor="evidence-contract-evidence"><td><code>@emberai/onchain-actions-contracts/evidence</code></td><td>The versioned evidence envelope, freshness, provenance, result, field, and warning schemas below.</td></tr>
         <tr data-anchor="evidence-contract-snapshot"><td><code>createSnapshotEnvelopeV1Schema(subjectSchema, valueSchema)</code></td><td><code>schema_version: "1"</code>, <code>snapshot_id</code>, <code>quote_currency</code>, <code>completeness</code>, items, and structured warnings. The factory validates caller-owned subject and value shapes without weakening the envelope invariants.</td></tr>
         <tr data-anchor="evidence-contract-freshness"><td><code>FreshnessEvidenceV1Schema</code></td><td><code>observed_at</code>, <code>received_at</code>, <code>fresh_until</code>, optional <code>refresh_after</code>/<code>retry_after</code>, and <code>observed_at_source</code>. Clock ordering is validated.</td></tr>
         <tr data-anchor="evidence-contract-provenance"><td><code>ProvenanceV1Schema</code></td><td>Provider ID, capability, canonical subject reference, source class, and optional safe digest/artifact reference.</td></tr>
@@ -98,7 +103,9 @@
       <li data-anchor="evidence-constraint-zod">Zod schemas are the runtime validation authority and exported TypeScript types are inferred from them.</li>
       <li data-anchor="evidence-constraint-zod-version">V1 uses a Zod 3 peer dependency so the registry and server share one compatible runtime schema instance.</li>
       <li data-anchor="evidence-constraint-neutral">The contract describes evidence rather than product-specific authorization policy.</li>
-      <li data-anchor="evidence-constraint-adoption">Consumers import the contracts package directly. The registry does not re-export it, and existing registry exports remain unchanged.</li>
+      <li data-anchor="evidence-constraint-entrypoints">The package exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./evidence</code> entrypoints; consumers do not import package internals.</li>
+      <li data-anchor="evidence-constraint-adoption">New consumers import contract entrypoints directly. The registry depends on the contracts package and temporarily re-exports only the neutral symbols it already exported so existing consumers remain source-compatible. It does not become the gateway for new evidence contracts.</li>
+      <li data-anchor="evidence-constraint-source">Each moved schema or interface has one implementation source in the contracts package; the registry contains no duplicate definitions.</li>
       <li data-anchor="evidence-constraint-release">The package follows the repository's existing <code>0.0.0</code> semantic-release source version, public npm provenance, stable <code>main</code> channel, and prerelease <code>next</code> channel.</li>
     </ul>
   </section>
@@ -107,9 +114,10 @@
     <h2>Non-goals</h2>
     <ul>
       <li data-anchor="evidence-nongoal-fetch">No provider fetching, retry, cache, or rate-limit implementation.</li>
-      <li data-anchor="evidence-nongoal-registry">No plugin discovery lifecycle redesign; EMB-1148 owns that work.</li>
+      <li data-anchor="evidence-nongoal-registry">No registry runtime, registry configuration, or plugin discovery lifecycle redesign; EMB-1148 owns discovery work.</li>
+      <li data-anchor="evidence-nongoal-protocols">No Aave or other bundled protocol implementation moves into the contracts package.</li>
       <li data-anchor="evidence-nongoal-wallet">No wallet aggregation implementation; EMB-1146 consumes this contract.</li>
-      <li data-anchor="evidence-nongoal-transactions">No transaction or action authorization types.</li>
+      <li data-anchor="evidence-nongoal-server-migration">No repository-wide migration of existing <code>onchain-actions</code> imports. That cross-repository adoption is separate linked work; new work such as EMB-1144 imports the evidence entrypoint directly.</li>
       <li data-anchor="evidence-nongoal-client">No replacement or redesign of the private <code>typescript/lib/ember-api</code> MCP client or its broad DeFi request/response schemas. That client may consume the evidence package later through an explicit migration.</li>
     </ul>
   </section>
@@ -126,9 +134,10 @@
       <li data-anchor="evidence-decision-union">2026-07-15: result states use a discriminated union rather than optional values plus loosely related flags.</li>
       <li data-anchor="evidence-decision-fields">2026-07-15: field-level provenance is supported for aggregated wallet records.</li>
       <li data-anchor="evidence-decision-wire">2026-07-15: the public wire contract uses snake_case, RFC 3339 UTC timestamps, and decimal strings.</li>
-      <li data-anchor="evidence-decision-compatibility">2026-07-15: consumers import the neutral package directly; preserving registry compatibility means leaving current registry exports unchanged.</li>
+      <li data-anchor="evidence-decision-compatibility">2026-07-15: neutral contracts move to one dependency-light source; the registry preserves its existing public surface through compatibility re-exports while new consumers use explicit contract-package entrypoints.</li>
       <li data-anchor="evidence-decision-client-scope">2026-07-15: the contracts package complements rather than replaces the existing <code>ember-api</code> client Module.</li>
       <li data-anchor="evidence-decision-architecture-approved">2026-07-15: the operator approved the neutral package Module, Zod 3 Interface, generic schema factories, and OIDC release integration.</li>
+      <li data-anchor="evidence-decision-kernel-approved">2026-07-15: the operator approved extracting the registry's neutral contract kernel, preserving compatibility re-exports, and leaving the server's bulk import migration to separate linked work.</li>
     </ul>
   </section>
 
