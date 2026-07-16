@@ -50,6 +50,7 @@
       <li>The contracts package must remain dependency-light and side-effect free.</li>
       <li>The registry and server publish migrations against a shared versioned seam.</li>
       <li>Provider implementations, cache behavior, and product authorization remain outside the package.</li>
+      <li>The existing private <code>ember-api</code> MCP client remains a separate consumer-facing Module; this decision neither replaces it nor migrates its broad endpoint schemas.</li>
       <li>The existing multi-package release detector, dry-run validation, build/test steps, and OIDC publisher configuration must include the new package.</li>
       <li>An operator must register the new npm package's trusted publisher for <code>EmberAGI/arbitrum-vibekit</code>, workflow <code>release.yml</code>, and the <code>npm publish</code> action before first release.</li>
     </ul>

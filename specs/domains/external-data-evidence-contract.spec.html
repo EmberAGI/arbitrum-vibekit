@@ -110,6 +110,7 @@
       <li data-anchor="evidence-nongoal-registry">No plugin discovery lifecycle redesign; EMB-1148 owns that work.</li>
       <li data-anchor="evidence-nongoal-wallet">No wallet aggregation implementation; EMB-1146 consumes this contract.</li>
       <li data-anchor="evidence-nongoal-transactions">No transaction or action authorization types.</li>
+      <li data-anchor="evidence-nongoal-client">No replacement or redesign of the private <code>typescript/lib/ember-api</code> MCP client or its broad DeFi request/response schemas. That client may consume the evidence package later through an explicit migration.</li>
     </ul>
   </section>
 
@@ -126,6 +127,7 @@
       <li data-anchor="evidence-decision-fields">2026-07-15: field-level provenance is supported for aggregated wallet records.</li>
       <li data-anchor="evidence-decision-wire">2026-07-15: the public wire contract uses snake_case, RFC 3339 UTC timestamps, and decimal strings.</li>
       <li data-anchor="evidence-decision-compatibility">2026-07-15: consumers import the neutral package directly; preserving registry compatibility means leaving current registry exports unchanged.</li>
+      <li data-anchor="evidence-decision-client-scope">2026-07-15: the contracts package complements rather than replaces the existing <code>ember-api</code> client Module.</li>
       <li data-anchor="evidence-decision-architecture-approved">2026-07-15: the operator approved the neutral package Module, Zod 3 Interface, generic schema factories, and OIDC release integration.</li>
     </ul>
   </section>
