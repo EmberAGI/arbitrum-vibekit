@@ -15,16 +15,143 @@
     <p class="lede">A dependency-light contract kernel owns the neutral onchain-action schemas, while every externally sourced value carries enough evidence for a consumer to decide whether it is current, partial, stale, or unavailable.</p>
   </header>
 
-  <section data-anchor="evidence-intended-behavior">
-    <h2>Intended behavior</h2>
-    <div class="flow" role="img" aria-label="Provider payload becomes a validated item result inside a versioned snapshot">
-      <article class="node"><strong>Provider payload</strong><p>Untrusted value and timing metadata.</p></article>
-      <div class="arrow">→</div>
-      <article class="node"><strong>Adapter validation</strong><p>Normalize identity, value, time, and provenance.</p></article>
-      <div class="arrow">→</div>
-      <article class="node"><strong>Item result</strong><p>One valid discriminated state.</p></article>
-      <div class="arrow">→</div>
-      <article class="node"><strong>Snapshot envelope</strong><p>Stable identity and batch completeness.</p></article>
+  <section data-anchor="evidence-architecture">
+    <h2>Public contract kernel dependency direction</h2>
+    <p>The new package factors the neutral contract kernel out of the public registry package.</p>
+    <p>It is a dependency-light Module below registry and server implementations, not a replacement for either implementation Module.</p>
+    <div class="architecture-scroll">
+      <figure class="architecture-figure">
+        <svg viewBox="0 0 1180 690" role="img" aria-labelledby="kernel-title kernel-desc">
+          <title id="kernel-title">Dependency architecture for the public onchain-actions contracts kernel</title>
+          <desc id="kernel-desc">The public registry and private onchain-actions server depend on the public contracts package. The contracts package has no dependency on registry runtime, server services, provider adapters, protocol SDKs, cache, or network clients.</desc>
+          <defs>
+            <marker id="kernel-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc"/></marker>
+            <marker id="kernel-arrow-good" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#86efac"/></marker>
+          </defs>
+
+          <rect class="arch-zone public" x="25" y="24" width="1130" height="404" rx="18"/>
+          <text class="arch-zone-title" x="48" y="53">PUBLIC REPOSITORY · ARBITRUM-VIBEKIT</text>
+          <rect class="arch-box adapter" x="55" y="88" width="370" height="138"/>
+          <text class="arch-title" x="79" y="118">@emberai/onchain-actions-registry</text>
+          <text class="arch-copy" x="79" y="145">Registry runtime + configuration</text>
+          <text class="arch-copy" x="79" y="169">Discovery + bundled Aave implementation</text>
+          <text class="arch-small" x="79" y="198">Compatibility-re-exports only existing neutral symbols</text>
+          <rect class="arch-box later" x="55" y="270" width="370" height="100"/>
+          <text class="arch-title" x="79" y="301">EMB-1148 · RegistrySnapshot</text>
+          <text class="arch-copy" x="79" y="327">Deterministic action/query plugin discovery</text>
+          <text class="arch-small" x="79" y="348">Still depends on contracts; does not own market data</text>
+
+          <rect class="arch-box module" x="500" y="78" width="610" height="316"/>
+          <text class="arch-title" x="526" y="111">@emberai/onchain-actions-contracts · neutral Module</text>
+          <rect class="arch-box interface" x="530" y="142" width="250" height="82"/>
+          <text class="arch-title" x="551" y="171">/core</text>
+          <text class="arch-copy" x="551" y="196">Token + chain identity</text>
+          <rect class="arch-box interface" x="825" y="142" width="250" height="82"/>
+          <text class="arch-title" x="846" y="171">/plugins</text>
+          <text class="arch-copy" x="846" y="196">Plugin types + TokenPriceReader</text>
+          <rect class="arch-box interface" x="530" y="254" width="250" height="82"/>
+          <text class="arch-title" x="551" y="283">/endpoints</text>
+          <text class="arch-copy" x="551" y="308">Request/response contracts</text>
+          <rect class="arch-box interface" x="825" y="254" width="250" height="82"/>
+          <text class="arch-title" x="846" y="283">/evidence</text>
+          <text class="arch-copy" x="846" y="308">Results + freshness + provenance</text>
+          <text class="arch-small" x="526" y="370">Zod 3 peer · no network · no cache · no registry runtime · no protocol SDK</text>
+
+          <rect class="arch-zone private" x="25" y="460" width="1130" height="205" rx="18"/>
+          <text class="arch-zone-title" x="48" y="489">PRIVATE REPOSITORY · ONCHAIN-ACTIONS</text>
+          <rect class="arch-box module" x="55" y="520" width="320" height="104"/>
+          <text class="arch-title" x="79" y="550">PriceSnapshotService</text>
+          <text class="arch-copy" x="79" y="577">Implements orchestration + evidence</text>
+          <text class="arch-small" x="79" y="599">Imports /core, /evidence, /plugins</text>
+          <rect class="arch-box adapter" x="430" y="520" width="300" height="104"/>
+          <text class="arch-title" x="454" y="550">Algebra plugin</text>
+          <text class="arch-copy" x="454" y="577">Consumes TokenPriceReader</text>
+          <text class="arch-small" x="454" y="599">Portable across host implementations</text>
+          <rect class="arch-box" x="785" y="520" width="325" height="104"/>
+          <text class="arch-title" x="809" y="550">Server registry wrapper</text>
+          <text class="arch-copy" x="809" y="577">Consumes public registry runtime</text>
+          <text class="arch-small" x="809" y="599">Separate from market-data orchestration</text>
+
+          <path class="arch-edge" d="M425 145 H500" marker-end="url(#kernel-arrow)"/>
+          <text class="arch-small" x="430" y="133">depends on</text>
+          <path class="arch-edge dashed" d="M240 270 V226" marker-end="url(#kernel-arrow)"/>
+          <path class="arch-edge good" d="M215 520 V438 H655 V394" marker-end="url(#kernel-arrow-good)"/>
+          <path class="arch-edge good" d="M580 520 V438 H950 V336" marker-end="url(#kernel-arrow-good)"/>
+          <path class="arch-edge dashed" d="M948 520 V438 H240 V226" marker-end="url(#kernel-arrow)"/>
+          <text class="arch-small" x="762" y="451">implementation dependencies point upward only to public packages</text>
+        </svg>
+        <figcaption>The forbidden dependency is the important boundary: contracts never import the registry, server container, provider implementations, cache, network clients, or protocol SDKs.</figcaption>
+      </figure>
+    </div>
+    <div class="architecture-legend" aria-label="Architecture legend">
+      <span class="legend-key"><span class="legend-swatch module"></span>Module</span>
+      <span class="legend-key"><span class="legend-swatch interface"></span>Public Interface</span>
+      <span class="legend-key"><span class="legend-swatch adapter"></span>Implementation / Adapter</span>
+      <span class="legend-key"><span class="legend-swatch later"></span>Associated issue</span>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-issue-map">
+    <h2>Associated issue architecture and sequence</h2>
+    <p>EMB-1145 is the shared contract foundation; each later issue owns one bounded behavioral Module or registry evolution.</p>
+    <div class="architecture-scroll">
+      <figure class="architecture-figure">
+        <svg viewBox="0 0 1180 650" role="img" aria-labelledby="issue-title issue-desc">
+          <title id="issue-title">Cross-repository dependency and scope map for EMB-1145 and associated issues</title>
+          <desc id="issue-desc">EMB-1145 blocks EMB-1144, EMB-1146, and EMB-1148. EMB-1144 blocks the portfolio consumer EMB-1138 and establishes the first price orchestration module before EMB-1147 generalizes provider composition. EMB-1148 precedes server registry snapshot consumption in EMB-1149.</desc>
+          <defs>
+            <marker id="issue-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc"/></marker>
+            <marker id="issue-arrow-warn" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#fde68a"/></marker>
+          </defs>
+          <rect class="arch-zone public" x="25" y="28" width="1130" height="176" rx="18"/>
+          <text class="arch-zone-title" x="48" y="56">ARBITRUM-VIBEKIT · PUBLIC PACKAGES</text>
+          <rect class="arch-box module" x="80" y="84" width="390" height="88"/>
+          <text class="arch-title" x="103" y="113">EMB-1145 · contract kernel</text>
+          <text class="arch-copy" x="103" y="138">Core + plugins + endpoints + evidence</text>
+          <text class="arch-small" x="103" y="157">Foundation; first above all else</text>
+          <rect class="arch-box later" x="690" y="84" width="390" height="88"/>
+          <text class="arch-title" x="713" y="113">EMB-1148 · registry snapshots</text>
+          <text class="arch-copy" x="713" y="138">Deterministic action/query plugin discovery</text>
+          <text class="arch-small" x="713" y="157">No market-data provider composition</text>
+
+          <rect class="arch-zone private" x="25" y="228" width="1130" height="282" rx="18"/>
+          <text class="arch-zone-title" x="48" y="256">ONCHAIN-ACTIONS · PRIVATE SERVER MODULES</text>
+          <rect class="arch-box module" x="80" y="286" width="300" height="92"/>
+          <text class="arch-title" x="103" y="316">EMB-1144 · prices</text>
+          <text class="arch-copy" x="103" y="341">PriceSnapshotService</text>
+          <text class="arch-small" x="103" y="360">API + TokenPriceReader Adapter</text>
+          <rect class="arch-box module" x="440" y="286" width="300" height="92"/>
+          <text class="arch-title" x="463" y="316">EMB-1146 · wallet truth</text>
+          <text class="arch-copy" x="463" y="341">WalletSnapshotService</text>
+          <text class="arch-small" x="463" y="360">Field-level provenance</text>
+          <rect class="arch-box later" x="80" y="404" width="300" height="76"/>
+          <text class="arch-title" x="103" y="434">EMB-1147 · providers</text>
+          <text class="arch-copy" x="103" y="458">ProviderCatalog + capability orchestrators</text>
+          <rect class="arch-box later" x="800" y="286" width="300" height="92"/>
+          <text class="arch-title" x="823" y="316">EMB-1149 · registry host</text>
+          <text class="arch-copy" x="823" y="341">Consumes immutable registry snapshot</text>
+          <text class="arch-small" x="823" y="360">Server composition only</text>
+
+          <rect class="arch-zone external" x="25" y="534" width="1130" height="92" rx="18"/>
+          <text class="arch-zone-title" x="48" y="562">AUTONOMOUS-PORTFOLIO · PRODUCT CONSUMER</text>
+          <rect class="arch-box" x="440" y="552" width="300" height="54"/>
+          <text class="arch-title" x="463" y="585">EMB-1138 · floor-safe rebalance</text>
+
+          <path class="arch-edge" d="M275 172 V246 H230 V286" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="181" y="232">blocks</text>
+          <path class="arch-edge" d="M365 172 V224 H590 V286" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="473" y="215">blocks</text>
+          <path class="arch-edge" d="M470 128 H690" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="563" y="116">blocks</text>
+          <path class="arch-edge" d="M885 172 V286" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="895" y="232">precedes</text>
+          <path class="arch-edge dashed warn" d="M230 378 V404" marker-end="url(#issue-arrow-warn)"/>
+          <text class="arch-small" x="242" y="397">sequences/generalizes</text>
+          <path class="arch-edge" d="M380 332 H407 V579 H440" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="395" y="515">price API blocks consumer</text>
+        </svg>
+        <figcaption>Solid arrows are delivery dependencies or precedence; the dashed arrow means EMB-1144 establishes the localized price Module that EMB-1147 later generalizes into explicit cross-capability provider composition.</figcaption>
+      </figure>
     </div>
   </section>
 
@@ -152,6 +279,10 @@
       <li><a href="https://linear.app/emberai/issue/EMB-1145">EMB-1145 — versioned evidence contracts</a></li>
       <li><a href="https://linear.app/emberai/issue/EMB-1144">EMB-1144 — cached batch token prices</a></li>
       <li><a href="https://linear.app/emberai/issue/EMB-1146">EMB-1146 — transparent wallet snapshots</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1147">EMB-1147 — explicit provider composition</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1148">EMB-1148 — deterministic plugin registry snapshots</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1149">EMB-1149 — server registry snapshot consumption</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1138">EMB-1138 — floor-safe rebalance lifecycle</a></li>
     </ul>
   </section>
 </main>
