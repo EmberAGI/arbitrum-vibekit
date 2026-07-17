@@ -166,6 +166,37 @@
     </div>
   </section>
 
+  <section data-anchor="evidence-canonical-language">
+    <h2>Canonical domain language</h2>
+    <p>These terms separate public contract ownership from registry and server behavior.</p>
+    <table>
+      <thead><tr><th>Canonical term</th><th>Meaning</th><th>Avoid when this is meant</th></tr></thead>
+      <tbody>
+        <tr data-anchor="evidence-language-kernel"><td>Contract kernel</td><td>The dependency-light public source of neutral runtime schemas and TypeScript Interfaces.</td><td>Registry package, server DTOs, shared utils</td></tr>
+        <tr data-anchor="evidence-language-registry"><td>Registry runtime</td><td>Behavior that discovers, configures, and exposes action/query plugins and bundled implementations.</td><td>Contract kernel, provider catalog</td></tr>
+        <tr data-anchor="evidence-language-capability"><td>Host capability</td><td>A neutral Interface a plugin consumes and a host satisfies through injection, such as <code>TokenPriceReader</code>.</td><td>Server service, HTTP endpoint, registry implementation</td></tr>
+        <tr data-anchor="evidence-language-observation"><td>Provider observation</td><td>One externally sourced value with provider identity and observation time before it is composed into a result or snapshot.</td><td>Snapshot, receipt, current price</td></tr>
+        <tr data-anchor="evidence-language-evidence"><td>Evidence</td><td>The provenance, freshness, safe warning, and result-state material that lets a consumer judge an external value.</td><td>Metadata, diagnostic payload</td></tr>
+        <tr data-anchor="evidence-language-snapshot"><td>Snapshot</td><td>A versioned set of requested item results with derived completeness and stable batch identity.</td><td>Provider observation, cache entry</td></tr>
+      </tbody>
+    </table>
+    <p class="callout">Market-data providers belong to the read-only provider-composition context. Action/query plugins belong to the registry context. Both may depend on the contract kernel, but neither context owns the other.</p>
+  </section>
+
+  <section data-anchor="evidence-codebase-design-pass">
+    <h2>Codebase-design pass</h2>
+    <table>
+      <thead><tr><th>Module or Seam</th><th>Depth and dependency classification</th><th>Adapters and test surface</th></tr></thead>
+      <tbody>
+        <tr data-anchor="evidence-design-contract-module"><td>Contracts package Module</td><td>One composite public Interface exposed through four supported subpaths hides runtime validation, type inference, evidence invariants, and compatibility ownership. Dependencies are in-process and dependency-light.</td><td>Test only through packed public subpaths and consumer-visible schemas; do not test package internals as a second Interface.</td></tr>
+        <tr data-anchor="evidence-design-reader-seam"><td><code>TokenPriceReader</code> Seam</td><td>A real host-capability Seam because behavior varies between the onchain-actions production Adapter and deterministic test Adapters. The Interface includes one-result-per-token ordering and strict result semantics.</td><td>Production Adapter backed by EMB-1144; deterministic in-memory Adapter in plugin tests.</td></tr>
+        <tr data-anchor="evidence-design-registry-adapter"><td>Registry compatibility Adapter</td><td>A temporary source-compatibility role, not a new public contract gateway. It re-exports existing neutral symbols without duplicating their implementation.</td><td>Compatibility tests import the old registry surface; new-consumer tests import contracts directly.</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Deletion test:</strong> deleting the contracts Module would force registry, server, and public plugins to duplicate runtime schemas, evidence invariants, and dependency direction, so the Module provides real leverage and locality.</p>
+    <p><strong>Rejected shallow shape:</strong> leaving neutral definitions in the registry would make the new package a pass-through or make every non-registry consumer learn registry runtime and protocol dependencies.</p>
+  </section>
+
   <section data-anchor="evidence-rules">
     <h2>Rules and invariants</h2>
     <ul>
@@ -261,7 +292,7 @@
   <section data-anchor="evidence-decisions">
     <h2>Decision log or links to ADRs</h2>
     <ul>
-      <li><a href="../adr/0001-neutral-data-contract-package.spec.html">ADR 0001 — neutral data-contract package</a>.</li>
+      <li><a href="../../adr/0001-neutral-data-contract-package.spec.html">ADR 0001 — neutral data-contract package</a>.</li>
       <li data-anchor="evidence-decision-union">2026-07-15: result states use a discriminated union rather than optional values plus loosely related flags.</li>
       <li data-anchor="evidence-decision-fields">2026-07-15: field-level provenance is supported for aggregated wallet records.</li>
       <li data-anchor="evidence-decision-wire">2026-07-15: the public wire contract uses snake_case, RFC 3339 UTC timestamps, and decimal strings.</li>

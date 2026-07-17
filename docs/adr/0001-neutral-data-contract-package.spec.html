@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ADR 0001 — Neutral Data-contract Package</title>
-  <link rel="stylesheet" href="../.style/spec.css">
-  <script defer src="../.viz/runtime.js"></script>
+  <link rel="stylesheet" href="../specs/.style/spec.css">
+  <script defer src="../specs/.viz/runtime.js"></script>
 </head>
 <body>
 <main>
@@ -48,6 +48,8 @@
       </figure>
     </div>
     <p>The contracts package uses a Zod 3 peer dependency and exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./evidence</code> entrypoints. Neutral definitions move from the registry into those entrypoints and have one source of truth. The <code>./plugins</code> entrypoint also owns neutral host-capability ports such as <code>TokenPriceReader</code>, allowing a public plugin to request evidence-bearing token prices without importing a server service. The registry imports contracts and temporarily re-exports only its existing symbols for source compatibility; it does not re-export new evidence or host-capability contracts. New consumers import the contracts package directly.</p>
+    <p><strong>Domain-language decision:</strong> “contract kernel” names neutral public definitions, “registry runtime” names plugin discovery/configuration behavior, and “host capability” names an injected Interface such as <code>TokenPriceReader</code>. Market-data provider composition remains a separate read-only context.</p>
+    <p><strong>Depth decision:</strong> the package presents one composite public Interface through supported subpaths. Packed-package and consumer tests use those subpaths as the test surface; registry compatibility re-exports are a migration Adapter rather than a second contract source.</p>
   </section>
   <section data-anchor="contracts-adr-tradeoffs">
     <h2>Trade-offs</h2>
@@ -79,7 +81,7 @@
   </section>
   <section data-anchor="contracts-adr-references">
     <h2>References</h2>
-    <p><a href="../domains/external-data-evidence-contract.spec.html">External data evidence domain spec</a> · <a href="https://linear.app/emberai/issue/EMB-1145">EMB-1145</a></p>
+    <p><a href="../specs/domains/external-data-evidence-contract.spec.html">External data evidence domain spec</a> · <a href="https://linear.app/emberai/issue/EMB-1145">EMB-1145</a></p>
   </section>
 </main>
 </body>
