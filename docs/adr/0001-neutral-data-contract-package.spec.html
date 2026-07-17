@@ -12,7 +12,7 @@
   <header data-anchor="contracts-adr-title">
     <p class="eyebrow">Accepted architecture decision · EMB-1145</p>
     <h1>Neutral onchain-action contract kernel</h1>
-    <p class="lede">Public core, plugin, endpoint, and evidence contracts live below both the plugin registry and the server, not inside either implementation.</p>
+    <p class="lede">Public core, plugin, endpoint, and external-data contracts live below both the plugin registry and the server, not inside either implementation.</p>
   </header>
   <section data-anchor="contracts-adr-context">
     <h2>Context</h2>
@@ -38,7 +38,7 @@
           <text class="arch-copy" x="734" y="141">Host implementations of public ports</text>
           <rect class="arch-box module" x="285" y="240" width="610" height="124"/>
           <text class="arch-title" x="310" y="273">@emberai/onchain-actions-contracts</text>
-          <text class="arch-copy" x="310" y="301">/core · /plugins · /endpoints · /evidence</text>
+          <text class="arch-copy" x="310" y="301">/core · /plugins · /endpoints · /external-data</text>
           <text class="arch-small" x="310" y="329">One neutral source · Zod 3 peer · no registry/server/network/protocol dependency</text>
           <path class="arch-edge" d="M270 168 V209 H480 V240" marker-end="url(#contracts-adr-arrow)"/>
           <path class="arch-edge" d="M910 168 V209 H700 V240" marker-end="url(#contracts-adr-arrow)"/>
@@ -47,7 +47,7 @@
         <figcaption>The arrows are intentionally one-way. Compatibility re-exports preserve the registry’s existing surface while new consumers import contract entrypoints directly.</figcaption>
       </figure>
     </div>
-    <p>The contracts package uses a Zod 3 peer dependency and exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./evidence</code> entrypoints. Neutral definitions move from the registry into those entrypoints and have one source of truth. The <code>./plugins</code> entrypoint owns neutral host-capability ports such as <code>TokenPriceReader</code>, allowing a public plugin to request evidence-bearing token prices without importing a server Module. The <code>./endpoints</code> entrypoint owns public contracts such as the EMB-1144 token-market request, value, result, and snapshot envelope. The registry imports contracts and temporarily re-exports only its existing symbols for source compatibility; it does not re-export new evidence, endpoint, or host-capability contracts. New consumers import the contracts package directly.</p>
+    <p>The contracts package uses a Zod 3 peer dependency and exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./external-data</code> entrypoints. Neutral definitions move from the registry into those entrypoints and have one source of truth. The <code>./plugins</code> entrypoint owns neutral host-capability ports such as <code>TokenPriceReader</code>, allowing a public plugin to request evidence-bearing token prices without importing a server Module. The <code>./endpoints</code> entrypoint owns public contracts such as the EMB-1144 token-market request, value, result, and snapshot envelope. The registry imports contracts and temporarily re-exports only its existing symbols for source compatibility; it does not re-export new external-data, endpoint, or host-capability contracts. New consumers import the contracts package directly.</p>
     <p><strong>Domain-language decision:</strong> “contract kernel” names neutral public definitions, “registry runtime” names plugin discovery/configuration behavior, and “host capability” names an injected Interface such as <code>TokenPriceReader</code>. Market-data provider composition remains a separate read-only context.</p>
     <p><strong>Depth decision:</strong> the package presents one composite public Interface through supported subpaths. Packed-package and consumer tests use those subpaths as the test surface; registry compatibility re-exports are a migration Adapter rather than a second contract source.</p>
   </section>
@@ -74,6 +74,7 @@
       <li>Public consumers import EMB-1144 token-market request/value/result/envelope schemas from <code>./endpoints</code>; onchain-actions supplies orchestration without redefining the wire contract.</li>
       <li>The token-market request contract validates canonical token identity and uniqueness without exposing or requiring private Memgraph membership.</li>
       <li>Generic stale evidence remains available to domains that need it, while token-market endpoint and reader contracts narrow the shared result vocabulary to exclude stale last-known values.</li>
+      <li>V1 provenance remains minimal and does not define cryptographic source digests, canonical-JSON hashing, or optional source-artifact references.</li>
       <li>The registry depends on contracts and keeps its current public API source-compatible through tested re-exports; moved definitions are not duplicated.</li>
       <li>New server work imports the appropriate contracts entrypoint directly. Repository-wide migration of the server's existing registry imports is separate linked work.</li>
       <li>Provider implementations, cache behavior, and product authorization remain outside the package.</li>
