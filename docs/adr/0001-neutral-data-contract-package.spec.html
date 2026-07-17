@@ -72,6 +72,7 @@
       <li>The contracts package must remain dependency-light and side-effect free.</li>
       <li>Public plugins may import neutral host ports such as <code>TokenPriceReader</code> from <code>./plugins</code>; hosts inject implementations, and the contracts package performs no provider access.</li>
       <li>Public consumers import EMB-1144 token-market request/value/result/envelope schemas from <code>./endpoints</code>; onchain-actions supplies orchestration without redefining the wire contract.</li>
+      <li>The token-market request contract validates canonical token identity and uniqueness without exposing or requiring private Memgraph membership.</li>
       <li>The registry depends on contracts and keeps its current public API source-compatible through tested re-exports; moved definitions are not duplicated.</li>
       <li>New server work imports the appropriate contracts entrypoint directly. Repository-wide migration of the server's existing registry imports is separate linked work.</li>
       <li>Provider implementations, cache behavior, and product authorization remain outside the package.</li>
