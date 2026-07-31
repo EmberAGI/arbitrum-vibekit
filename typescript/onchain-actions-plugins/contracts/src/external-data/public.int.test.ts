@@ -93,6 +93,24 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
         message: 'x'.repeat(513),
       }).success,
     ).toBe(false);
+    expect(
+      PublicWarningV1Schema.safeParse({
+        ...warning,
+        code: 'raw_provider_error',
+      }).success,
+    ).toBe(false);
+    expect(
+      PublicWarningV1Schema.safeParse({
+        ...warning,
+        provider_diagnostic: 'upstream stack trace',
+      }).success,
+    ).toBe(false);
+    expect(
+      PublicWarningV1Schema.safeParse({
+        ...warning,
+        credential: 'provider-api-key',
+      }).success,
+    ).toBe(false);
   });
 
   it('allows a current value only for an available result', () => {
@@ -364,12 +382,77 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
         provenance,
       }).success,
     ).toBe(false);
+
+    const nonAvailableStates = [
+      {
+        status: 'rate_limited',
+        subject: tokens[0],
+        reason: 'rate_limited',
+        retry_after: '2026-07-30T12:06:00.000Z',
+      },
+      {
+        status: 'not_found',
+        subject: tokens[0],
+        reason: 'not_found',
+      },
+      {
+        status: 'unsupported',
+        subject: tokens[0],
+        reason: 'unsupported_subject',
+      },
+      {
+        status: 'unavailable',
+        subject: tokens[0],
+        reason: 'provider_unavailable',
+      },
+      {
+        status: 'unavailable',
+        subject: tokens[0],
+        reason: 'provider_payload_invalid',
+      },
+    ] as const;
+
+    for (const state of nonAvailableStates) {
+      expect(TokenMarketSnapshotResultV1Schema.parse(state)).toEqual(state);
+      expect(
+        TokenMarketSnapshotResultV1Schema.safeParse({
+          ...state,
+          value,
+        }).success,
+      ).toBe(false);
+      expect(
+        TokenMarketSnapshotResultV1Schema.safeParse({
+          ...state,
+          last_known_value: value,
+        }).success,
+      ).toBe(false);
+    }
+
     expect(
       TokenMarketSnapshotEnvelopeV1Schema.safeParse({
         ...envelope,
         items: [items[1], items[0]],
       }).success,
     ).toBe(false);
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [],
+      }).success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [{ chainId: '42161' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotResultV1Schema.safeParse({
+        status: 'unavailable',
+        subject: tokens[0],
+        reason: 'provider_payload_invalid',
+      }).success,
+    ).toBe(true);
     expect(
       TokenMarketSnapshotValueV1Schema.safeParse({
         price_usd: '0',
@@ -379,11 +462,14 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
       TokenMarketSnapshotValueV1Schema.parse({
         price_usd: '1.25',
         market_cap_usd: '1000000.50',
+        fully_diluted_value_usd: '1200000.75',
       }),
     ).toEqual({
       price_usd: '1.25',
       market_cap_usd: '1000000.50',
+      fully_diluted_value_usd: '1200000.75',
     });
+    expect(TokenMarketSnapshotValueV1Schema.parse(value)).toEqual(value);
     expect(
       TokenMarketSnapshotRequestV1Schema.safeParse({
         schema_version: '1',
