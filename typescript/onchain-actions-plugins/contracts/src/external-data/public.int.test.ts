@@ -431,6 +431,13 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
         provenance,
       }).success,
     ).toBe(false);
+    expect(
+      TokenPriceReadResultV1Schema.safeParse({
+        status: 'not_found',
+        subject: { chainId: '', address: '' },
+        reason: 'not_found',
+      }).success,
+    ).toBe(false);
   });
 
   it('validates an ordered token-market snapshot without stale values', () => {
@@ -550,6 +557,19 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
       TokenMarketSnapshotRequestV1Schema.safeParse({
         schema_version: '1',
         tokens: [{ chainId: '42161' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [{ chainId: '', address: '' }],
+      }).success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotResultV1Schema.safeParse({
+        status: 'not_found',
+        subject: { chainId: '', address: '' },
+        reason: 'not_found',
       }).success,
     ).toBe(false);
     expect(

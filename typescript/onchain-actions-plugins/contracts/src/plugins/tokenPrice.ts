@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-import { type TokenIdentifier, TokenIdentifierSchema } from '../core/index.js';
+import type { TokenIdentifier } from '../core/index.js';
+import { CanonicalTokenIdentifierV1Schema } from '../internal/canonical-token.js';
 import {
   createFreshDataResultV1Schema,
   PositiveDecimalStringSchema,
@@ -15,7 +16,7 @@ export const TokenUsdPriceValueV1Schema = z
 export type TokenUsdPriceValueV1 = z.infer<typeof TokenUsdPriceValueV1Schema>;
 
 export const TokenPriceReadResultV1Schema = createFreshDataResultV1Schema(
-  TokenIdentifierSchema,
+  CanonicalTokenIdentifierV1Schema,
   TokenUsdPriceValueV1Schema,
 );
 

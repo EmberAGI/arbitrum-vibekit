@@ -1,13 +1,12 @@
 import { z } from 'zod';
 
-import { TokenIdentifierSchema, type TokenIdentifier } from '../core/index.js';
+import type { TokenIdentifier } from '../core/index.js';
 import { PublicWarningV1Schema } from '../external-data/index.js';
+import { CanonicalTokenIdentifierV1Schema } from '../internal/canonical-token.js';
 import {
   createFreshDataResultV1Schema,
   PositiveDecimalStringSchema,
 } from '../internal/fresh-data.js';
-
-const CanonicalTokenIdentifierV1Schema = TokenIdentifierSchema.strict();
 
 function canonicalTokenKey(token: TokenIdentifier): string {
   return `${token.chainId}:${token.address.toLowerCase()}`;
@@ -55,7 +54,7 @@ export const TokenMarketSnapshotValueV1Schema = z
 export type TokenMarketSnapshotValueV1 = z.infer<typeof TokenMarketSnapshotValueV1Schema>;
 
 export const TokenMarketSnapshotResultV1Schema = createFreshDataResultV1Schema(
-  TokenIdentifierSchema,
+  CanonicalTokenIdentifierV1Schema,
   TokenMarketSnapshotValueV1Schema,
 );
 

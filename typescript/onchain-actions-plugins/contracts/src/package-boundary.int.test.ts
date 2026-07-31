@@ -171,6 +171,16 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         requested_tokens: [token],
         items: [tokenAvailable],
       }).success) process.exit(17);
+      const emptyToken = { chainId: "", address: "" };
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [emptyToken],
+      }).success) process.exit(4);
+      if (plugins.TokenPriceReadResultV1Schema.safeParse({
+        status: "not_found",
+        subject: emptyToken,
+        reason: "not_found",
+      }).success) process.exit(5);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);
