@@ -141,6 +141,24 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         completeness: "unavailable",
         items: [prematureStale],
       }).success) process.exit(12);
+      const expiredAvailable = {
+        status: "available",
+        subject: "token:arb",
+        value: { price_usd: "1.25" },
+        freshness: {
+          ...prematureStale.freshness,
+          received_at: "2026-07-30T13:00:00.000Z",
+        },
+        provenance: prematureStale.provenance,
+      };
+      if (genericResult.safeParse(expiredAvailable).success) process.exit(13);
+      if (genericEnvelope.safeParse({
+        schema_version: "1",
+        snapshot_id: "expired-generic-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        items: [expiredAvailable],
+      }).success) process.exit(14);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);

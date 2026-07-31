@@ -159,6 +159,39 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
     ).toBe(false);
   });
 
+  it('rejects expired available results across generic result and envelope Interfaces', () => {
+    const expiredFreshness = {
+      ...freshness,
+      received_at: '2026-07-30T13:00:00.000Z',
+    } as const;
+    const genericResultSchema = createDataResultV1Schema(
+      z.string().min(1),
+      z.object({ price_usd: z.string() }).strict(),
+    );
+    const genericAvailable = {
+      status: 'available',
+      subject: 'token:arb',
+      value: { price_usd: '1.25' },
+      freshness: expiredFreshness,
+      provenance,
+    } as const;
+    expect(genericResultSchema.safeParse(genericAvailable).success).toBe(false);
+
+    const genericEnvelopeSchema = createSnapshotEnvelopeV1Schema(
+      z.string().min(1),
+      z.object({ price_usd: z.string() }).strict(),
+    );
+    expect(
+      genericEnvelopeSchema.safeParse({
+        schema_version: '1',
+        snapshot_id: 'expired-generic-snapshot',
+        quote_currency: 'USD',
+        completeness: 'complete',
+        items: [genericAvailable],
+      }).success,
+    ).toBe(false);
+  });
+
   it('validates every generic result state without leaking current values', () => {
     const schema = createDataResultV1Schema(
       z.string().min(1),
