@@ -35,6 +35,7 @@ jobs:
     outputs:
       has_changes: ${{ steps.targets.outputs.has_changes }}
       matrix: ${{ steps.targets.outputs.matrix }}
+      selected: ${{ steps.targets.outputs.selected }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -52,6 +53,7 @@ jobs:
         run: |
           node ./scripts/detect-release-targets.mjs --output release-targets.json
           echo "matrix=$(jq -c '.matrix' release-targets.json)" >> "$GITHUB_OUTPUT"
+          echo "selected=$(jq -c '.selected' release-targets.json)" >> "$GITHUB_OUTPUT"
           echo "has_changes=$(jq -r '((.selected | length) > 0)|tostring' release-targets.json)" >> "$GITHUB_OUTPUT"
 
   validate:
@@ -59,10 +61,6 @@ jobs:
     needs: prepare
     if: github.event_name == 'pull_request' && needs.prepare.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJson(needs.prepare.outputs.matrix) }}
     defaults:
       run:
         working-directory: typescript
@@ -85,48 +83,47 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Setup test environment
-        if: matrix.package.id == 'agent-node'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'agent-node')
         working-directory: typescript/lib/agent-node
         run: cp .env.test.example .env.test
       - name: Build agent-node
-        if: matrix.package.id == 'agent-node'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'agent-node')
         run: pnpm --filter @emberai/agent-node build
       - name: Test agent-node
-        if: matrix.package.id == 'agent-node'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'agent-node')
         run: pnpm --filter @emberai/agent-node test:ci
       - name: Build registry
-        if: matrix.package.id == 'registry'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'registry')
         run: pnpm --filter @emberai/onchain-actions-registry build
       - name: Test registry
-        if: matrix.package.id == 'registry'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'registry')
         run: pnpm --filter @emberai/onchain-actions-registry test:ci
       - name: Build contracts
-        if: matrix.package.id == 'contracts'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'contracts')
         run: pnpm --filter @emberai/onchain-actions-contracts build
       - name: Test contracts
-        if: matrix.package.id == 'contracts'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'contracts')
         run: pnpm --filter @emberai/onchain-actions-contracts test:ci
-      - name: Prepare npm publish folder
-        if: matrix.package.id == 'registry' || matrix.package.id == 'contracts'
-        run: node scripts/prepare-npm-publish.mjs --package "${{ matrix.package.packageJson }}"
+      - name: Prepare registry npm publish folder
+        if: contains(fromJson(needs.prepare.outputs.selected), 'registry')
+        run: node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/registry/package.json
+      - name: Prepare contracts npm publish folder
+        if: contains(fromJson(needs.prepare.outputs.selected), 'contracts')
+        run: node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/contracts/package.json
       - name: Validate release (dry-run)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_DRY_RUN: "true"
-        run: pnpm release -- --dry-run --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
+        run: pnpm release -- --dry-run --packages agent-node registry contracts --summary-file release-summary-dry-run.json
 
   release:
-    name: Publish ${{ matrix.package.packageName }}
+    name: Publish release packages
     needs: prepare
     if: github.event_name != 'pull_request' && needs.prepare.outputs.has_changes == 'true'
     permissions:
       contents: write
       id-token: write
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJson(needs.prepare.outputs.matrix) }}
     defaults:
       run:
         working-directory: typescript
@@ -149,43 +146,46 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Setup test environment
-        if: matrix.package.id == 'agent-node'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'agent-node')
         working-directory: typescript/lib/agent-node
         run: cp .env.test.example .env.test
       - name: Build agent-node
-        if: matrix.package.id == 'agent-node'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'agent-node')
         run: pnpm --filter @emberai/agent-node build
       - name: Test agent-node
-        if: matrix.package.id == 'agent-node'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'agent-node')
         run: pnpm --filter @emberai/agent-node test:ci
       - name: Build registry
-        if: matrix.package.id == 'registry'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'registry')
         run: pnpm --filter @emberai/onchain-actions-registry build
       - name: Test registry
-        if: matrix.package.id == 'registry'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'registry')
         run: pnpm --filter @emberai/onchain-actions-registry test:ci
       - name: Build contracts
-        if: matrix.package.id == 'contracts'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'contracts')
         run: pnpm --filter @emberai/onchain-actions-contracts build
       - name: Test contracts
-        if: matrix.package.id == 'contracts'
+        if: contains(fromJson(needs.prepare.outputs.selected), 'contracts')
         run: pnpm --filter @emberai/onchain-actions-contracts test:ci
-      - name: Prepare npm publish folder
-        if: matrix.package.id == 'registry' || matrix.package.id == 'contracts'
-        run: node scripts/prepare-npm-publish.mjs --package "${{ matrix.package.packageJson }}"
+      - name: Prepare registry npm publish folder
+        if: contains(fromJson(needs.prepare.outputs.selected), 'registry')
+        run: node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/registry/package.json
+      - name: Prepare contracts npm publish folder
+        if: contains(fromJson(needs.prepare.outputs.selected), 'contracts')
+        run: node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/contracts/package.json
       - name: Run multi-semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm release -- --packages "${{ matrix.package.packageJson }}" --summary-file "release-summary-${{ matrix.package.id }}.json"
+        run: pnpm release -- --packages agent-node registry contracts --summary-file release-summary.json
       - name: Generate release tweet copy
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: node scripts/release-tweet-copy.mjs "release-summary-${{ matrix.package.id }}.json"
+        run: node scripts/release-tweet-copy.mjs release-summary.json
       - name: Upload release summary
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-summary-${{ matrix.package.id }}
-          path: typescript/release-summary-${{ matrix.package.id }}.json
+          name: release-summary
+          path: typescript/release-summary.json
           if-no-files-found: warn

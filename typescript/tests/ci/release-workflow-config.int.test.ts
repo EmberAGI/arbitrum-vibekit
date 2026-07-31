@@ -19,6 +19,10 @@ type WorkflowStep = {
 };
 
 type WorkflowJob = {
+  name?: string;
+  strategy?: {
+    matrix?: unknown;
+  };
   steps?: WorkflowStep[];
 };
 
@@ -84,7 +88,7 @@ describe('release workflow trusted-branch configuration', () => {
     }
   });
 
-  it('tests registry compatibility and contracts in both release jobs', async () => {
+  it('tests registry compatibility and contracts before validation and release', async () => {
     const workflow = await readReleaseWorkflow();
     const registryManifest = JSON.parse(
       await readFile(
@@ -93,29 +97,81 @@ describe('release workflow trusted-branch configuration', () => {
       ),
     ) as { scripts?: Record<string, string> };
 
-    for (const job of [workflow.jobs?.validate, workflow.jobs?.release]) {
-      const registryTest = job?.steps?.find((step) => step.name === 'Test registry');
-      const contractBuild = job?.steps?.find((step) => step.name === 'Build contracts');
-      const contractTest = job?.steps?.find((step) => step.name === 'Test contracts');
-      const prepare = job?.steps?.find((step) => step.name === 'Prepare npm publish folder');
+    const validateJob = workflow.jobs?.validate;
+    const validateRegistryTest = validateJob?.steps?.find(
+      (step) => step.name === 'Test registry',
+    );
+    const validateContractBuild = validateJob?.steps?.find(
+      (step) => step.name === 'Build contracts',
+    );
+    const validateContractTest = validateJob?.steps?.find(
+      (step) => step.name === 'Test contracts',
+    );
+    const validateRegistryPrepare = validateJob?.steps?.find(
+      (step) => step.name === 'Prepare registry npm publish folder',
+    );
+    const validateContractsPrepare = validateJob?.steps?.find(
+      (step) => step.name === 'Prepare contracts npm publish folder',
+    );
 
-      expect(registryTest).toMatchObject({
-        if: "matrix.package.id == 'registry'",
-        run: 'pnpm --filter @emberai/onchain-actions-registry test:ci',
-      });
-      expect(contractBuild).toMatchObject({
-        if: "matrix.package.id == 'contracts'",
-        run: 'pnpm --filter @emberai/onchain-actions-contracts build',
-      });
-      expect(contractTest).toMatchObject({
-        if: "matrix.package.id == 'contracts'",
-        run: 'pnpm --filter @emberai/onchain-actions-contracts test:ci',
-      });
-      expect(prepare?.if).toBe(
-        "matrix.package.id == 'registry' || matrix.package.id == 'contracts'",
-      );
-      expect(prepare?.run).toContain('matrix.package.packageJson');
-    }
+    expect(validateRegistryTest).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'registry')",
+      run: 'pnpm --filter @emberai/onchain-actions-registry test:ci',
+    });
+    expect(validateContractBuild).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'contracts')",
+      run: 'pnpm --filter @emberai/onchain-actions-contracts build',
+    });
+    expect(validateContractTest).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'contracts')",
+      run: 'pnpm --filter @emberai/onchain-actions-contracts test:ci',
+    });
+    expect(validateRegistryPrepare).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'registry')",
+      run: 'node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/registry/package.json',
+    });
+    expect(validateContractsPrepare).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'contracts')",
+      run: 'node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/contracts/package.json',
+    });
+
+    const releaseJob = workflow.jobs?.release;
+    const releaseRegistryTest = releaseJob?.steps?.find(
+      (step) => step.name === 'Test registry',
+    );
+    const releaseContractBuild = releaseJob?.steps?.find(
+      (step) => step.name === 'Build contracts',
+    );
+    const releaseContractTest = releaseJob?.steps?.find(
+      (step) => step.name === 'Test contracts',
+    );
+    const releaseRegistryPrepare = releaseJob?.steps?.find(
+      (step) => step.name === 'Prepare registry npm publish folder',
+    );
+    const releaseContractsPrepare = releaseJob?.steps?.find(
+      (step) => step.name === 'Prepare contracts npm publish folder',
+    );
+
+    expect(releaseRegistryTest).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'registry')",
+      run: 'pnpm --filter @emberai/onchain-actions-registry test:ci',
+    });
+    expect(releaseContractBuild).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'contracts')",
+      run: 'pnpm --filter @emberai/onchain-actions-contracts build',
+    });
+    expect(releaseContractTest).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'contracts')",
+      run: 'pnpm --filter @emberai/onchain-actions-contracts test:ci',
+    });
+    expect(releaseRegistryPrepare).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'registry')",
+      run: 'node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/registry/package.json',
+    });
+    expect(releaseContractsPrepare).toMatchObject({
+      if: "contains(fromJson(needs.prepare.outputs.selected), 'contracts')",
+      run: 'node scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/contracts/package.json',
+    });
 
     expect(registryManifest.scripts?.['test:ci']).toBe(
       'tsdown && vitest run --config vitest.config.ts',
@@ -194,5 +250,33 @@ describe('release workflow trusted-branch configuration', () => {
       prepareCmd:
         'node ../../scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/registry/package.json',
     });
+  });
+
+  it('publishes one coordinated local-package release graph', async () => {
+    const workflow = await readReleaseWorkflow();
+    const releaseJob = workflow.jobs?.release;
+    const releaseStep = releaseJob?.steps?.find(
+      (step) => step.name === 'Run multi-semantic-release',
+    );
+
+    expect(releaseJob?.strategy).toBeUndefined();
+    expect(releaseJob?.name).toBe('Publish release packages');
+    expect(JSON.stringify(releaseJob)).not.toContain('matrix.package');
+    expect(releaseStep?.run).toBe(
+      'pnpm release -- --packages agent-node registry contracts --summary-file release-summary.json',
+    );
+  });
+
+  it('dry-runs the same coordinated local-package release graph', async () => {
+    const workflow = await readReleaseWorkflow();
+    const validateJob = workflow.jobs?.validate;
+    const validateStep = validateJob?.steps?.find(
+      (step) => step.name === 'Validate release (dry-run)',
+    );
+
+    expect(validateJob?.strategy).toBeUndefined();
+    expect(validateStep?.run).toBe(
+      'pnpm release -- --dry-run --packages agent-node registry contracts --summary-file release-summary-dry-run.json',
+    );
   });
 });
