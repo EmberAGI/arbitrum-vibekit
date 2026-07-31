@@ -263,7 +263,7 @@ describe('release workflow trusted-branch configuration', () => {
     expect(releaseJob?.name).toBe('Publish release packages');
     expect(JSON.stringify(releaseJob)).not.toContain('matrix.package');
     expect(releaseStep?.run).toBe(
-      'pnpm release -- --packages agent-node registry contracts --summary-file release-summary.json',
+      'pnpm release -- --packages "agent-node,registry,contracts" --summary-file release-summary.json',
     );
   });
 
@@ -276,7 +276,7 @@ describe('release workflow trusted-branch configuration', () => {
 
     expect(validateJob?.strategy).toBeUndefined();
     expect(validateStep?.run).toBe(
-      'pnpm release -- --dry-run --packages agent-node registry contracts --summary-file release-summary-dry-run.json',
+      'pnpm release -- --dry-run --packages "agent-node,registry,contracts" --summary-file release-summary-dry-run.json',
     );
   });
 });
