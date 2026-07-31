@@ -7,12 +7,14 @@ import {
   PositiveDecimalStringSchema,
 } from '../internal/fresh-data.js';
 
+const CanonicalTokenIdentifierV1Schema = TokenIdentifierSchema.strict();
+
 function canonicalTokenKey(token: TokenIdentifier): string {
   return `${token.chainId}:${token.address.toLowerCase()}`;
 }
 
 const RequestedTokensSchema = z
-  .array(TokenIdentifierSchema)
+  .array(CanonicalTokenIdentifierV1Schema)
   .min(1)
   .max(50)
   .superRefine((tokens, context) => {

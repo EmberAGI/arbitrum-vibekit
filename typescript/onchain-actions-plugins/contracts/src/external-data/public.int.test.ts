@@ -480,4 +480,19 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('rejects private token fields at the token-market request Interface', () => {
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [
+          {
+            chainId: '42161',
+            address: '0x0000000000000000000000000000000000000001',
+            memgraph_id: 'private-graph-node',
+          },
+        ],
+      }).success,
+    ).toBe(false);
+  });
 });

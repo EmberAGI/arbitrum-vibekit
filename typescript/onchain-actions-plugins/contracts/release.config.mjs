@@ -6,6 +6,13 @@ export default createReleaseConfig({
   tagFormat: '@emberai/onchain-actions-contracts@${version}',
   packagePlugins: [
     [
+      '@semantic-release/exec',
+      {
+        prepareCmd:
+          'node ../../scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/contracts/package.json',
+      },
+    ],
+    [
       '@semantic-release/npm',
       {
         npmPublish: SHOULD_PUBLISH,
