@@ -86,6 +86,12 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
     } as const;
 
     expect(FreshnessEvidenceV1Schema.parse(fallback)).toEqual(fallback);
+    expect(
+      FreshnessEvidenceV1Schema.safeParse({
+        ...fallback,
+        observed_at: '2026-07-30T12:00:00.000Z',
+      }).success,
+    ).toBe(false);
     expect(PublicWarningV1Schema.parse(warning)).toEqual(warning);
     expect(
       PublicWarningV1Schema.safeParse({

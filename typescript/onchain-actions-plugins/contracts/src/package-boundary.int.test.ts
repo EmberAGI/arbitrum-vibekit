@@ -171,6 +171,12 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         requested_tokens: [token],
         items: [tokenAvailable],
       }).success) process.exit(17);
+      if (evidence.FreshnessEvidenceV1Schema.safeParse({
+        observed_at: "2026-07-30T12:00:00.000Z",
+        received_at: "2026-07-30T12:00:01.000Z",
+        fresh_until: "2026-07-30T12:05:00.000Z",
+        observed_at_source: "receipt_fallback",
+      }).success) process.exit(18);
       const emptyToken = { chainId: "", address: "" };
       if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
         schema_version: "1",
