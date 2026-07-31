@@ -13,6 +13,7 @@ export default defineConfig({
     '@aave/contract-helpers',
     '@aave/math-utils',
     '@bgd-labs/aave-address-book',
+    /^@emberai\/onchain-actions-contracts(?:\/.*)?$/,
     'ethers',
     'zod',
   ],

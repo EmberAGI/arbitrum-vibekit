@@ -1,48 +1,197 @@
-import type { ActionDefinition } from './actions/index.js';
-import type { LifecycleCapability } from './lifecycle.js';
-import type { AvailableActions, AvailableQueries, PluginType } from './pluginType.js';
-
-export interface EmberPlugin<Type extends PluginType> {
-  /**
-   * The unique identifier for the plugin.
-   */
-  id: string;
-  /**
-   * The type of the plugin, which determines the actions and queries it supports.
-   */
-  type: Type;
-  /**
-   * The possible actions that the plugin can perform.
-   */
-  actions: ActionDefinition<AvailableActions[Type]>[];
-  /**
-   * The metadata getters that the plugin can provide.
-   */
-  queries: AvailableQueries[Type];
-  /**
-   * The name of the plugin.
-   */
-  name: string;
-  /**
-   * An optional description of the plugin.
-   */
-  description?: string;
-  /**
-   * The twitter URL for the plugin or its creator.
-   */
-  x?: string;
-  /**
-   * The website URL for the plugin or its creator.
-   */
-  website?: string;
-  /**
-   * Optional lifecycle capability for topology-sensitive providers.
-   */
-  lifecycleCapability?: LifecycleCapability;
-}
-
-export * from './actions/index.js';
-export * from './lifecycle.js';
-export * from './queries/index.js';
-export * from './pluginType.js';
-export * from './schemas/index.js';
+export * from '@emberai/onchain-actions-contracts/core';
+export {
+  BorrowTokensRequestSchema,
+  BorrowTokensResponseSchema,
+  BuyPtRequestSchema,
+  BuyPtResponseSchema,
+  BuyYtRequestSchema,
+  BuyYtResponseSchema,
+  ClaimRewardsRequestSchema,
+  ClaimRewardsResponseSchema,
+  CreatePerpetualsDecreasePlanRequestSchema,
+  CreatePerpetualsDecreasePlanResponseSchema,
+  CreatePerpetualsDecreaseQuoteRequestSchema,
+  CreatePerpetualsDecreaseQuoteResponseSchema,
+  CreatePerpetualsIncreasePlanRequestSchema,
+  CreatePerpetualsIncreasePlanResponseSchema,
+  CreatePerpetualsIncreaseQuoteRequestSchema,
+  CreatePerpetualsIncreaseQuoteResponseSchema,
+  CreatePerpetualsOrderCancelPlanRequestSchema,
+  CreatePerpetualsOrderCancelPlanResponseSchema,
+  CreatePerpetualsPositionRequestSchema,
+  CreatePerpetualsPositionResponseSchema,
+  DecreasePositionSwapTypeSchema,
+  GetLiquidityPoolsResponseSchema,
+  GetPerpetualLifecycleRequestSchema,
+  GetPerpetualLifecycleResponseSchema,
+  GetPerpetualsMarketsOrdersRequestSchema,
+  GetPerpetualsMarketsOrdersResponseSchema,
+  GetPerpetualsMarketsPositionsRequestSchema,
+  GetPerpetualsMarketsPositionsResponseSchema,
+  GetPerpetualsMarketsRequestSchema,
+  GetPerpetualsMarketsResponseSchema,
+  GetWalletLendingPositionsRequestSchema,
+  GetWalletLendingPositionsResponseSchema,
+  GetWalletLiquidityPositionsRequestSchema,
+  GetWalletLiquidityPositionsResponseSchema,
+  LendTokenDetailSchema,
+  LiquidityFeesOwedTokenSchema,
+  LiquidityPayTokensSchema,
+  LiquidityPooledTokenSchema,
+  LiquidityPoolSchema,
+  LiquidityPoolTokens,
+  LiquidityPositionRangeSchema,
+  LiquidityPositionSchema,
+  LiquidityProvisionRangeSchema,
+  LiquidityRewardsOwedTokenSchema,
+  MarketTokenizedYieldRequestSchema,
+  MarketTokenizedYieldResponseSchema,
+  MintPtAndYtRequestSchema,
+  MintPtAndYtResponseSchema,
+  OrderSchema,
+  OrdersDataSchema,
+  OrderTypeSchema,
+  PerpetualMarketSchema,
+  PerpetualNumericPrecisionSchema,
+  PerpetualPlanResponseSchema,
+  PerpetualQuoteResponseSchema,
+  PerpetualsQueryKeys,
+  PositionSchema,
+  PositionsDataSchema,
+  PositionSideSchema,
+  RedeemPtRequestSchema,
+  RedeemPtResponseSchema,
+  RepayTokensRequestSchema,
+  RepayTokensResponseSchema,
+  SellPtRequestSchema,
+  SellPtResponseSchema,
+  SellYtRequestSchema,
+  SellYtResponseSchema,
+  SubmitPerpetualsTransactionRequestSchema,
+  SubmitPerpetualsTransactionResponseSchema,
+  SupplyLiquidityRequestSchema,
+  SupplyLiquidityResponseSchema,
+  SupplyTokensRequestSchema,
+  SupplyTokensResponseSchema,
+  SwapTokensRequestSchema,
+  SwapTokensResponseSchema,
+  TokenizedYieldMarketSchema,
+  TokenizedYieldUserPositionSchema,
+  TokenizedYieldUserPositionsRequestSchema,
+  TokenizedYieldUserPositionsResponseSchema,
+  WithdrawLiquidityRequestSchema,
+  WithdrawLiquidityResponseSchema,
+  WithdrawTokensRequestSchema,
+  WithdrawTokensResponseSchema,
+} from '@emberai/onchain-actions-contracts/plugins';
+export type {
+  Action,
+  ActionDefinition,
+  AvailableActions,
+  AvailableQueries,
+  BorrowTokensRequest,
+  BorrowTokensResponse,
+  BuyPtRequest,
+  BuyPtResponse,
+  BuyYtRequest,
+  BuyYtResponse,
+  ClaimRewardsRequest,
+  ClaimRewardsResponse,
+  CreatePerpetualsDecreasePlanRequest,
+  CreatePerpetualsDecreasePlanResponse,
+  CreatePerpetualsDecreaseQuoteRequest,
+  CreatePerpetualsDecreaseQuoteResponse,
+  CreatePerpetualsIncreasePlanRequest,
+  CreatePerpetualsIncreasePlanResponse,
+  CreatePerpetualsIncreaseQuoteRequest,
+  CreatePerpetualsIncreaseQuoteResponse,
+  CreatePerpetualsOrderCancelPlanRequest,
+  CreatePerpetualsOrderCancelPlanResponse,
+  CreatePerpetualsPositionRequest,
+  CreatePerpetualsPositionResponse,
+  DecreasePositionSwapType,
+  EmberPlugin,
+  GetLiquidityPoolsResponse,
+  GetPerpetualLifecycleRequest,
+  GetPerpetualLifecycleResponse,
+  GetPerpetualsMarketsOrdersRequest,
+  GetPerpetualsMarketsOrdersResponse,
+  GetPerpetualsMarketsPositionsRequest,
+  GetPerpetualsMarketsPositionsResponse,
+  GetPerpetualsMarketsRequest,
+  GetPerpetualsMarketsResponse,
+  GetWalletLendingPositionsRequest,
+  GetWalletLendingPositionsResponse,
+  GetWalletLiquidityPositionsRequest,
+  GetWalletLiquidityPositionsResponse,
+  LendingActions,
+  LendingGetPositions,
+  LendingQueries,
+  LendTokenDetail,
+  LifecycleCapability,
+  LifecycleRefreshScope,
+  LifecycleSegmentTopology,
+  LiquidityActions,
+  LiquidityFeesOwedToken,
+  LiquidityGetPools,
+  LiquidityGetPoolsOptions,
+  LiquidityGetWalletPositions,
+  LiquidityGetWalletPositionsOptions,
+  LiquidityPayTokens,
+  LiquidityPool,
+  LiquidityPooledToken,
+  LiquidityPosition,
+  LiquidityPositionRange,
+  LiquidityProvisionRange,
+  LiquidityQueries,
+  LiquidityRewardsOwedToken,
+  MarketTokenizedYieldRequest,
+  MarketTokenizedYieldResponse,
+  MintPtAndYtRequest,
+  MintPtAndYtResponse,
+  OrderType,
+  PerpetualMarket,
+  PerpetualNumericPrecision,
+  PerpetualPlanResponse,
+  PerpetualQuoteResponse,
+  PerpetualsActions,
+  PerpetualsGetLifecycle,
+  PerpetualsGetMarkets,
+  PerpetualsGetOrders,
+  PerpetualsGetPositions,
+  PerpetualsOrder,
+  PerpetualsPosition,
+  PerpetualsQueries,
+  PluginType,
+  PositionSide,
+  RedeemPtRequest,
+  RedeemPtResponse,
+  RepayTokensRequest,
+  RepayTokensResponse,
+  SellPtRequest,
+  SellPtResponse,
+  SellYtRequest,
+  SellYtResponse,
+  SubmitPerpetualsTransactionRequest,
+  SubmitPerpetualsTransactionResponse,
+  SupplyLiquidityRequest,
+  SupplyLiquidityResponse,
+  SupplyTokensRequest,
+  SupplyTokensResponse,
+  SwapActions,
+  SwapTokensRequest,
+  SwapTokensResponse,
+  TokenizedYieldActions,
+  TokenizedYieldGetMarkets,
+  TokenizedYieldGetUserPositions,
+  TokenizedYieldMarket,
+  TokenizedYieldQueries,
+  TokenizedYieldUserPosition,
+  TokenizedYieldUserPositionsRequest,
+  TokenizedYieldUserPositionsResponse,
+  TokenSet,
+  WithdrawLiquidityRequest,
+  WithdrawLiquidityResponse,
+  WithdrawTokensRequest,
+  WithdrawTokensResponse,
+} from '@emberai/onchain-actions-contracts/plugins';
