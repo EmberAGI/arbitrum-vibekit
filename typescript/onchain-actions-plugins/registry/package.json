@@ -27,6 +27,7 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
+    "pretest:ci": "pnpm --filter @emberai/onchain-actions-contracts build",
     "test:ci": "tsdown && vitest run --config vitest.config.ts"
   },
   "dependencies": {
