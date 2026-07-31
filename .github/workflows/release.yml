@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       packages:
-        description: "Comma separated package overrides (agent-node, registry)"
+        description: "Comma separated package overrides (agent-node, registry, contracts)"
         required: false
         type: string
   pull_request:
     paths:
       - "typescript/lib/agent-node/**"
       - "typescript/onchain-actions-plugins/registry/**"
+      - "typescript/onchain-actions-plugins/contracts/**"
       - "typescript/scripts/**"
       - "typescript/release/**"
       - "typescript/.multi-releaserc.cjs"
@@ -96,9 +97,18 @@ jobs:
       - name: Build registry
         if: matrix.package.id == 'registry'
         run: pnpm --filter @emberai/onchain-actions-registry build
-      - name: Prepare npm publish folder
+      - name: Test registry
         if: matrix.package.id == 'registry'
-        run: node scripts/prepare-npm-publish.mjs
+        run: pnpm --filter @emberai/onchain-actions-registry test:ci
+      - name: Build contracts
+        if: matrix.package.id == 'contracts'
+        run: pnpm --filter @emberai/onchain-actions-contracts build
+      - name: Test contracts
+        if: matrix.package.id == 'contracts'
+        run: pnpm --filter @emberai/onchain-actions-contracts test:ci
+      - name: Prepare npm publish folder
+        if: matrix.package.id == 'registry' || matrix.package.id == 'contracts'
+        run: node scripts/prepare-npm-publish.mjs --package "${{ matrix.package.packageJson }}"
       - name: Validate release (dry-run)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -151,9 +161,18 @@ jobs:
       - name: Build registry
         if: matrix.package.id == 'registry'
         run: pnpm --filter @emberai/onchain-actions-registry build
-      - name: Prepare npm publish folder
+      - name: Test registry
         if: matrix.package.id == 'registry'
-        run: node scripts/prepare-npm-publish.mjs
+        run: pnpm --filter @emberai/onchain-actions-registry test:ci
+      - name: Build contracts
+        if: matrix.package.id == 'contracts'
+        run: pnpm --filter @emberai/onchain-actions-contracts build
+      - name: Test contracts
+        if: matrix.package.id == 'contracts'
+        run: pnpm --filter @emberai/onchain-actions-contracts test:ci
+      - name: Prepare npm publish folder
+        if: matrix.package.id == 'registry' || matrix.package.id == 'contracts'
+        run: node scripts/prepare-npm-publish.mjs --package "${{ matrix.package.packageJson }}"
       - name: Run multi-semantic-release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

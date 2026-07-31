@@ -1,26 +1,32 @@
 #!/usr/bin/env node
 
-import fs from "node:fs";
-import fsPromises from "node:fs/promises";
-import path from "node:path";
-import process from "node:process";
+import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
+import path from 'node:path';
+import process from 'node:process';
 
-import createDebug from "debug";
-import multiSemanticRelease from "@anolilab/multi-semantic-release";
-import logger from "@anolilab/multi-semantic-release/lib/logger.js";
+import createDebug from 'debug';
+import multiSemanticRelease from '@anolilab/multi-semantic-release';
+import logger from '@anolilab/multi-semantic-release/lib/logger.js';
 
 const PACKAGE_DEFINITIONS = [
   {
-    id: "agent-node",
-    packageJson: "lib/agent-node/package.json",
-    packageName: "@emberai/agent-node",
-    workspace: "lib/agent-node",
+    id: 'agent-node',
+    packageJson: 'lib/agent-node/package.json',
+    packageName: '@emberai/agent-node',
+    workspace: 'lib/agent-node',
   },
   {
-    id: "registry",
-    packageJson: "onchain-actions-plugins/registry/package.json",
-    packageName: "@emberai/onchain-actions-registry",
-    workspace: "onchain-actions-plugins/registry",
+    id: 'registry',
+    packageJson: 'onchain-actions-plugins/registry/package.json',
+    packageName: '@emberai/onchain-actions-registry',
+    workspace: 'onchain-actions-plugins/registry',
+  },
+  {
+    id: 'contracts',
+    packageJson: 'onchain-actions-plugins/contracts/package.json',
+    packageName: '@emberai/onchain-actions-contracts',
+    workspace: 'onchain-actions-plugins/contracts',
   },
 ];
 
@@ -33,8 +39,8 @@ const PACKAGE_LOOKUP = new Map(
       [definition.packageJson, definition],
     ];
 
-    if (definition.packageJson.endsWith("/package.json")) {
-      entries.push([definition.packageJson.replace(/\/package\.json$/, ""), definition]);
+    if (definition.packageJson.endsWith('/package.json')) {
+      entries.push([definition.packageJson.replace(/\/package\.json$/, ''), definition]);
     }
 
     return entries;
@@ -43,41 +49,41 @@ const PACKAGE_LOOKUP = new Map(
 
 const DEFAULT_PACKAGE_IDS = PACKAGE_DEFINITIONS.map((pkg) => pkg.id);
 const LIST_DELIMITER = /[, ]/;
-const DEFAULT_DEBUG_SCOPES = ["msr:*", "semantic-release:*"];
-const DEBUG_SCOPE_ENV = "MSR_DEBUG_SCOPES";
+const DEFAULT_DEBUG_SCOPES = ['msr:*', 'semantic-release:*'];
+const DEBUG_SCOPE_ENV = 'MSR_DEBUG_SCOPES';
 let loggerLevelPatched = false;
 
 const BOOLEAN_FLAGS = new Map([
-  ["--dry-run", "dryRun"],
-  ["--debug", "debug"],
-  ["--silent", "silent"],
-  ["--sequential-init", "sequentialInit"],
-  ["--sequential-prepare", "sequentialPrepare"],
-  ["--first-parent", "firstParent"],
-  ["--ci", "ci"],
+  ['--dry-run', 'dryRun'],
+  ['--debug', 'debug'],
+  ['--silent', 'silent'],
+  ['--sequential-init', 'sequentialInit'],
+  ['--sequential-prepare', 'sequentialPrepare'],
+  ['--first-parent', 'firstParent'],
+  ['--ci', 'ci'],
 ]);
 
 const STRING_FLAGS = new Map([
-  ["--log-level", "logLevel"],
-  ["--tag-format", "tagFormat"],
+  ['--log-level', 'logLevel'],
+  ['--tag-format', 'tagFormat'],
 ]);
 
 const LIST_FLAGS = new Map([
-  ["--branches", "branches"],
-  ["--ignore-packages", "ignorePackages"],
+  ['--branches', 'branches'],
+  ['--ignore-packages', 'ignorePackages'],
 ]);
 
 const NESTED_STRING_FLAGS = new Map([
-  ["--deps.bump", ["deps", "bump"]],
-  ["--deps.release", ["deps", "release"]],
-  ["--deps.prefix", ["deps", "prefix"]],
+  ['--deps.bump', ['deps', 'bump']],
+  ['--deps.release', ['deps', 'release']],
+  ['--deps.prefix', ['deps', 'prefix']],
 ]);
 
 const FLAG_ALIASES = new Map([
-  ["-d", "--dry-run"],
-  ["-b", "--branches"],
-  ["-p", "--packages"],
-  ["-h", "--help"],
+  ['-d', '--dry-run'],
+  ['-b', '--branches'],
+  ['-p', '--packages'],
+  ['-h', '--help'],
 ]);
 
 function printHelp() {
@@ -94,7 +100,7 @@ Options:
 Examples:
   pnpm release -- --dry-run
   pnpm release -- --packages agent-node
-  pnpm release -- --packages agent-node registry --summary-file .artifacts/msr-summary.json
+  pnpm release -- --packages agent-node registry contracts --summary-file .artifacts/msr-summary.json
 `);
 }
 
@@ -131,7 +137,7 @@ function addDebugNamespaces(scopes) {
     return;
   }
 
-  createDebug.enable([...namespaceSet].join(","));
+  createDebug.enable([...namespaceSet].join(','));
 }
 
 function patchLoggerLevel(scopes) {
@@ -139,13 +145,13 @@ function patchLoggerLevel(scopes) {
     return;
   }
 
-  const descriptor = Object.getOwnPropertyDescriptor(logger.config, "level");
+  const descriptor = Object.getOwnPropertyDescriptor(logger.config, 'level');
 
   if (!descriptor?.set) {
     return;
   }
 
-  Object.defineProperty(logger.config, "level", {
+  Object.defineProperty(logger.config, 'level', {
     configurable: descriptor.configurable ?? true,
     enumerable: descriptor.enumerable ?? true,
     get: descriptor.get ? descriptor.get.bind(logger.config) : undefined,
@@ -174,8 +180,8 @@ function maybeEnableVerboseMsrLogging(options) {
 }
 
 function normalizeValueToken(token, queue) {
-  if (token.includes("=")) {
-    return token.substring(token.indexOf("=") + 1);
+  if (token.includes('=')) {
+    return token.substring(token.indexOf('=') + 1);
   }
 
   if (!queue.length) {
@@ -212,11 +218,15 @@ function resolvePackageSpecs(specs, cwd) {
       continue;
     }
 
-    const candidate = trimmed.endsWith("package.json") ? trimmed : path.join(trimmed, "package.json");
+    const candidate = trimmed.endsWith('package.json')
+      ? trimmed
+      : path.join(trimmed, 'package.json');
     const absolutePath = path.resolve(cwd, candidate);
 
     if (!fs.existsSync(absolutePath)) {
-      throw new Error(`Unknown package spec "${spec}". Expected a known package id or a valid path to package.json.`);
+      throw new Error(
+        `Unknown package spec "${spec}". Expected a known package id or a valid path to package.json.`,
+      );
     }
 
     const packageName = path.basename(path.dirname(absolutePath));
@@ -237,7 +247,7 @@ function resolvePackageSpecs(specs, cwd) {
   }
 
   if (resolved.length === 0) {
-    throw new Error("At least one package must be selected for release.");
+    throw new Error('At least one package must be selected for release.');
   }
 
   return resolved;
@@ -250,7 +260,7 @@ function parseCliArguments(argv, cwd) {
 
   let summaryFile = process.env.RELEASE_SUMMARY_FILE
     ? path.resolve(cwd, process.env.RELEASE_SUMMARY_FILE)
-    : path.resolve(cwd, "release-summary.json");
+    : path.resolve(cwd, 'release-summary.json');
 
   while (queue.length) {
     let token = queue.shift();
@@ -259,44 +269,44 @@ function parseCliArguments(argv, cwd) {
       token = FLAG_ALIASES.get(token);
     }
 
-    if (token === "--") {
+    if (token === '--') {
       continue;
     }
 
-    if (token === "--help") {
+    if (token === '--help') {
       printHelp();
       process.exit(0);
     }
 
-    if (token === "--packages") {
+    if (token === '--packages') {
       const value = normalizeValueToken(token, queue);
       packageSpecs.push(...parseList(value));
       continue;
     }
 
-    if (token.startsWith("--packages=")) {
-      packageSpecs.push(...parseList(token.slice("--packages=".length)));
+    if (token.startsWith('--packages=')) {
+      packageSpecs.push(...parseList(token.slice('--packages='.length)));
       continue;
     }
 
-    if (token === "--summary-file") {
+    if (token === '--summary-file') {
       const value = normalizeValueToken(token, queue);
-      summaryFile = value === "false" ? null : path.resolve(cwd, value);
+      summaryFile = value === 'false' ? null : path.resolve(cwd, value);
       continue;
     }
 
-    if (token.startsWith("--summary-file=")) {
-      const value = token.slice("--summary-file=".length);
-      summaryFile = value === "false" ? null : path.resolve(cwd, value);
+    if (token.startsWith('--summary-file=')) {
+      const value = token.slice('--summary-file='.length);
+      summaryFile = value === 'false' ? null : path.resolve(cwd, value);
       continue;
     }
 
-    if (token === "--ignore-private") {
+    if (token === '--ignore-private') {
       options.ignorePrivate = true;
       continue;
     }
 
-    if (token === "--no-ignore-private") {
+    if (token === '--no-ignore-private') {
       options.ignorePrivate = false;
       continue;
     }
@@ -306,7 +316,7 @@ function parseCliArguments(argv, cwd) {
       continue;
     }
 
-    if (token.startsWith("--no-")) {
+    if (token.startsWith('--no-')) {
       const positiveFlag = `--${token.slice(5)}`;
       if (BOOLEAN_FLAGS.has(positiveFlag)) {
         options[BOOLEAN_FLAGS.get(positiveFlag)] = false;
@@ -385,7 +395,7 @@ function formatReleaseSummary(packages) {
   return packages.map((pkg) => {
     const releaseResult = pkg.result || null;
     const nextRelease = releaseResult?.nextRelease ?? null;
-    const githubInfo = releaseResult?.releases?.find((entry) => entry.name === "github");
+    const githubInfo = releaseResult?.releases?.find((entry) => entry.name === 'github');
 
     return {
       gitTag: nextRelease?.gitTag ?? null,
@@ -417,7 +427,7 @@ async function main() {
   const { options, packageSpecs, summaryFile } = parseCliArguments(process.argv.slice(2), cwd);
 
   if (options.dryRun && !process.env.RELEASE_DRY_RUN) {
-    process.env.RELEASE_DRY_RUN = "true";
+    process.env.RELEASE_DRY_RUN = 'true';
   }
 
   maybeEnableVerboseMsrLogging(options);
@@ -435,10 +445,12 @@ async function main() {
   if (releasedPackages.length > 0) {
     const labels = releasedPackages.map((entry) => `${entry.package}@${entry.version}`);
     // eslint-disable-next-line no-console
-    console.log(`[multi-release] Published ${releasedPackages.length} package(s): ${labels.join(", ")}`);
+    console.log(
+      `[multi-release] Published ${releasedPackages.length} package(s): ${labels.join(', ')}`,
+    );
   } else {
     // eslint-disable-next-line no-console
-    console.log("[multi-release] No packages required a release.");
+    console.log('[multi-release] No packages required a release.');
   }
 }
 

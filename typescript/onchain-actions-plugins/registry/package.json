@@ -26,12 +26,13 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test:ci": "vitest run --config vitest.config.ts"
+    "test:ci": "tsdown && vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "@aave/contract-helpers": "^1.32.1",
     "@aave/math-utils": "^1.32.1",
     "@bgd-labs/aave-address-book": "^4.10.0",
+    "@emberai/onchain-actions-contracts": "workspace:^",
     "ethers": "^5.7.2"
   },
   "peerDependencies": {
@@ -39,7 +40,8 @@
   },
   "devDependencies": {
     "@semantic-release/exec": "^7.1.0",
-    "tsdown": "catalog:"
+    "tsdown": "catalog:",
+    "zod": "^3.25.76"
   },
   "license": "MIT",
   "publishConfig": {
