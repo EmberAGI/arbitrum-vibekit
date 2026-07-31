@@ -23,6 +23,11 @@ let temporaryRoot: string;
 let consumerRoot: string;
 let packedFiles: Array<{ path: string }>;
 
+type NpmPackResult = {
+  filename: string;
+  files: Array<{ path: string }>;
+};
+
 beforeAll(async () => {
   temporaryRoot = await mkdtemp(path.join(tmpdir(), 'onchain-actions-contracts-pack-'));
   const packDirectory = path.join(temporaryRoot, 'pack');
@@ -41,11 +46,8 @@ beforeAll(async () => {
     ['pack', '--json', '--pack-destination', packDirectory],
     { cwd: packageRoot },
   );
-  const packResult = JSON.parse(stdout) as Array<{
-    filename: string;
-    files: Array<{ path: string }>;
-  }>;
-  const [packed] = packResult;
+  const packResult = JSON.parse(stdout) as NpmPackResult | NpmPackResult[];
+  const packed = Array.isArray(packResult) ? packResult[0] : packResult;
 
   if (!packed) {
     throw new Error('npm pack returned no package');
