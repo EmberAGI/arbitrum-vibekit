@@ -3,6 +3,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readdir,
   realpath,
   rename,
   rm,
@@ -24,7 +25,6 @@ let consumerRoot: string;
 let packedFiles: Array<{ path: string }>;
 
 type NpmPackResult = {
-  filename: string;
   files: Array<{ path: string }>;
 };
 
@@ -54,7 +54,15 @@ beforeAll(async () => {
   }
 
   packedFiles = packed.files;
-  const tarballPath = path.join(packDirectory, packed.filename);
+  const [tarballFilename, ...extraTarballs] = (await readdir(packDirectory)).filter((filename) =>
+    filename.endsWith('.tgz'),
+  );
+
+  if (!tarballFilename || extraTarballs.length > 0) {
+    throw new Error('npm pack did not produce exactly one tarball');
+  }
+
+  const tarballPath = path.join(packDirectory, tarballFilename);
 
   await execFileAsync('tar', ['-xzf', tarballPath, '-C', extractDirectory]);
   await rename(
