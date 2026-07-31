@@ -152,6 +152,28 @@ describe('release workflow trusted-branch configuration', () => {
     });
   });
 
+  it('prepares the contracts publish directory before semantic-release reads it', async () => {
+    const configPath = path.resolve(
+      import.meta.dirname,
+      '../../onchain-actions-plugins/contracts/release.config.mjs',
+    );
+    const configModule = (await import(`${pathToFileURL(configPath).href}?test=${Date.now()}`)) as {
+      default: {
+        plugins: Array<[string, Record<string, unknown>]>;
+      };
+    };
+    const plugins = configModule.default.plugins;
+    const prepareIndex = plugins.findIndex(([name]) => name === '@semantic-release/exec');
+    const npmIndex = plugins.findIndex(([name]) => name === '@semantic-release/npm');
+
+    expect(prepareIndex).toBeGreaterThan(-1);
+    expect(prepareIndex).toBeLessThan(npmIndex);
+    expect(plugins[prepareIndex]?.[1]).toMatchObject({
+      prepareCmd:
+        'node ../../scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/contracts/package.json',
+    });
+  });
+
   it('refreshes the registry publish manifest after local dependency versions resolve', async () => {
     const configPath = path.resolve(
       import.meta.dirname,
