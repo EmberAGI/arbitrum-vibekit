@@ -25,16 +25,22 @@ The Ember Plugin System consists of the following components:
 
 ```
 onchain-actions-plugins/
+├── contracts/                 # Neutral public contract kernel.
+│   └── src/
+│       ├── core/              # Token, chain, transaction, and provider-tracking contracts.
+│       ├── plugins/           # Plugin, action, query, lifecycle, and host-capability contracts.
+│       ├── endpoints/         # Public endpoint request and response contracts.
+│       └── external-data/     # Versioned evidence and snapshot contracts.
 └── registry/
     ├── src/
-    │   ├── core/              # Type definitions, interfaces, and schemas for plugin development.
-    │   ├── aave-lending-plugin/   #  Complete AAVE V3 lending plugin serving as a development example.
+    │   ├── core/index.ts      # Compatibility re-exports for existing registry consumers.
+    │   ├── aave-lending-plugin/   # Complete AAVE V3 lending plugin serving as a development example.
     │   ├── registry.ts        # Plugin registration and discovery system.
-    │   ├── chainConfig.ts     # Chain configuration utilities
-    │   └── index.ts           # Main registry initialization
+    │   ├── chainConfig.ts     # Chain configuration utilities.
+    │   └── index.ts           # Main registry initialization.
     ├── package.json
     ├── tsconfig.json
-    └── tsup.config.ts
+    └── tsdown.config.ts
 ```
 
 ### What are Plugins?
@@ -63,7 +69,9 @@ Here is how the system's components interact with each other:
 
 ## Plugin Architecture
 
-The core framework (`registry/src/core/`) provides the following components:
+The neutral plugin contracts are owned by
+`@emberai/onchain-actions-contracts/plugins`, which provides the following
+components:
 
 - **actions**: Action type definitions and interfaces for all plugin types
 - **queries**: Query type definitions for retrieving protocol data
@@ -71,7 +79,16 @@ The core framework (`registry/src/core/`) provides the following components:
 - **pluginType.ts**: Core plugin type definitions
 - **index.ts**: Main exports for plugin development
 
-These components work together to create a type-safe plugin system: **index.ts** defines the foundational `EmberPlugin` interface, while **pluginType.ts** defines the plugin types (lending, liquidity, swap, perpetuals) and maps each type to its available **actions** and **queries**. The **actions** directory provides the executable operations (supply, borrow, swap, etc.) with their callback signatures, while **queries** enable data retrieval without transactions. All inputs and outputs are validated through **schemas**, ensuring type safety and data consistency across the system.
+These components work together to create a type-safe plugin system: the public
+entrypoint exports the foundational `EmberPlugin` interface and maps each
+plugin type to its available **actions** and **queries**. Action contracts
+describe executable operations and callback signatures, while query contracts
+describe data retrieval without transactions. Zod **schemas** validate their
+inputs and outputs.
+
+The registry's `src/core/index.ts` is a compatibility adapter that re-exports
+symbols the registry already exposed. New plugin and host code should import
+neutral contracts from the supported contracts-package subpaths directly.
 
 ### Plugin Interface
 
@@ -100,7 +117,11 @@ The system supports four main plugin types:
 
 ### Actions
 
-Each plugin type defines specific [actions](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins/registry/src/core/actions) they can execute. For example, lending plugins can do `lending-supply`, `lending-borrow`, `lending-repay`, and `lending-withdraw`. Each action has callback functions that define its request and response.
+Each plugin type defines specific
+[actions](https://github.com/EmberAGI/arbitrum-vibekit/tree/main/typescript/onchain-actions-plugins/contracts/src/plugins/actions)
+it can execute. For example, lending plugins can do `lending-supply`,
+`lending-borrow`, `lending-repay`, and `lending-withdraw`. Each action has
+callback functions that define its request and response.
 
 ```typescript
 interface ActionDefinition<T extends Action> {
@@ -227,19 +248,25 @@ type AvailableQueries = {
 
 The schema system provides comprehensive type safety with Zod validation:
 
-**Core Schemas** (`schemas/core.ts`):
+**Core contracts** (`@emberai/onchain-actions-contracts/core`):
 
 - `TokenSchema`: Complete token metadata including native token handling
 - `TransactionPlanSchema`: Standardized transaction format for all chains
 - `FeeBreakdownSchema`: Service fees and slippage cost structure
-- `BalanceSchema`: User wallet balance representation
+- `ProviderTrackingInfoSchema`: Provider request tracking information
 
-**Action-Specific Schemas**:
+**Plugin contracts** (`@emberai/onchain-actions-contracts/plugins`):
 
-- **Lending** (`schemas/lending.ts`): Supply, borrow, repay, withdraw operations with comprehensive position tracking, optional `tokenAddress` targeting, and reserve quote fields for exact max-borrow resolution
-- **Liquidity** (`schemas/liquidity.ts`): Advanced liquidity provision with discriminated unions for full/limited range positions
-- **Swap** (`schemas/swap.ts`): Token exchange with slippage tolerance and price tracking
-- **Perpetuals** (`schemas/perpetuals.ts`): Integration with GMX SDK for complex derivatives trading
+- **Lending**: Supply, borrow, repay, and withdraw operation contracts
+- **Liquidity**: Liquidity provision contracts with full/limited range positions
+- **Swap**: Token exchange contracts with slippage tolerance and price tracking
+- **Perpetuals**: Derivatives action and query contracts
+
+Public request and response contracts are exported from
+`@emberai/onchain-actions-contracts/endpoints`. New external-data evidence
+contracts are exported from
+`@emberai/onchain-actions-contracts/external-data`; the registry does not
+re-export that new evidence surface.
 
 ## Plugin Registry
 
