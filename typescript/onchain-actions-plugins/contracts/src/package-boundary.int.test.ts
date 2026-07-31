@@ -106,6 +106,41 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (!core.TokenIdentifierSchema || !plugins.TokenPriceReadResultV1Schema ||
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
+      const { z } = await import("zod");
+      const genericResult = evidence.createDataResultV1Schema(
+        z.string().min(1),
+        z.object({ price_usd: z.string() }).strict(),
+      );
+      const prematureStale = {
+        status: "stale",
+        subject: "token:arb",
+        reason: "stale_observation",
+        last_known_value: { price_usd: "1.10" },
+        freshness: {
+          observed_at: "2026-07-30T12:00:00.000Z",
+          received_at: "2026-07-30T12:00:01.000Z",
+          fresh_until: "2026-07-30T12:05:00.000Z",
+          observed_at_source: "provider",
+        },
+        provenance: {
+          provider_id: "coingecko",
+          capability: "token_usd_price",
+          canonical_subject: "token:arb",
+          source_class: "provider_api",
+        },
+      };
+      if (genericResult.safeParse(prematureStale).success) process.exit(11);
+      const genericEnvelope = evidence.createSnapshotEnvelopeV1Schema(
+        z.string().min(1),
+        z.object({ price_usd: z.string() }).strict(),
+      );
+      if (genericEnvelope.safeParse({
+        schema_version: "1",
+        snapshot_id: "premature-stale-snapshot",
+        quote_currency: "USD",
+        completeness: "unavailable",
+        items: [prematureStale],
+      }).success) process.exit(12);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);

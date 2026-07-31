@@ -119,6 +119,46 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
     ).toBe(false);
   });
 
+  it('accepts stale evidence only after its freshness window has elapsed', () => {
+    const schema = createDataResultV1Schema(
+      z.string().min(1),
+      z.object({ price_usd: z.string() }).strict(),
+    );
+    const staleResult = {
+      status: 'stale',
+      subject: 'token:arb',
+      reason: 'stale_observation',
+      last_known_value: { price_usd: '1.10' },
+      freshness,
+      provenance,
+    } as const;
+
+    expect(schema.safeParse(staleResult).success).toBe(false);
+    expect(
+      schema.safeParse({
+        ...staleResult,
+        freshness: {
+          ...freshness,
+          received_at: '2026-07-30T13:00:00.000Z',
+        },
+      }).success,
+    ).toBe(true);
+
+    const envelopeSchema = createSnapshotEnvelopeV1Schema(
+      z.string().min(1),
+      z.object({ price_usd: z.string() }).strict(),
+    );
+    expect(
+      envelopeSchema.safeParse({
+        schema_version: '1',
+        snapshot_id: 'premature-stale-snapshot',
+        quote_currency: 'USD',
+        completeness: 'unavailable',
+        items: [staleResult],
+      }).success,
+    ).toBe(false);
+  });
+
   it('validates every generic result state without leaking current values', () => {
     const schema = createDataResultV1Schema(
       z.string().min(1),
