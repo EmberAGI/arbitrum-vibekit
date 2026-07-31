@@ -23,6 +23,7 @@
   "sideEffects": false,
   "scripts": {
     "build": "tsdown",
+    "prelint": "pnpm --filter @emberai/onchain-actions-contracts build",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\"",
