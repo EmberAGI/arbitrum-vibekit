@@ -22,11 +22,7 @@ const workspaceRoot = path.resolve(packageRoot, '../..');
 
 let temporaryRoot: string;
 let consumerRoot: string;
-let packedFiles: Array<{ path: string }>;
-
-type NpmPackResult = {
-  files: Array<{ path: string }>;
-};
+let packedFiles: string[];
 
 beforeAll(async () => {
   temporaryRoot = await mkdtemp(path.join(tmpdir(), 'onchain-actions-contracts-pack-'));
@@ -41,19 +37,9 @@ beforeAll(async () => {
     mkdir(packageScope, { recursive: true }),
   ]);
 
-  const { stdout } = await execFileAsync(
-    'npm',
-    ['pack', '--json', '--pack-destination', packDirectory],
-    { cwd: packageRoot },
-  );
-  const packResult = JSON.parse(stdout) as NpmPackResult | NpmPackResult[];
-  const packed = Array.isArray(packResult) ? packResult[0] : packResult;
-
-  if (!packed) {
-    throw new Error('npm pack returned no package');
-  }
-
-  packedFiles = packed.files;
+  await execFileAsync('npm', ['pack', '--json', '--pack-destination', packDirectory], {
+    cwd: packageRoot,
+  });
   const [tarballFilename, ...extraTarballs] = (await readdir(packDirectory)).filter((filename) =>
     filename.endsWith('.tgz'),
   );
@@ -65,6 +51,7 @@ beforeAll(async () => {
   const tarballPath = path.join(packDirectory, tarballFilename);
 
   await execFileAsync('tar', ['-xzf', tarballPath, '-C', extractDirectory]);
+  packedFiles = await readdir(path.join(extractDirectory, 'package'), { recursive: true });
   await rename(
     path.join(extractDirectory, 'package'),
     path.join(packageScope, 'onchain-actions-contracts'),
@@ -88,9 +75,7 @@ afterAll(async () => {
 
 describe('packed @emberai/onchain-actions-contracts', () => {
   it('publishes only supported artifacts for all four subpaths', () => {
-    const paths = packedFiles.map((file) => file.path);
-
-    expect(paths).toEqual(
+    expect(packedFiles).toEqual(
       expect.arrayContaining([
         'dist/core/index.mjs',
         'dist/core/index.cjs',
@@ -103,8 +88,8 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         'README.md',
       ]),
     );
-    expect(paths.some((filePath) => filePath.startsWith('src/'))).toBe(false);
-    expect(paths.some((filePath) => filePath.endsWith('.tsbuildinfo'))).toBe(false);
+    expect(packedFiles.some((filePath) => filePath.startsWith('src/'))).toBe(false);
+    expect(packedFiles.some((filePath) => filePath.endsWith('.tsbuildinfo'))).toBe(false);
   });
 
   it('loads every public ESM and CJS entrypoint and rejects internal paths', async () => {
