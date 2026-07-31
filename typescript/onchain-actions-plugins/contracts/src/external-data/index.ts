@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { validateStaleExpiration } from '../internal/result-invariants.js';
+import { validateResultFreshness } from '../internal/result-invariants.js';
 
 const Rfc3339UtcSchema = z.string().datetime();
 const BoundedIdentifierSchema = z.string().trim().min(1).max(128);
@@ -144,7 +144,7 @@ export function createDataResultV1Schema<
         })
         .strict(),
     ])
-    .superRefine(validateStaleExpiration);
+    .superRefine(validateResultFreshness);
 }
 
 export function createEvidencedFieldV1Schema<ValueSchema extends z.ZodTypeAny>(
