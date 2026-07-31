@@ -159,6 +159,23 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         completeness: "complete",
         items: [expiredAvailable],
       }).success) process.exit(14);
+      const token = {
+        chainId: "42161",
+        address: "0x0000000000000000000000000000000000000001",
+      };
+      const tokenAvailable = { ...expiredAvailable, subject: token };
+      if (plugins.TokenPriceReadResultV1Schema.safeParse(tokenAvailable).success)
+        process.exit(15);
+      if (endpoints.TokenMarketSnapshotResultV1Schema.safeParse(tokenAvailable).success)
+        process.exit(16);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        schema_version: "1",
+        snapshot_id: "expired-market-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        requested_tokens: [token],
+        items: [tokenAvailable],
+      }).success) process.exit(17);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);

@@ -192,6 +192,36 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
     ).toBe(false);
   });
 
+  it('rejects expired available results across fresh-only public Interfaces', () => {
+    const token = {
+      chainId: '42161',
+      address: '0x0000000000000000000000000000000000000001',
+    } as const;
+    const tokenAvailable = {
+      status: 'available',
+      subject: token,
+      value: { price_usd: '1.25' },
+      freshness: {
+        ...freshness,
+        received_at: '2026-07-30T13:00:00.000Z',
+      },
+      provenance,
+    } as const;
+
+    expect(TokenPriceReadResultV1Schema.safeParse(tokenAvailable).success).toBe(false);
+    expect(TokenMarketSnapshotResultV1Schema.safeParse(tokenAvailable).success).toBe(false);
+    expect(
+      TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        schema_version: '1',
+        snapshot_id: 'expired-market-snapshot',
+        quote_currency: 'USD',
+        completeness: 'complete',
+        requested_tokens: [token],
+        items: [tokenAvailable],
+      }).success,
+    ).toBe(false);
+  });
+
   it('validates every generic result state without leaking current values', () => {
     const schema = createDataResultV1Schema(
       z.string().min(1),
