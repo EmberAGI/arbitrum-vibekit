@@ -39,6 +39,12 @@ const PACKAGE_LOOKUP = new Map(
 
 const LIST_DELIMITER = /[, ]/;
 const STABLE_BRANCHES = new Set(['main']);
+const DEPENDENCY_SCOPES = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+];
 
 function parseList(value) {
   return value
@@ -168,6 +174,46 @@ function resolveReleaseChannel(branchName) {
   return 'next';
 }
 
+async function expandSelectedWithLocalDependents(packages, cwd) {
+  const selectedIds = new Set(packages.filter((pkg) => pkg.changed).map((pkg) => pkg.id));
+  const packageNamesById = new Map(packages.map((pkg) => [pkg.id, pkg.name]));
+  const manifestsById = new Map();
+
+  for (const pkg of packages) {
+    const manifest = JSON.parse(
+      await fs.readFile(path.resolve(cwd, pkg.packageJson), 'utf8'),
+    );
+    manifestsById.set(pkg.id, manifest);
+  }
+
+  let expanded = true;
+
+  while (expanded) {
+    expanded = false;
+    const selectedNames = new Set(
+      [...selectedIds].map((id) => packageNamesById.get(id)).filter(Boolean),
+    );
+
+    for (const pkg of packages) {
+      if (selectedIds.has(pkg.id)) {
+        continue;
+      }
+
+      const manifest = manifestsById.get(pkg.id) ?? {};
+      const dependencyNames = DEPENDENCY_SCOPES.flatMap((scope) =>
+        Object.keys(manifest[scope] ?? {}),
+      );
+
+      if (dependencyNames.some((name) => selectedNames.has(name))) {
+        selectedIds.add(pkg.id);
+        expanded = true;
+      }
+    }
+  }
+
+  return selectedIds;
+}
+
 async function main() {
   const cwd = process.cwd();
   const argv = process.argv.slice(2);
@@ -233,9 +279,10 @@ async function main() {
     });
   }
 
-  const selected = packages.filter((pkg) => pkg.changed).map((pkg) => pkg.id);
+  const selectedIds = await expandSelectedWithLocalDependents(packages, cwd);
+  const selected = packages.filter((pkg) => selectedIds.has(pkg.id)).map((pkg) => pkg.id);
   const matrix = packages
-    .filter((pkg) => pkg.changed)
+    .filter((pkg) => selectedIds.has(pkg.id))
     .map((pkg) => ({
       forced: pkg.forced,
       id: pkg.id,

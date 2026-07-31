@@ -6,8 +6,11 @@ providers, plugins, endpoints, and registry consumers.
 ## Install
 
 ```bash
-pnpm add @emberai/onchain-actions-contracts zod
+pnpm add @emberai/onchain-actions-contracts zod@^3.25.76
 ```
+
+Zod is a peer dependency. V1 requires Zod 3 so producers and consumers share
+one runtime schema instance.
 
 The package exposes four stable public subpaths:
 

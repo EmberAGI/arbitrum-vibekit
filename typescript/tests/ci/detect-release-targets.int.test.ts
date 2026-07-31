@@ -57,6 +57,9 @@ async function writeReleaseWorkspace(repoRoot: string) {
     JSON.stringify({
       name: '@emberai/onchain-actions-registry',
       version: '0.0.0',
+      dependencies: {
+        '@emberai/onchain-actions-contracts': 'workspace:^',
+      },
     }),
   );
   await writeFile(
@@ -233,7 +236,7 @@ describe('detect-release-targets', () => {
     }
   });
 
-  it('detects changed contracts packages alongside the existing release targets', async () => {
+  it('includes registry when contracts changes can trigger a dependent release', async () => {
     const repoRoot = await mkdtemp(path.join(tmpdir(), 'detect-release-targets-contracts-'));
 
     try {
@@ -262,12 +265,20 @@ describe('detect-release-targets', () => {
         RELEASE_SIMULATE_BRANCH: 'main',
       });
 
-      expect(result.selected).toEqual(['contracts']);
-      expect(result.matrix).toHaveLength(1);
-      expect(result.matrix[0]).toMatchObject({
-        id: 'contracts',
-        packageName: '@emberai/onchain-actions-contracts',
-      });
+      expect(result.selected).toEqual(['registry', 'contracts']);
+      expect(result.matrix).toHaveLength(2);
+      expect(result.matrix).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'registry',
+            packageName: '@emberai/onchain-actions-registry',
+          }),
+          expect.objectContaining({
+            id: 'contracts',
+            packageName: '@emberai/onchain-actions-contracts',
+          }),
+        ]),
+      );
 
       await execFileAsync('git', ['tag', '@emberai/onchain-actions-contracts@0.1.1-next.1'], {
         cwd: repoRoot,
@@ -282,11 +293,19 @@ describe('detect-release-targets', () => {
         RELEASE_SIMULATE_BRANCH: 'next',
       });
 
-      expect(nextResult.selected).toEqual(['contracts']);
-      expect(nextResult.matrix[0]).toMatchObject({
-        id: 'contracts',
-        packageName: '@emberai/onchain-actions-contracts',
-      });
+      expect(nextResult.selected).toEqual(['registry', 'contracts']);
+      expect(nextResult.matrix).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'registry',
+            packageName: '@emberai/onchain-actions-registry',
+          }),
+          expect.objectContaining({
+            id: 'contracts',
+            packageName: '@emberai/onchain-actions-contracts',
+          }),
+        ]),
+      );
     } finally {
       await rm(repoRoot, { force: true, recursive: true });
     }
