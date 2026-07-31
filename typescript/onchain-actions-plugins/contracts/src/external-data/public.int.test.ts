@@ -177,7 +177,10 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
         subject: 'token:stale',
         reason: 'stale_observation',
         last_known_value: { price_usd: '1.10' },
-        freshness,
+        freshness: {
+          ...freshness,
+          received_at: '2026-07-30T13:00:00.000Z',
+        },
         provenance,
       },
       {
