@@ -18,7 +18,9 @@ describe('canonical onchain-action contract specifications', () => {
   it('keeps local document, stylesheet, and renderer links resolvable', async () => {
     for (const relativePath of specificationPaths) {
       const document = await readSpecification(relativePath);
-      const hrefs = [...document.matchAll(/\b(?:href|src)="([^"]+)"/g)].map(([, href]) => href);
+      const hrefs = [...document.matchAll(/\b(?:href|src)="([^"]+)"/g)]
+        .map((match) => match[1])
+        .filter((href): href is string => href !== undefined);
 
       for (const href of hrefs) {
         if (/^(?:https?:|#)/.test(href)) {
@@ -38,9 +40,9 @@ describe('canonical onchain-action contract specifications', () => {
 
     for (const relativePath of specificationPaths) {
       const document = await readSpecification(relativePath);
-      const documentAnchors = [...document.matchAll(/\bdata-anchor="([^"]+)"/g)].map(
-        ([, anchor]) => anchor,
-      );
+      const documentAnchors = [...document.matchAll(/\bdata-anchor="([^"]+)"/g)]
+        .map((match) => match[1])
+        .filter((anchor): anchor is string => anchor !== undefined);
 
       expect(documentAnchors.length).toBeGreaterThan(0);
 
@@ -52,6 +54,10 @@ describe('canonical onchain-action contract specifications', () => {
       for (const [, labelledBy] of document.matchAll(
         /<svg\b[^>]*\brole="img"[^>]*\baria-labelledby="([^"]+)"/g,
       )) {
+        if (labelledBy === undefined) {
+          throw new Error('diagram aria-labelledby capture is missing');
+        }
+
         labelledDiagramCount += 1;
         const labelIds = labelledBy.split(/\s+/);
 
