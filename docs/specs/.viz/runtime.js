@@ -580,7 +580,7 @@ function ingest(events) {
 /* ---------------- UI ---------------- */
 const CSS = `
 /* document presentation — the spec file stays lean; the dialect's look lives here */
-body{margin:0;background:#faf9f6;color:#22242a;padding-bottom:100px}
+body:has(> article.spec){margin:0;background:#faf9f6;color:#22242a;padding-bottom:100px}
 article.spec{max-width:720px;margin:0 auto;padding:40px 24px;font:16.5px/1.65 "Iowan Old Style","Palatino Linotype",Georgia,serif}
 article.spec header{border-bottom:1px solid #e2e0d8;padding-bottom:16px;margin-bottom:28px}
 article.spec h1{font-size:29px;line-height:1.2;margin:0 0 8px;letter-spacing:-.01em}
@@ -590,7 +590,7 @@ article.spec p{margin:0 0 10px;max-width:62ch}
 article.spec a{color:#12897c}
 [data-render-target]{border:1px solid #e2e0d8;border-radius:8px;background:#fff;margin:6px 0 10px}
 @media(prefers-color-scheme:dark){
-body{background:#17191d;color:#e8e7e2}
+body:has(> article.spec){background:#17191d;color:#e8e7e2}
 article.spec header{border-color:#33363c}
 article.spec nav{color:#74767e}
 article.spec a{color:#34a899}

@@ -15,6 +15,26 @@ async function readSpecification(relativePath: string): Promise<string> {
 }
 
 describe('canonical onchain-action contract specifications', () => {
+  it('keeps the annotation runtime from overriding the canonical document theme', async () => {
+    const [runtime, stylesheet] = await Promise.all([
+      readFile(path.join(repositoryRoot, 'docs/specs/.viz/runtime.js'), 'utf8'),
+      readFile(path.join(repositoryRoot, 'docs/specs/.style/spec.css'), 'utf8'),
+    ]);
+    const runtimeStyles = /const CSS = `([\s\S]*?)`;/u.exec(runtime)?.[1];
+
+    expect(runtimeStyles).toBeDefined();
+    expect(stylesheet).toMatch(/body\s*\{[^}]*background:/su);
+    expect(stylesheet).toMatch(/body\s*\{[^}]*color:\s*var\(--ink\)/su);
+    expect(runtimeStyles).not.toMatch(/(?:^|\n|\})\s*body\s*\{[^}]*(?:background|color)\s*:/su);
+
+    for (const relativePath of specificationPaths) {
+      const document = await readSpecification(relativePath);
+
+      expect(document).toContain('<main>');
+      expect(document).not.toContain('<article class="spec">');
+    }
+  });
+
   it('keeps local document, stylesheet, and renderer links resolvable', async () => {
     for (const relativePath of specificationPaths) {
       const document = await readSpecification(relativePath);
