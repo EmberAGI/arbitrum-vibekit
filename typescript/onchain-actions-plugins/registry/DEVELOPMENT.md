@@ -38,7 +38,11 @@ Start by defining your protocol's core types and market configurations.
 
 ```typescript
 // src/your-protocol-plugin/index.ts
-import type { ActionDefinition, EmberPlugin, LendingActions } from '../core/index.js';
+import type {
+  ActionDefinition,
+  EmberPlugin,
+  LendingActions,
+} from '@emberai/onchain-actions-contracts/plugins';
 import { YourProtocolAdapter, type YourProtocolAdapterParams } from './adapter.js';
 import type { ChainConfig } from '../chainConfig.js';
 import type { PublicEmberPluginRegistry } from '../registry.js';
@@ -88,21 +92,22 @@ export function registerYourProtocol(
 
 #### 3.1 Available Action Types
 
-Each plugin type has specific action types (as defined in core action files):
+Each plugin type has specific action contracts exported from
+`@emberai/onchain-actions-contracts/plugins`:
 
-**Lending Plugin Actions** (`core/actions/lending.ts`):
+**Lending Plugin Actions** (`LendingActions`):
 
 - `lending-supply`, `lending-borrow`, `lending-repay`, `lending-withdraw`
 
-**Liquidity Plugin Actions** (`core/actions/liquidity.ts`):
+**Liquidity Plugin Actions** (`LiquidityActions`):
 
 - `liquidity-supply`, `liquidity-withdraw`
 
-**Swap Plugin Actions** (`core/actions/swap.ts`):
+**Swap Plugin Actions** (`SwapActions`):
 
 - `swap`
 
-**Perpetuals Plugin Actions** (`core/actions/perpetuals.ts`):
+**Perpetuals Plugin Actions** (`PerpetualsActions`):
 
 - `perpetuals-long`, `perpetuals-short`, `perpetuals-close`
 
@@ -112,7 +117,10 @@ Create action functions that return proper action definitions:
 
 ```typescript
 // src/your-protocol-plugin/index.ts (part of getYourProtocolActions)
-import type { ActionDefinition, LendingActions } from '../core/index.js';
+import type {
+  ActionDefinition,
+  LendingActions,
+} from '@emberai/onchain-actions-contracts/plugins';
 
 async function getYourProtocolActions(
   adapter: YourProtocolAdapter
@@ -216,12 +224,14 @@ import { Chain } from './chain.js';
 import { type YourProtocolMarket, getMarket } from './market.js';
 import type {
   TransactionPlan,
+  Token,
+} from '@emberai/onchain-actions-contracts/core';
+import type {
   SupplyTokensRequest,
   SupplyTokensResponse,
   BorrowTokensRequest,
   BorrowTokensResponse,
-  Token,
-} from '../core/index.js';
+} from '@emberai/onchain-actions-contracts/plugins';
 
 export interface YourProtocolAdapterParams {
   chainId: number;
