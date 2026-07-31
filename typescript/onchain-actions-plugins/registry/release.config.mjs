@@ -1,15 +1,22 @@
-import { createReleaseConfig } from "../../release/base.config.mjs";
+import { createReleaseConfig } from '../../release/base.config.mjs';
 
-const SHOULD_PUBLISH = process.env.RELEASE_DRY_RUN !== "true";
+const SHOULD_PUBLISH = process.env.RELEASE_DRY_RUN !== 'true';
 
 export default createReleaseConfig({
-  tagFormat: "@emberai/onchain-actions-registry@${version}",
+  tagFormat: '@emberai/onchain-actions-registry@${version}',
   packagePlugins: [
     [
-      "@semantic-release/npm",
+      '@semantic-release/exec',
+      {
+        prepareCmd:
+          'node ../../scripts/prepare-npm-publish.mjs --package onchain-actions-plugins/registry/package.json',
+      },
+    ],
+    [
+      '@semantic-release/npm',
       {
         npmPublish: SHOULD_PUBLISH,
-        pkgRoot: ".npm-publish",
+        pkgRoot: '.npm-publish',
         provenance: true,
       },
     ],

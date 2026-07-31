@@ -54,5 +54,6 @@ opencode.json
 .codex/
 .cursor/
 .agent/
+*.review/
 typescript/lib/agent-node/*.zip
 typescript/clients/web/

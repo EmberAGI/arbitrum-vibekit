@@ -1,24 +1,31 @@
 #!/usr/bin/env node
 
-import { spawnSync } from "node:child_process";
-import fs from "node:fs/promises";
-import path from "node:path";
-import process from "node:process";
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import process from 'node:process';
 
 const PACKAGE_DEFINITIONS = [
   {
-    id: "agent-node",
-    packageJson: "lib/agent-node/package.json",
-    packageName: "@emberai/agent-node",
-    tagPattern: "@emberai/agent-node@*",
-    workspace: "lib/agent-node",
+    id: 'agent-node',
+    packageJson: 'lib/agent-node/package.json',
+    packageName: '@emberai/agent-node',
+    tagPattern: '@emberai/agent-node@*',
+    workspace: 'lib/agent-node',
   },
   {
-    id: "registry",
-    packageJson: "onchain-actions-plugins/registry/package.json",
-    packageName: "@emberai/onchain-actions-registry",
-    tagPattern: "@emberai/onchain-actions-registry@*",
-    workspace: "onchain-actions-plugins/registry",
+    id: 'registry',
+    packageJson: 'onchain-actions-plugins/registry/package.json',
+    packageName: '@emberai/onchain-actions-registry',
+    tagPattern: '@emberai/onchain-actions-registry@*',
+    workspace: 'onchain-actions-plugins/registry',
+  },
+  {
+    id: 'contracts',
+    packageJson: 'onchain-actions-plugins/contracts/package.json',
+    packageName: '@emberai/onchain-actions-contracts',
+    tagPattern: '@emberai/onchain-actions-contracts@*',
+    workspace: 'onchain-actions-plugins/contracts',
   },
 ];
 
@@ -31,7 +38,13 @@ const PACKAGE_LOOKUP = new Map(
 );
 
 const LIST_DELIMITER = /[, ]/;
-const STABLE_BRANCHES = new Set(["main"]);
+const STABLE_BRANCHES = new Set(['main']);
+const DEPENDENCY_SCOPES = [
+  'dependencies',
+  'devDependencies',
+  'optionalDependencies',
+  'peerDependencies',
+];
 
 function parseList(value) {
   return value
@@ -41,7 +54,7 @@ function parseList(value) {
 }
 
 function runGit(args, cwd) {
-  const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
 
   if (result.status !== 0) {
     return { error: result.stderr.trim() };
@@ -51,7 +64,7 @@ function runGit(args, cwd) {
 }
 
 function extractVersionFromTag(tag) {
-  const lastAt = tag.lastIndexOf("@");
+  const lastAt = tag.lastIndexOf('@');
 
   if (lastAt === -1) {
     return tag;
@@ -62,18 +75,21 @@ function extractVersionFromTag(tag) {
 
 function isStableTag(tag) {
   const version = extractVersionFromTag(tag);
-  return !version.includes("-");
+  return !version.includes('-');
 }
 
 function findLatestTag(pattern, cwd, options = {}) {
-  const { output, error } = runGit(["tag", "--merged", "HEAD", "--sort=-creatordate", "--list", pattern], cwd);
+  const { output, error } = runGit(
+    ['tag', '--merged', 'HEAD', '--sort=-creatordate', '--list', pattern],
+    cwd,
+  );
 
   if (error || !output) {
     return null;
   }
 
   const tags = output
-    .split("\n")
+    .split('\n')
     .map((tag) => tag.trim())
     .filter(Boolean);
 
@@ -93,7 +109,10 @@ function detectChanges(sinceTag, targetPath, cwd) {
     return true;
   }
 
-  const { output, error } = runGit(["diff", `${sinceTag}..HEAD`, "--name-only", "--", targetPath], cwd);
+  const { output, error } = runGit(
+    ['diff', `${sinceTag}..HEAD`, '--name-only', '--', targetPath],
+    cwd,
+  );
 
   if (error) {
     throw new Error(error);
@@ -130,12 +149,12 @@ function resolveBranchName(cwd) {
   }
 
   const githubRef = process.env.GITHUB_REF?.trim();
-  if (githubRef?.startsWith("refs/heads/")) {
-    return githubRef.slice("refs/heads/".length);
+  if (githubRef?.startsWith('refs/heads/')) {
+    return githubRef.slice('refs/heads/'.length);
   }
 
-  const { output } = runGit(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
-  if (output && output !== "HEAD") {
+  const { output } = runGit(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+  if (output && output !== 'HEAD') {
     return output;
   }
 
@@ -144,43 +163,83 @@ function resolveBranchName(cwd) {
 
 function resolveReleaseChannel(branchName) {
   const override = process.env.RELEASE_CHANNEL?.trim()?.toLowerCase();
-  if (override === "stable" || override === "next") {
+  if (override === 'stable' || override === 'next') {
     return override;
   }
 
-  if (branchName && (STABLE_BRANCHES.has(branchName) || branchName.startsWith("release/"))) {
-    return "stable";
+  if (branchName && (STABLE_BRANCHES.has(branchName) || branchName.startsWith('release/'))) {
+    return 'stable';
   }
 
-  return "next";
+  return 'next';
+}
+
+async function expandSelectedWithLocalDependents(packages, cwd) {
+  const selectedIds = new Set(packages.filter((pkg) => pkg.changed).map((pkg) => pkg.id));
+  const packageNamesById = new Map(packages.map((pkg) => [pkg.id, pkg.name]));
+  const manifestsById = new Map();
+
+  for (const pkg of packages) {
+    const manifest = JSON.parse(
+      await fs.readFile(path.resolve(cwd, pkg.packageJson), 'utf8'),
+    );
+    manifestsById.set(pkg.id, manifest);
+  }
+
+  let expanded = true;
+
+  while (expanded) {
+    expanded = false;
+    const selectedNames = new Set(
+      [...selectedIds].map((id) => packageNamesById.get(id)).filter(Boolean),
+    );
+
+    for (const pkg of packages) {
+      if (selectedIds.has(pkg.id)) {
+        continue;
+      }
+
+      const manifest = manifestsById.get(pkg.id) ?? {};
+      const dependencyNames = DEPENDENCY_SCOPES.flatMap((scope) =>
+        Object.keys(manifest[scope] ?? {}),
+      );
+
+      if (dependencyNames.some((name) => selectedNames.has(name))) {
+        selectedIds.add(pkg.id);
+        expanded = true;
+      }
+    }
+  }
+
+  return selectedIds;
 }
 
 async function main() {
   const cwd = process.cwd();
   const argv = process.argv.slice(2);
   const packageSpecs = [];
-  let outputPath = path.resolve(cwd, "release-targets.json");
+  let outputPath = path.resolve(cwd, 'release-targets.json');
 
   while (argv.length) {
     const token = argv.shift();
 
-    if (token === "--packages") {
-      packageSpecs.push(...parseList(argv.shift() ?? ""));
+    if (token === '--packages') {
+      packageSpecs.push(...parseList(argv.shift() ?? ''));
       continue;
     }
 
-    if (token?.startsWith("--packages=")) {
-      packageSpecs.push(...parseList(token.slice("--packages=".length)));
+    if (token?.startsWith('--packages=')) {
+      packageSpecs.push(...parseList(token.slice('--packages='.length)));
       continue;
     }
 
-    if (token === "--output") {
-      outputPath = path.resolve(cwd, argv.shift() ?? "");
+    if (token === '--output') {
+      outputPath = path.resolve(cwd, argv.shift() ?? '');
       continue;
     }
 
-    if (token?.startsWith("--output=")) {
-      outputPath = path.resolve(cwd, token.slice("--output=".length));
+    if (token?.startsWith('--output=')) {
+      outputPath = path.resolve(cwd, token.slice('--output='.length));
       continue;
     }
 
@@ -193,10 +252,12 @@ async function main() {
       : [];
   const forcedIds = new Set(overrideSpecs.map((spec) => resolvePackageList([spec])[0].id));
 
-  const packagesToCheck = resolvePackageList(packageSpecs.length > 0 ? packageSpecs : PACKAGE_DEFINITIONS.map((pkg) => pkg.id));
+  const packagesToCheck = resolvePackageList(
+    packageSpecs.length > 0 ? packageSpecs : PACKAGE_DEFINITIONS.map((pkg) => pkg.id),
+  );
   const branchName = resolveBranchName(cwd);
   const releaseChannel = resolveReleaseChannel(branchName);
-  const preferStableTags = releaseChannel === "stable";
+  const preferStableTags = releaseChannel === 'stable';
 
   const packages = [];
 
@@ -218,9 +279,10 @@ async function main() {
     });
   }
 
-  const selected = packages.filter((pkg) => pkg.changed).map((pkg) => pkg.id);
+  const selectedIds = await expandSelectedWithLocalDependents(packages, cwd);
+  const selected = packages.filter((pkg) => selectedIds.has(pkg.id)).map((pkg) => pkg.id);
   const matrix = packages
-    .filter((pkg) => pkg.changed)
+    .filter((pkg) => selectedIds.has(pkg.id))
     .map((pkg) => ({
       forced: pkg.forced,
       id: pkg.id,

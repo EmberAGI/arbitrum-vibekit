@@ -1,0 +1,76 @@
+{
+  "name": "@emberai/onchain-actions-contracts",
+  "version": "0.0.0",
+  "description": "Runtime-validatable neutral contracts for Ember onchain actions.",
+  "type": "module",
+  "exports": {
+    "./core": {
+      "import": {
+        "types": "./dist/core/index.d.mts",
+        "default": "./dist/core/index.mjs"
+      },
+      "require": {
+        "types": "./dist/core/index.d.cts",
+        "default": "./dist/core/index.cjs"
+      }
+    },
+    "./plugins": {
+      "import": {
+        "types": "./dist/plugins/index.d.mts",
+        "default": "./dist/plugins/index.mjs"
+      },
+      "require": {
+        "types": "./dist/plugins/index.d.cts",
+        "default": "./dist/plugins/index.cjs"
+      }
+    },
+    "./endpoints": {
+      "import": {
+        "types": "./dist/endpoints/index.d.mts",
+        "default": "./dist/endpoints/index.mjs"
+      },
+      "require": {
+        "types": "./dist/endpoints/index.d.cts",
+        "default": "./dist/endpoints/index.cjs"
+      }
+    },
+    "./external-data": {
+      "import": {
+        "types": "./dist/external-data/index.d.mts",
+        "default": "./dist/external-data/index.mjs"
+      },
+      "require": {
+        "types": "./dist/external-data/index.d.cts",
+        "default": "./dist/external-data/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown",
+    "lint": "NODE_OPTIONS=--max-old-space-size=4096 eslint src",
+    "lint:fix": "NODE_OPTIONS=--max-old-space-size=4096 eslint src --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test:ci": "tsdown && vitest run --config vitest.config.ts"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "zod": "^3.25.76"
+  },
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "tag": "next"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EmberAGI/arbitrum-vibekit.git",
+    "directory": "typescript/onchain-actions-plugins/contracts"
+  },
+  "peerDependencies": {
+    "zod": "^3.25.76"
+  }
+}

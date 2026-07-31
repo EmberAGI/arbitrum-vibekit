@@ -5,7 +5,62 @@ import yaml from 'js-yaml';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
-const PKG_DIR = path.join(REPO_ROOT, 'onchain-actions-plugins/registry');
+
+const PACKAGE_DEFINITIONS = [
+  {
+    id: 'registry',
+    packageJson: 'onchain-actions-plugins/registry/package.json',
+    packageName: '@emberai/onchain-actions-registry',
+    directory: 'onchain-actions-plugins/registry',
+  },
+  {
+    id: 'contracts',
+    packageJson: 'onchain-actions-plugins/contracts/package.json',
+    packageName: '@emberai/onchain-actions-contracts',
+    directory: 'onchain-actions-plugins/contracts',
+  },
+];
+
+const PACKAGE_LOOKUP = new Map(
+  PACKAGE_DEFINITIONS.flatMap((definition) => [
+    [definition.id, definition],
+    [definition.packageJson, definition],
+    [definition.packageName, definition],
+    [definition.directory, definition],
+  ]),
+);
+
+function resolvePackage() {
+  const args = process.argv.slice(2);
+  let packageSpec = 'registry';
+
+  while (args.length > 0) {
+    const argument = args.shift();
+
+    if (argument === '--package') {
+      packageSpec = args.shift();
+      continue;
+    }
+
+    if (argument?.startsWith('--package=')) {
+      packageSpec = argument.slice('--package='.length);
+      continue;
+    }
+
+    throw new Error(`Unknown argument "${argument}". Supported argument: --package.`);
+  }
+
+  const definition = PACKAGE_LOOKUP.get(packageSpec);
+
+  if (!definition) {
+    throw new Error(`Unknown package "${packageSpec}".`);
+  }
+
+  return definition;
+}
+
+const packageDefinition = resolvePackage();
+const PKG_DIR = path.join(REPO_ROOT, packageDefinition.directory);
 const OUT_DIR = path.join(PKG_DIR, '.npm-publish');
 
 function copy(rel) {
@@ -31,6 +86,48 @@ function loadCatalog() {
 
 const catalog = loadCatalog();
 
+const workspacePackageVersions = new Map(
+  PACKAGE_DEFINITIONS.map((definition) => {
+    const manifestPath = path.join(REPO_ROOT, definition.packageJson);
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+
+    return [definition.packageName, manifest.version];
+  }),
+);
+
+function deWorkspace(deps = {}) {
+  const out = {};
+
+  for (const [name, ver] of Object.entries(deps)) {
+    if (typeof ver !== 'string' || !ver.startsWith('workspace:')) {
+      out[name] = ver;
+      continue;
+    }
+
+    const workspaceVersion = workspacePackageVersions.get(name);
+
+    if (!workspaceVersion) {
+      throw new Error(`Cannot publish unresolved workspace dependency "${name}".`);
+    }
+
+    const selector = ver.slice('workspace:'.length);
+
+    if (selector === '*') {
+      out[name] = workspaceVersion;
+      continue;
+    }
+
+    if (selector === '^' || selector === '~') {
+      out[name] = `${selector}${workspaceVersion}`;
+      continue;
+    }
+
+    throw new Error(`Unsupported workspace dependency selector "${ver}" for "${name}".`);
+  }
+
+  return out;
+}
+
 function deCatalog(deps = {}) {
   const out = {};
   for (const [name, ver] of Object.entries(deps)) {
@@ -43,12 +140,12 @@ function deCatalog(deps = {}) {
   }
   return out;
 }
-clean.dependencies = deCatalog(pkg.dependencies);
-clean.devDependencies = deCatalog(pkg.devDependencies);
-clean.peerDependencies = deCatalog(pkg.peerDependencies);
+clean.dependencies = deCatalog(deWorkspace(pkg.dependencies));
+clean.devDependencies = deCatalog(deWorkspace(pkg.devDependencies));
+clean.peerDependencies = deCatalog(deWorkspace(pkg.peerDependencies));
 
 // deja solo lo necesario para publicar
-clean.files = ['dist', 'README.md', 'LICENSE'].filter(f => fs.existsSync(path.join(PKG_DIR, f)));
+clean.files = ['dist', 'README.md', 'LICENSE'].filter((f) => fs.existsSync(path.join(PKG_DIR, f)));
 
 fs.rmSync(OUT_DIR, { recursive: true, force: true });
 fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -58,4 +155,4 @@ copy('dist');
 copy('README.md');
 copy('LICENSE');
 
-console.log('Prepared publish folder:', OUT_DIR);
+console.log(`Prepared publish folder for ${packageDefinition.packageName}:`, OUT_DIR);

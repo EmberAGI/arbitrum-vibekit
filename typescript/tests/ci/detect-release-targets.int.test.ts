@@ -41,6 +41,9 @@ async function writeReleaseWorkspace(repoRoot: string) {
   await mkdir(path.join(workspaceRoot, 'onchain-actions-plugins/registry/src'), {
     recursive: true,
   });
+  await mkdir(path.join(workspaceRoot, 'onchain-actions-plugins/contracts/src'), {
+    recursive: true,
+  });
 
   await writeFile(
     path.join(workspaceRoot, 'lib/agent-node/package.json'),
@@ -54,6 +57,9 @@ async function writeReleaseWorkspace(repoRoot: string) {
     JSON.stringify({
       name: '@emberai/onchain-actions-registry',
       version: '0.0.0',
+      dependencies: {
+        '@emberai/onchain-actions-contracts': 'workspace:^',
+      },
     }),
   );
   await writeFile(
@@ -63,6 +69,17 @@ async function writeReleaseWorkspace(repoRoot: string) {
   await writeFile(
     path.join(workspaceRoot, 'onchain-actions-plugins/registry/src/index.ts'),
     "export const registryVersion = 'stable';\n",
+  );
+  await writeFile(
+    path.join(workspaceRoot, 'onchain-actions-plugins/contracts/package.json'),
+    JSON.stringify({
+      name: '@emberai/onchain-actions-contracts',
+      version: '0.0.0',
+    }),
+  );
+  await writeFile(
+    path.join(workspaceRoot, 'onchain-actions-plugins/contracts/src/index.ts'),
+    "export const contractsVersion = 'stable';\n",
   );
 
   return workspaceRoot;
@@ -101,6 +118,9 @@ describe('detect-release-targets', () => {
         cwd: repoRoot,
       });
       await execFileAsync('git', ['tag', '@emberai/onchain-actions-registry@1.2.3'], {
+        cwd: repoRoot,
+      });
+      await execFileAsync('git', ['tag', '@emberai/onchain-actions-contracts@0.1.0'], {
         cwd: repoRoot,
       });
 
@@ -144,6 +164,9 @@ describe('detect-release-targets', () => {
       await execFileAsync('git', ['tag', '@emberai/onchain-actions-registry@1.2.3'], {
         cwd: repoRoot,
       });
+      await execFileAsync('git', ['tag', '@emberai/onchain-actions-contracts@0.1.0'], {
+        cwd: repoRoot,
+      });
 
       await mkdir(path.join(repoRoot, '.github/workflows'), { recursive: true });
       await writeFile(
@@ -178,6 +201,9 @@ describe('detect-release-targets', () => {
       await execFileAsync('git', ['tag', '@emberai/onchain-actions-registry@1.2.3'], {
         cwd: repoRoot,
       });
+      await execFileAsync('git', ['tag', '@emberai/onchain-actions-contracts@0.1.0'], {
+        cwd: repoRoot,
+      });
 
       await writeFile(
         path.join(workspaceRoot, 'onchain-actions-plugins/registry/src/index.ts'),
@@ -205,6 +231,81 @@ describe('detect-release-targets', () => {
         id: 'registry',
         packageName: '@emberai/onchain-actions-registry',
       });
+    } finally {
+      await rm(repoRoot, { force: true, recursive: true });
+    }
+  });
+
+  it('includes registry when contracts changes can trigger a dependent release', async () => {
+    const repoRoot = await mkdtemp(path.join(tmpdir(), 'detect-release-targets-contracts-'));
+
+    try {
+      const workspaceRoot = await writeReleaseWorkspace(repoRoot);
+
+      await initGitRepository(repoRoot);
+      await commitAll(repoRoot, 'initial release state');
+
+      await execFileAsync('git', ['tag', '@emberai/agent-node@1.0.0'], {
+        cwd: repoRoot,
+      });
+      await execFileAsync('git', ['tag', '@emberai/onchain-actions-registry@1.2.3'], {
+        cwd: repoRoot,
+      });
+      await execFileAsync('git', ['tag', '@emberai/onchain-actions-contracts@0.1.0'], {
+        cwd: repoRoot,
+      });
+
+      await writeFile(
+        path.join(workspaceRoot, 'onchain-actions-plugins/contracts/src/index.ts'),
+        "export const contractsVersion = 'changed';\n",
+      );
+      await commitAll(repoRoot, 'contracts release change');
+
+      const result = await runDetectReleaseTargets(workspaceRoot, {
+        RELEASE_SIMULATE_BRANCH: 'main',
+      });
+
+      expect(result.selected).toEqual(['registry', 'contracts']);
+      expect(result.matrix).toHaveLength(2);
+      expect(result.matrix).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'registry',
+            packageName: '@emberai/onchain-actions-registry',
+          }),
+          expect.objectContaining({
+            id: 'contracts',
+            packageName: '@emberai/onchain-actions-contracts',
+          }),
+        ]),
+      );
+
+      await execFileAsync('git', ['tag', '@emberai/onchain-actions-contracts@0.1.1-next.1'], {
+        cwd: repoRoot,
+      });
+      await writeFile(
+        path.join(workspaceRoot, 'onchain-actions-plugins/contracts/src/index.ts'),
+        "export const contractsVersion = 'next';\n",
+      );
+      await commitAll(repoRoot, 'contracts prerelease change');
+
+      const nextResult = await runDetectReleaseTargets(workspaceRoot, {
+        RELEASE_SIMULATE_BRANCH: 'next',
+      });
+
+      expect(nextResult.selected).toEqual(['registry', 'contracts']);
+      expect(nextResult.matrix).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: 'registry',
+            packageName: '@emberai/onchain-actions-registry',
+          }),
+          expect.objectContaining({
+            id: 'contracts',
+            packageName: '@emberai/onchain-actions-contracts',
+          }),
+        ]),
+      );
     } finally {
       await rm(repoRoot, { force: true, recursive: true });
     }

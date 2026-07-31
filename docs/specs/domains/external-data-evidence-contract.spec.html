@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>External Data Evidence Contract</title>
+  <link rel="stylesheet" href="../.style/spec.css">
+  <script defer src="../.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="evidence-title">
+    <p class="eyebrow">Domain contract · EMB-1145</p>
+    <h1>Onchain-action contracts and external data evidence</h1>
+    <p class="lede">A dependency-light contract kernel owns the neutral onchain-action schemas, while every externally sourced value carries enough evidence for a consumer to decide whether it is current, partial, stale, or unavailable.</p>
+  </header>
+
+  <section data-anchor="evidence-architecture">
+    <h2>Public contract kernel dependency direction</h2>
+    <p>The new package factors the neutral contract kernel out of the public registry package.</p>
+    <p>It is a dependency-light Module below registry and server implementations, not a replacement for either implementation Module.</p>
+    <div class="architecture-scroll">
+      <figure class="architecture-figure">
+        <svg viewBox="0 0 1180 690" role="img" aria-labelledby="kernel-title kernel-desc">
+          <title id="kernel-title">Dependency architecture for the public onchain-actions contracts kernel</title>
+          <desc id="kernel-desc">The public registry and private onchain-actions server depend on the public contracts package. The contracts package has no dependency on registry runtime, server services, provider adapters, protocol SDKs, cache, or network clients.</desc>
+          <defs>
+            <marker id="kernel-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc"/></marker>
+            <marker id="kernel-arrow-good" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#86efac"/></marker>
+          </defs>
+
+          <rect class="arch-zone public" x="25" y="24" width="1130" height="404" rx="18"/>
+          <text class="arch-zone-title" x="48" y="53">PUBLIC REPOSITORY · ARBITRUM-VIBEKIT</text>
+          <rect class="arch-box adapter" x="55" y="88" width="370" height="138"/>
+          <text class="arch-title" x="79" y="118">@emberai/onchain-actions-registry</text>
+          <text class="arch-copy" x="79" y="145">Registry runtime + configuration</text>
+          <text class="arch-copy" x="79" y="169">Discovery + bundled Aave implementation</text>
+          <text class="arch-small" x="79" y="198">Compatibility-re-exports only existing neutral symbols</text>
+          <rect class="arch-box later" x="55" y="270" width="370" height="100"/>
+          <text class="arch-title" x="79" y="301">EMB-1148 · RegistrySnapshot</text>
+          <text class="arch-copy" x="79" y="327">Deterministic action/query plugin discovery</text>
+          <text class="arch-small" x="79" y="348">Still depends on contracts; does not own market data</text>
+
+          <rect class="arch-box module" x="500" y="78" width="610" height="316"/>
+          <text class="arch-title" x="526" y="111">@emberai/onchain-actions-contracts · neutral Module</text>
+          <rect class="arch-box interface" x="530" y="142" width="250" height="82"/>
+          <text class="arch-title" x="551" y="171">/core</text>
+          <text class="arch-copy" x="551" y="196">Token + chain identity</text>
+          <rect class="arch-box interface" x="825" y="142" width="250" height="82"/>
+          <text class="arch-title" x="846" y="171">/plugins</text>
+          <text class="arch-copy" x="846" y="196">Plugin types + TokenPriceReader</text>
+          <rect class="arch-box interface" x="530" y="254" width="250" height="82"/>
+          <text class="arch-title" x="551" y="283">/endpoints</text>
+          <text class="arch-copy" x="551" y="308">Token-market + other endpoint contracts</text>
+          <rect class="arch-box interface" x="825" y="254" width="250" height="82"/>
+          <text class="arch-title" x="846" y="283">/external-data</text>
+          <text class="arch-copy" x="846" y="308">Results + freshness + provenance</text>
+          <text class="arch-small" x="526" y="370">Zod 3 peer · no network · no cache · no registry runtime · no protocol SDK</text>
+
+          <rect class="arch-zone private" x="25" y="460" width="1130" height="205" rx="18"/>
+          <text class="arch-zone-title" x="48" y="489">PRIVATE REPOSITORY · ONCHAIN-ACTIONS</text>
+          <rect class="arch-box module" x="55" y="520" width="320" height="104"/>
+          <text class="arch-title" x="79" y="550">TokenMarketSnapshotService</text>
+          <text class="arch-copy" x="79" y="577">Implements orchestration + evidence</text>
+          <text class="arch-small" x="79" y="599">Imports /core, /endpoints, /external-data, /plugins</text>
+          <rect class="arch-box adapter" x="430" y="520" width="300" height="104"/>
+          <text class="arch-title" x="454" y="550">Algebra plugin</text>
+          <text class="arch-copy" x="454" y="577">Consumes TokenPriceReader</text>
+          <text class="arch-small" x="454" y="599">Portable across host implementations</text>
+          <rect class="arch-box" x="785" y="520" width="325" height="104"/>
+          <text class="arch-title" x="809" y="550">Server registry wrapper</text>
+          <text class="arch-copy" x="809" y="577">Consumes public registry runtime</text>
+          <text class="arch-small" x="809" y="599">Separate from market-data orchestration</text>
+
+          <path class="arch-edge" d="M425 145 H500" marker-end="url(#kernel-arrow)"/>
+          <text class="arch-small" x="430" y="133">depends on</text>
+          <path class="arch-edge dashed" d="M240 270 V226" marker-end="url(#kernel-arrow)"/>
+          <path class="arch-edge good" d="M215 520 V438 H655 V394" marker-end="url(#kernel-arrow-good)"/>
+          <path class="arch-edge good" d="M580 520 V438 H950 V336" marker-end="url(#kernel-arrow-good)"/>
+          <path class="arch-edge dashed" d="M948 520 V438 H240 V226" marker-end="url(#kernel-arrow)"/>
+          <text class="arch-small" x="762" y="451">implementation dependencies point upward only to public packages</text>
+        </svg>
+        <figcaption>The forbidden dependency is the important boundary: contracts never import the registry, server container, provider implementations, cache, network clients, or protocol SDKs.</figcaption>
+      </figure>
+    </div>
+    <div class="architecture-legend" aria-label="Architecture legend">
+      <span class="legend-key"><span class="legend-swatch module"></span>Module</span>
+      <span class="legend-key"><span class="legend-swatch interface"></span>Public Interface</span>
+      <span class="legend-key"><span class="legend-swatch adapter"></span>Implementation / Adapter</span>
+      <span class="legend-key"><span class="legend-swatch later"></span>Associated issue</span>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-issue-map">
+    <h2>Associated issue architecture and sequence</h2>
+    <p>EMB-1145 is the shared contract foundation; each later issue owns one bounded behavioral Module or registry evolution.</p>
+    <div class="architecture-scroll">
+      <figure class="architecture-figure">
+        <svg viewBox="0 0 1180 650" role="img" aria-labelledby="issue-title issue-desc">
+          <title id="issue-title">Cross-repository dependency and scope map for EMB-1145 and associated issues</title>
+          <desc id="issue-desc">EMB-1145 blocks EMB-1144, EMB-1146, and EMB-1148. EMB-1144 blocks the portfolio consumer EMB-1138 and establishes the first token-market orchestration Module before EMB-1147 generalizes provider composition. EMB-1148 precedes server registry snapshot consumption in EMB-1149.</desc>
+          <defs>
+            <marker id="issue-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#7dd3fc"/></marker>
+            <marker id="issue-arrow-warn" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#fde68a"/></marker>
+          </defs>
+          <rect class="arch-zone public" x="25" y="28" width="1130" height="176" rx="18"/>
+          <text class="arch-zone-title" x="48" y="56">ARBITRUM-VIBEKIT · PUBLIC PACKAGES</text>
+          <rect class="arch-box module" x="80" y="84" width="390" height="88"/>
+          <text class="arch-title" x="103" y="113">EMB-1145 · contract kernel</text>
+          <text class="arch-copy" x="103" y="138">Core + plugins + endpoints + external data</text>
+          <text class="arch-small" x="103" y="157">Foundation; first above all else</text>
+          <rect class="arch-box later" x="690" y="84" width="390" height="88"/>
+          <text class="arch-title" x="713" y="113">EMB-1148 · registry snapshots</text>
+          <text class="arch-copy" x="713" y="138">Deterministic action/query plugin discovery</text>
+          <text class="arch-small" x="713" y="157">No market-data provider composition</text>
+
+          <rect class="arch-zone private" x="25" y="228" width="1130" height="282" rx="18"/>
+          <text class="arch-zone-title" x="48" y="256">ONCHAIN-ACTIONS · PRIVATE SERVER MODULES</text>
+          <rect class="arch-box module" x="80" y="286" width="300" height="92"/>
+          <text class="arch-title" x="103" y="316">EMB-1144 · token market</text>
+          <text class="arch-copy" x="103" y="341">TokenMarketSnapshotService</text>
+          <text class="arch-small" x="103" y="360">HTTP + TokenPriceReader Adapters</text>
+          <rect class="arch-box module" x="440" y="286" width="300" height="92"/>
+          <text class="arch-title" x="463" y="316">EMB-1146 · wallet truth</text>
+          <text class="arch-copy" x="463" y="341">WalletSnapshotService</text>
+          <text class="arch-small" x="463" y="360">Field-level provenance</text>
+          <rect class="arch-box later" x="80" y="404" width="300" height="76"/>
+          <text class="arch-title" x="103" y="434">EMB-1147 · providers</text>
+          <text class="arch-copy" x="103" y="458">ProviderCatalog + capability orchestrators</text>
+          <rect class="arch-box later" x="800" y="286" width="300" height="92"/>
+          <text class="arch-title" x="823" y="316">EMB-1149 · registry host</text>
+          <text class="arch-copy" x="823" y="341">Consumes immutable registry snapshot</text>
+          <text class="arch-small" x="823" y="360">Server composition only</text>
+
+          <rect class="arch-zone external" x="25" y="534" width="1130" height="92" rx="18"/>
+          <text class="arch-zone-title" x="48" y="562">AUTONOMOUS-PORTFOLIO · PRODUCT CONSUMER</text>
+          <rect class="arch-box" x="440" y="552" width="300" height="54"/>
+          <text class="arch-title" x="463" y="585">EMB-1138 · floor-safe rebalance</text>
+
+          <path class="arch-edge" d="M275 172 V246 H230 V286" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="181" y="232">blocks</text>
+          <path class="arch-edge" d="M365 172 V224 H590 V286" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="473" y="215">blocks</text>
+          <path class="arch-edge" d="M470 128 H690" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="563" y="116">blocks</text>
+          <path class="arch-edge" d="M885 172 V286" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="895" y="232">precedes</text>
+          <path class="arch-edge dashed warn" d="M230 378 V404" marker-end="url(#issue-arrow-warn)"/>
+          <text class="arch-small" x="242" y="397">sequences/generalizes</text>
+          <path class="arch-edge" d="M380 332 H407 V579 H440" marker-end="url(#issue-arrow)"/>
+          <text class="arch-small" x="395" y="515">token-market Interface blocks consumer</text>
+        </svg>
+        <figcaption>Solid arrows are delivery dependencies or precedence; the dashed arrow means EMB-1144 establishes the localized token-market Module that EMB-1147 later generalizes into explicit cross-capability provider composition.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-domain-concepts">
+    <h2>Domain concepts</h2>
+    <div class="grid">
+      <article class="card" data-anchor="evidence-concept-snapshot"><h3>Snapshot</h3><p>A versioned wire-format observation set with stable ID, quote currency, completeness, and creation context.</p></article>
+      <article class="card" data-anchor="evidence-concept-provenance"><h3>Provenance</h3><p>The provider, capability, canonical subject, and source class that produced a field or item.</p></article>
+      <article class="card" data-anchor="evidence-concept-freshness"><h3>Freshness</h3><p>Observation, receipt, expiry, refresh, and retry timing with an explicit timestamp source.</p></article>
+      <article class="card" data-anchor="evidence-concept-completeness"><h3>Completeness</h3><p>Whether current values cover every requested subject, some requested subjects, or none. Item states independently explain stale, rate-limited, not-found, and unavailable outcomes.</p></article>
+      <article class="card" data-anchor="evidence-concept-kernel"><h3>Contract kernel</h3><p>Neutral token, chain, transaction, plugin, action, query, lifecycle, plugin-host capability, endpoint, and evidence schemas shared by registry implementations and service consumers.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-canonical-language">
+    <h2>Canonical domain language</h2>
+    <p>These terms separate public contract ownership from registry and server behavior.</p>
+    <table>
+      <thead><tr><th>Canonical term</th><th>Meaning</th><th>Avoid when this is meant</th></tr></thead>
+      <tbody>
+        <tr data-anchor="evidence-language-kernel"><td>Contract kernel</td><td>The dependency-light public source of neutral runtime schemas and TypeScript Interfaces.</td><td>Registry package, server DTOs, shared utils</td></tr>
+        <tr data-anchor="evidence-language-registry"><td>Registry runtime</td><td>Behavior that discovers, configures, and exposes action/query plugins and bundled implementations.</td><td>Contract kernel, provider catalog</td></tr>
+        <tr data-anchor="evidence-language-capability"><td>Host capability</td><td>A neutral Interface a plugin consumes and a host satisfies through injection, such as <code>TokenPriceReader</code>.</td><td>Server service, HTTP endpoint, registry implementation</td></tr>
+        <tr data-anchor="evidence-language-observation"><td>Provider observation</td><td>One externally sourced value with provider identity and observation time before it is composed into a result or snapshot.</td><td>Snapshot, receipt, current price</td></tr>
+        <tr data-anchor="evidence-language-evidence"><td>Evidence</td><td>The provenance, freshness, safe warning, and result-state material that lets a consumer judge an external value.</td><td>Metadata, diagnostic payload</td></tr>
+        <tr data-anchor="evidence-language-snapshot"><td>Snapshot</td><td>A versioned set of requested item results with derived completeness and stable batch identity.</td><td>Provider observation, cache entry</td></tr>
+      </tbody>
+    </table>
+    <p class="callout">Market-data providers belong to the read-only provider-composition context. Action/query plugins belong to the registry context. Both may depend on the contract kernel, but neither context owns the other.</p>
+  </section>
+
+  <section data-anchor="evidence-codebase-design-pass">
+    <h2>Codebase-design pass</h2>
+    <table>
+      <thead><tr><th>Module or Seam</th><th>Depth and dependency classification</th><th>Adapters and test surface</th></tr></thead>
+      <tbody>
+        <tr data-anchor="evidence-design-contract-module"><td>Contracts package Module</td><td>One composite public Interface exposed through four supported subpaths hides runtime validation, type inference, evidence invariants, and compatibility ownership. Dependencies are in-process and dependency-light.</td><td>Test only through packed public subpaths and consumer-visible schemas; do not test package internals as a second Interface.</td></tr>
+        <tr data-anchor="evidence-design-reader-seam"><td><code>TokenPriceReader</code> Seam</td><td>A real host-capability Seam because behavior varies between the onchain-actions production Adapter and deterministic test Adapters. The Interface includes one-result-per-token ordering and strict result semantics.</td><td>Production Adapter backed by EMB-1144; deterministic in-memory Adapter in plugin tests.</td></tr>
+        <tr data-anchor="evidence-design-registry-adapter"><td>Registry compatibility Adapter</td><td>A temporary source-compatibility role, not a new public contract gateway. It re-exports existing neutral symbols without duplicating their implementation.</td><td>Compatibility tests import the old registry surface; new-consumer tests import contracts directly.</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Deletion test:</strong> deleting the contracts Module would force registry, server, and public plugins to duplicate runtime schemas, evidence invariants, and dependency direction, so the Module provides real leverage and locality.</p>
+    <p><strong>Rejected shallow shape:</strong> leaving neutral definitions in the registry would make the new package a pass-through or make every non-registry consumer learn registry runtime and protocol dependencies.</p>
+  </section>
+
+  <section data-anchor="evidence-rules">
+    <h2>Rules and invariants</h2>
+    <ul>
+      <li data-anchor="evidence-rule-state">Every item validates as exactly one discriminated result state.</li>
+      <li data-anchor="evidence-rule-value">A current available result contains its value; an unavailable result cannot pretend to contain a current value.</li>
+      <li data-anchor="evidence-rule-stale">A stale last-known value may be preserved only as evidence and retains its original observation time.</li>
+      <li data-anchor="evidence-rule-clock">Receipt time never rewrites or extends provider observation time.</li>
+      <li data-anchor="evidence-rule-source">When provider observation time is absent, the fallback timestamp and its source are explicit.</li>
+      <li data-anchor="evidence-rule-partial">Batch completeness is derived from item results and cannot hide a failed item.</li>
+      <li data-anchor="evidence-rule-errors">Public warnings use stable safe codes; raw diagnostics and credentials never enter the contract.</li>
+      <li data-anchor="evidence-rule-host-port">A public plugin may depend on neutral host capabilities from <code>./plugins</code>, but never on a concrete server service, container, HTTP client, registry runtime, or provider implementation.</li>
+      <li data-anchor="evidence-rule-version">Breaking semantic changes require a new contract version.</li>
+      <li data-anchor="evidence-rule-wire">Wire properties use <code>snake_case</code>; timestamps are RFC 3339 UTC strings and decimal quantities are strings.</li>
+      <li data-anchor="evidence-rule-digest">V1 provenance contains no cryptographic source digest or canonical-JSON hashing contract; consumers have no approved use case that requires one.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-contract">
+    <h2>Interfaces/contracts</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Required meaning</th></tr></thead>
+      <tbody>
+        <tr data-anchor="evidence-contract-core"><td><code>@emberai/onchain-actions-contracts/core</code></td><td>Dependency-light token and chain identities, transaction plans and errors, fee breakdowns, and provider tracking schemas currently defined by the registry package.</td></tr>
+        <tr data-anchor="evidence-contract-plugins"><td><code>@emberai/onchain-actions-contracts/plugins</code></td><td>Neutral plugin, action, query, lifecycle, and host-capability interfaces. Registry classes, registry configuration, server services, and bundled protocol implementations are excluded.</td></tr>
+        <tr data-anchor="evidence-contract-endpoints"><td><code>@emberai/onchain-actions-contracts/endpoints</code></td><td>Shared Zod request/response and pagination contracts for public onchain-action Interfaces, including the EMB-1144 token-market schemas below.</td></tr>
+        <tr data-anchor="evidence-contract-evidence"><td><code>@emberai/onchain-actions-contracts/external-data</code></td><td>The versioned external-data envelope, freshness, provenance, result, field, and warning schemas below.</td></tr>
+        <tr data-anchor="evidence-contract-snapshot"><td><code>createSnapshotEnvelopeV1Schema(subjectSchema, valueSchema)</code></td><td><code>schema_version: "1"</code>, <code>snapshot_id</code>, <code>quote_currency</code>, <code>completeness</code>, items, and structured warnings. The factory validates caller-owned subject and value shapes without weakening the envelope invariants.</td></tr>
+        <tr data-anchor="evidence-contract-freshness"><td><code>FreshnessEvidenceV1Schema</code></td><td><code>observed_at</code>, <code>received_at</code>, <code>fresh_until</code>, optional <code>refresh_after</code>/<code>retry_after</code>, and <code>observed_at_source</code>. Clock ordering is validated.</td></tr>
+        <tr data-anchor="evidence-contract-provenance"><td><code>ProvenanceV1Schema</code></td><td>Provider ID, capability, canonical subject reference, and source class. V1 does not define digest or source-artifact fields.</td></tr>
+        <tr data-anchor="evidence-contract-result"><td><code>createDataResultV1Schema(subjectSchema, valueSchema)</code></td><td>Discriminated states for <code>available</code>, <code>stale</code>, <code>rate_limited</code>, <code>not_found</code>, and <code>unavailable</code>. Only <code>available</code> carries a current value; <code>stale</code> may carry an evidence-only last-known value.</td></tr>
+        <tr data-anchor="evidence-contract-field"><td><code>createEvidencedFieldV1Schema(valueSchema)</code></td><td>Value plus field-level provenance and freshness for aggregated records whose fields originate from different providers.</td></tr>
+        <tr data-anchor="evidence-contract-warning"><td><code>PublicWarningV1Schema</code></td><td>Stable safe code, bounded safe message, affected subject reference, and retry guidance without internal exception text. V1 codes are <code>partial_result</code>, <code>timestamp_fallback</code>, <code>stale_observation</code>, <code>rate_limited</code>, <code>not_found</code>, <code>unsupported_subject</code>, <code>provider_unavailable</code>, and <code>provider_payload_invalid</code>.</td></tr>
+        <tr data-anchor="evidence-contract-token-market-value"><td><code>TokenMarketSnapshotValueV1Schema</code></td><td>Exported from <code>./endpoints</code> with required positive decimal-string <code>price_usd</code> and optional positive decimal-string <code>market_cap_usd</code> and <code>fully_diluted_value_usd</code>. Missing optional provider fields remain absent rather than becoming fabricated zeroes.</td></tr>
+        <tr data-anchor="evidence-contract-token-market-snapshot"><td>Token-market request and snapshot schemas</td><td><code>TokenMarketSnapshotRequestV1Schema</code> accepts 1–50 unique <code>TokenIdentifierSchema</code> values. The public schema validates structural canonical identity and uniqueness; it does not encode Memgraph membership or action-graph eligibility. <code>TokenMarketSnapshotResultV1Schema</code> narrows the generic result vocabulary to available, rate-limited, not-found, unsupported, and unavailable outcomes without a stale last-known value. <code>TokenMarketSnapshotEnvelopeV1Schema</code> preserves one result per requested token in request order.</td></tr>
+        <tr data-anchor="evidence-contract-price-reader"><td><code>TokenPriceReader</code></td><td>A provider-neutral host capability exported from <code>./plugins</code>. The same entrypoint exports <code>TokenUsdPriceValueV1Schema</code> with a positive decimal-string <code>price_usd</code> and <code>TokenPriceReadResultV1Schema</code>, composed from <code>TokenIdentifierSchema</code>, that value schema, and the token-market result vocabulary without stale values. <code>readTokenPrices(tokenUids)</code> accepts canonical token identities and returns one inferred strict result per requested token. It exposes no cache, retry, network, registry, or server implementation.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section data-anchor="evidence-state-map">
+    <h2>Result-state map</h2>
+    <div class="grid">
+      <article class="card" data-anchor="evidence-state-available"><h3 class="good">Available</h3><p>Current value plus complete freshness and provenance evidence.</p></article>
+      <article class="card" data-anchor="evidence-state-stale"><h3 class="warn">Stale</h3><p>Optional last-known value remains evidence-only after <code>freshUntil</code>.</p></article>
+      <article class="card" data-anchor="evidence-state-rate"><h3 class="warn">Rate limited</h3><p>No fabricated current value; retry guidance may be supplied.</p></article>
+      <article class="card" data-anchor="evidence-state-missing"><h3 class="bad">Not found / unavailable</h3><p>The subject was unsupported, absent, invalid, or could not be observed.</p></article>
+    </div>
+  </section>
+
+  <section data-anchor="evidence-edge-cases">
+    <h2>Edge cases</h2>
+    <ul>
+      <li data-anchor="evidence-edge-mixed">A partial batch contains healthy and failed item results under one partial envelope.</li>
+      <li data-anchor="evidence-edge-clock">Clock order and duration invariants reject impossible timing such as <code>fresh_until &lt; observed_at</code>, <code>received_at &lt; observed_at</code>, or <code>refresh_after &gt; fresh_until</code>.</li>
+      <li data-anchor="evidence-edge-receipt">A cached value keeps its original provider observation time across later HTTP receipts.</li>
+      <li data-anchor="evidence-edge-fields">Aggregated records may attach provenance per field when one item-level provider would be misleading.</li>
+      <li data-anchor="evidence-edge-request">Structurally invalid requests fail at the consuming HTTP or module interface. A valid subject whose provider payload is malformed returns an item-level <code>unavailable</code> result with a safe <code>provider_payload_invalid</code> code.</li>
+      <li data-anchor="evidence-edge-completeness">Envelope completeness is <code>complete</code> when every item is available, <code>partial</code> when some are available, and <code>unavailable</code> when none are currently usable.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-constraints">
+    <h2>Constraints</h2>
+    <ul>
+      <li data-anchor="evidence-constraint-package">The package is lightweight and has no Aave, protocol SDK, network client, cache, or server dependency.</li>
+      <li data-anchor="evidence-constraint-zod">Zod schemas are the runtime validation authority and exported TypeScript types are inferred from them.</li>
+      <li data-anchor="evidence-constraint-zod-version">V1 uses a Zod 3 peer dependency so the registry and server share one compatible runtime schema instance.</li>
+      <li data-anchor="evidence-constraint-neutral">The contract describes evidence rather than product-specific authorization policy.</li>
+      <li data-anchor="evidence-constraint-entrypoints">The package exposes stable <code>./core</code>, <code>./plugins</code>, <code>./endpoints</code>, and <code>./external-data</code> entrypoints; consumers do not import package internals.</li>
+      <li data-anchor="evidence-constraint-adoption">New consumers import contract entrypoints directly. The registry depends on the contracts package and temporarily re-exports only the neutral symbols it already exported so existing consumers remain source-compatible. It does not become the gateway for new evidence contracts.</li>
+      <li data-anchor="evidence-constraint-source">Each moved schema or interface has one implementation source in the contracts package; the registry contains no duplicate definitions.</li>
+      <li data-anchor="evidence-constraint-reader-import">New plugin and host code imports <code>TokenPriceReader</code> directly from <code>@emberai/onchain-actions-contracts/plugins</code>. Because it is a new symbol, the registry does not become its compatibility gateway.</li>
+      <li data-anchor="evidence-constraint-token-market-import">EMB-1144 imports token-market request/value/snapshot schemas directly from <code>@emberai/onchain-actions-contracts/endpoints</code>. The private server and registry do not duplicate or re-export those new contracts.</li>
+      <li data-anchor="evidence-constraint-release">The package follows the repository's existing <code>0.0.0</code> semantic-release source version, public npm provenance, stable <code>main</code> channel, and prerelease <code>next</code> channel.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-non-goals">
+    <h2>Non-goals</h2>
+    <ul>
+      <li data-anchor="evidence-nongoal-fetch">No provider fetching, retry, cache, or rate-limit implementation.</li>
+      <li data-anchor="evidence-nongoal-registry">No registry runtime, registry configuration, or plugin discovery lifecycle redesign; EMB-1148 owns discovery work.</li>
+      <li data-anchor="evidence-nongoal-protocols">No Aave or other bundled protocol implementation moves into the contracts package.</li>
+      <li data-anchor="evidence-nongoal-reader-runtime">No <code>TokenPriceReader</code> implementation, provider selection, price cache, HTTP client, or fallback policy lives in contracts; EMB-1144 supplies the private server implementation.</li>
+      <li data-anchor="evidence-nongoal-wallet">No wallet aggregation implementation; EMB-1146 consumes this contract.</li>
+      <li data-anchor="evidence-nongoal-server-migration">No repository-wide migration of existing <code>onchain-actions</code> imports. That cross-repository adoption is separate linked work; new work such as EMB-1144 imports the external-data entrypoint directly.</li>
+      <li data-anchor="evidence-nongoal-client">No replacement or redesign of the private <code>typescript/lib/ember-api</code> MCP client or its broad DeFi request/response schemas. That client may consume the evidence package later through an explicit migration.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-open-questions">
+    <h2>Open questions about system behavior</h2>
+    <p data-anchor="evidence-open-none">None. The operator approved the public <code>TokenPriceReader</code> host-capability contract and the <code>POST /market/token-snapshots</code> request/value/snapshot contracts on 2026-07-16, then reserved the npm package and configured its package-specific trusted publisher on 2026-07-22. The first automated publication must verify that registration.</p>
+  </section>
+
+  <section data-anchor="evidence-decisions">
+    <h2>Decision log or links to ADRs</h2>
+    <ul>
+      <li><a href="../../adr/0001-neutral-data-contract-package.spec.html">ADR 0001 — neutral data-contract package</a>.</li>
+      <li data-anchor="evidence-decision-union">2026-07-15: result states use a discriminated union rather than optional values plus loosely related flags.</li>
+      <li data-anchor="evidence-decision-fields">2026-07-15: field-level provenance is supported for aggregated wallet records.</li>
+      <li data-anchor="evidence-decision-wire">2026-07-15: the public wire contract uses snake_case, RFC 3339 UTC timestamps, and decimal strings.</li>
+      <li data-anchor="evidence-decision-compatibility">2026-07-15: neutral contracts move to one dependency-light source; the registry preserves its existing public surface through compatibility re-exports while new consumers use explicit contract-package entrypoints.</li>
+      <li data-anchor="evidence-decision-client-scope">2026-07-15: the contracts package complements rather than replaces the existing <code>ember-api</code> client Module.</li>
+      <li data-anchor="evidence-decision-architecture-approved">2026-07-15: the operator approved the neutral package Module, Zod 3 Interface, generic schema factories, and OIDC release integration.</li>
+      <li data-anchor="evidence-decision-kernel-approved">2026-07-15: the operator approved extracting the registry's neutral contract kernel, preserving compatibility re-exports, and leaving the server's bulk import migration to separate linked work.</li>
+      <li data-anchor="evidence-decision-price-reader">2026-07-16: the operator approved <code>TokenPriceReader</code> as a neutral public plugin-host port in <code>./plugins</code>; Algebra may consume it without depending on the private service that implements it.</li>
+      <li data-anchor="evidence-decision-token-market-snapshot">2026-07-16: the operator approved <code>POST /market/token-snapshots</code> backed by <code>TokenMarketSnapshotService</code>; <code>./endpoints</code> owns the request, broader token-market value, result, and envelope schemas while <code>TokenPriceReader</code> remains the narrow Algebra projection.</li>
+      <li data-anchor="evidence-decision-token-market-graph">2026-07-16: the operator approved a structurally canonical, graph-independent request contract. Memgraph membership remains private action-topology state and is not represented by the public token-market request schema.</li>
+      <li data-anchor="evidence-decision-token-market-no-stale">2026-07-16: EMB-1144 spec-chat review resolved token-market observations as fresh then evicted. Generic stale evidence remains available for domains such as wallet snapshots, but token-market result and reader schemas exclude stale last-known values.</li>
+      <li data-anchor="evidence-decision-external-data-name">2026-07-16: the operator renamed the generic public contract subpath from bespoke <code>./evidence</code> to descriptive <code>./external-data</code> before first publication.</li>
+      <li data-anchor="evidence-decision-no-digest">2026-07-16: the operator removed source digests, deterministic canonical-JSON hashing, and optional source-artifact references from V1 provenance because no approved consumer requires them.</li>
+    </ul>
+  </section>
+
+  <section data-anchor="evidence-references">
+    <h2>References to source issues</h2>
+    <ul>
+      <li><a href="https://linear.app/emberai/issue/EMB-1145">EMB-1145 — versioned evidence contracts</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1144">EMB-1144 — cached batch token-market snapshots</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1146">EMB-1146 — transparent wallet snapshots</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1147">EMB-1147 — explicit provider composition</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1148">EMB-1148 — deterministic plugin registry snapshots</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1149">EMB-1149 — server registry snapshot consumption</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1138">EMB-1138 — floor-safe rebalance lifecycle</a></li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
