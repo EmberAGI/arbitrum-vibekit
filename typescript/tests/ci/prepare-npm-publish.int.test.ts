@@ -30,6 +30,7 @@ describe('prepare-npm-publish', () => {
       mkdir(fixtureScriptDirectory, { recursive: true }),
       mkdir(registryDirectory, { recursive: true }),
       mkdir(contractsDirectory, { recursive: true }),
+      mkdir(path.join(contractsDirectory, 'dist/core'), { recursive: true }),
     ]);
     await symlink(
       path.join(workspaceRoot, 'node_modules'),
@@ -56,8 +57,20 @@ describe('prepare-npm-publish', () => {
       JSON.stringify({
         name: '@emberai/onchain-actions-contracts',
         version: '1.2.3',
+        sideEffects: false,
+        exports: {
+          './core': './dist/core/index.mjs',
+        },
+        peerDependencies: {
+          zod: '^3.25.76',
+        },
       }),
     );
+    await writeFile(
+      path.join(contractsDirectory, 'dist/core/index.mjs'),
+      'export const core = 1;\n',
+    );
+    await writeFile(path.join(contractsDirectory, 'README.md'), '# Contracts\n');
 
     await execFileAsync(
       process.execPath,
@@ -70,5 +83,36 @@ describe('prepare-npm-publish', () => {
     ) as { dependencies: Record<string, string> };
 
     expect(prepared.dependencies['@emberai/onchain-actions-contracts']).toBe('^1.2.3');
+
+    await execFileAsync(
+      process.execPath,
+      ['scripts/prepare-npm-publish.mjs', '--package', '@emberai/onchain-actions-contracts'],
+      { cwd: fixtureWorkspace },
+    );
+
+    const preparedContracts = JSON.parse(
+      await readFile(path.join(contractsDirectory, '.npm-publish/package.json'), 'utf8'),
+    ) as {
+      exports: Record<string, string>;
+      files: string[];
+      name: string;
+      peerDependencies: Record<string, string>;
+      sideEffects: boolean;
+    };
+
+    expect(preparedContracts).toMatchObject({
+      name: '@emberai/onchain-actions-contracts',
+      sideEffects: false,
+      exports: {
+        './core': './dist/core/index.mjs',
+      },
+      peerDependencies: {
+        zod: '^3.25.76',
+      },
+      files: ['dist', 'README.md'],
+    });
+    await expect(
+      readFile(path.join(contractsDirectory, '.npm-publish/dist/core/index.mjs'), 'utf8'),
+    ).resolves.toBe('export const core = 1;\n');
   });
 });
