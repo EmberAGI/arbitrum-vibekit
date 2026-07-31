@@ -37,6 +37,14 @@ export const FreshnessEvidenceV1Schema = z
       });
     }
 
+    if (freshness.observed_at_source === 'receipt_fallback' && observedAt !== receivedAt) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'observed_at must equal received_at when receipt fallback is used',
+        path: ['observed_at'],
+      });
+    }
+
     if (freshness.refresh_after && Date.parse(freshness.refresh_after) > freshUntil) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
