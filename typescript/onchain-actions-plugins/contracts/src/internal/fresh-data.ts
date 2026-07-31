@@ -6,6 +6,8 @@ import {
   PublicWarningV1Schema,
 } from '../external-data/index.js';
 
+import { validateResultFreshness } from './result-invariants.js';
+
 const Rfc3339UtcSchema = z.string().datetime();
 const warningsShape = {
   warnings: z.array(PublicWarningV1Schema).max(100).optional(),
@@ -63,5 +65,5 @@ export function createFreshDataResultV1Schema<
         ...warningsShape,
       })
       .strict(),
-  ]);
+  ]).superRefine(validateResultFreshness);
 }
