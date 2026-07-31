@@ -86,6 +86,12 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
     } as const;
 
     expect(FreshnessEvidenceV1Schema.parse(fallback)).toEqual(fallback);
+    expect(
+      FreshnessEvidenceV1Schema.safeParse({
+        ...fallback,
+        observed_at: '2026-07-30T12:00:00.000Z',
+      }).success,
+    ).toBe(false);
     expect(PublicWarningV1Schema.parse(warning)).toEqual(warning);
     expect(
       PublicWarningV1Schema.safeParse({
@@ -133,6 +139,60 @@ describe('@emberai/onchain-actions-contracts/external-data', () => {
         subject: 'token:arb',
         reason: 'provider_unavailable',
         value: { price_usd: '1.25' },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('rejects expired available results across public result and envelope Interfaces', () => {
+    const token = {
+      chainId: '42161',
+      address: '0x0000000000000000000000000000000000000001',
+    } as const;
+    const expiredFreshness = {
+      ...freshness,
+      received_at: '2026-07-30T13:00:00.000Z',
+    } as const;
+    const genericResultSchema = createDataResultV1Schema(
+      z.string().min(1),
+      z.object({ price_usd: z.string() }).strict(),
+    );
+    const genericAvailable = {
+      status: 'available',
+      subject: 'token:arb',
+      value: { price_usd: '1.25' },
+      freshness: expiredFreshness,
+      provenance,
+    } as const;
+    const tokenAvailable = {
+      ...genericAvailable,
+      subject: token,
+    } as const;
+
+    expect(genericResultSchema.safeParse(genericAvailable).success).toBe(false);
+    expect(TokenPriceReadResultV1Schema.safeParse(tokenAvailable).success).toBe(false);
+    expect(TokenMarketSnapshotResultV1Schema.safeParse(tokenAvailable).success).toBe(false);
+
+    const genericEnvelopeSchema = createSnapshotEnvelopeV1Schema(
+      z.string().min(1),
+      z.object({ price_usd: z.string() }).strict(),
+    );
+    expect(
+      genericEnvelopeSchema.safeParse({
+        schema_version: '1',
+        snapshot_id: 'expired-generic-snapshot',
+        quote_currency: 'USD',
+        completeness: 'complete',
+        items: [genericAvailable],
+      }).success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        schema_version: '1',
+        snapshot_id: 'expired-market-snapshot',
+        quote_currency: 'USD',
+        completeness: 'complete',
+        requested_tokens: [token],
+        items: [tokenAvailable],
       }).success,
     ).toBe(false);
   });

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { validateAvailableCurrentness } from '../internal/result-invariants.js';
+
 const Rfc3339UtcSchema = z.string().datetime();
 const BoundedIdentifierSchema = z.string().trim().min(1).max(128);
 const CanonicalSubjectSchema = z.string().trim().min(1).max(512);
@@ -32,6 +34,14 @@ export const FreshnessEvidenceV1Schema = z
         code: z.ZodIssueCode.custom,
         message: 'fresh_until must not precede observed_at',
         path: ['fresh_until'],
+      });
+    }
+
+    if (freshness.observed_at_source === 'receipt_fallback' && observedAt !== receivedAt) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'observed_at must equal received_at when receipt fallback is used',
+        path: ['observed_at'],
       });
     }
 
@@ -89,54 +99,60 @@ export function createDataResultV1Schema<
   SubjectSchema extends z.ZodTypeAny,
   ValueSchema extends z.ZodTypeAny,
 >(subjectSchema: SubjectSchema, valueSchema: ValueSchema) {
-  return z.discriminatedUnion('status', [
-    z
-      .object({
-        status: z.literal('available'),
-        subject: subjectSchema,
-        value: valueSchema,
-        freshness: FreshnessEvidenceV1Schema,
-        provenance: ProvenanceV1Schema,
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('stale'),
-        subject: subjectSchema,
-        reason: z.literal('stale_observation'),
-        last_known_value: valueSchema.optional(),
-        freshness: FreshnessEvidenceV1Schema,
-        provenance: ProvenanceV1Schema,
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('rate_limited'),
-        subject: subjectSchema,
-        reason: z.literal('rate_limited'),
-        retry_after: Rfc3339UtcSchema.optional(),
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('not_found'),
-        subject: subjectSchema,
-        reason: z.literal('not_found'),
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('unavailable'),
-        subject: subjectSchema,
-        reason: z.enum(['unsupported_subject', 'provider_unavailable', 'provider_payload_invalid']),
-        ...warningsShape,
-      })
-      .strict(),
-  ]);
+  return z
+    .discriminatedUnion('status', [
+      z
+        .object({
+          status: z.literal('available'),
+          subject: subjectSchema,
+          value: valueSchema,
+          freshness: FreshnessEvidenceV1Schema,
+          provenance: ProvenanceV1Schema,
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('stale'),
+          subject: subjectSchema,
+          reason: z.literal('stale_observation'),
+          last_known_value: valueSchema.optional(),
+          freshness: FreshnessEvidenceV1Schema,
+          provenance: ProvenanceV1Schema,
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('rate_limited'),
+          subject: subjectSchema,
+          reason: z.literal('rate_limited'),
+          retry_after: Rfc3339UtcSchema.optional(),
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('not_found'),
+          subject: subjectSchema,
+          reason: z.literal('not_found'),
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('unavailable'),
+          subject: subjectSchema,
+          reason: z.enum([
+            'unsupported_subject',
+            'provider_unavailable',
+            'provider_payload_invalid',
+          ]),
+          ...warningsShape,
+        })
+        .strict(),
+    ])
+    .superRefine(validateAvailableCurrentness);
 }
 
 export function createEvidencedFieldV1Schema<ValueSchema extends z.ZodTypeAny>(

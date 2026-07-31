@@ -111,6 +111,52 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         subject: emptyToken,
         reason: "not_found",
       }).success) process.exit(5);
+      const token = {
+        chainId: "42161",
+        address: "0x0000000000000000000000000000000000000001",
+      };
+      const expiredFreshness = {
+        observed_at: "2026-07-30T12:00:00.000Z",
+        received_at: "2026-07-30T13:00:00.000Z",
+        fresh_until: "2026-07-30T12:05:00.000Z",
+        observed_at_source: "provider",
+      };
+      const provenance = {
+        provider_id: "coingecko",
+        capability: "token_usd_price",
+        canonical_subject: "eip155:42161/erc20:0x0000000000000000000000000000000000000001",
+        source_class: "provider_api",
+      };
+      const tokenAvailable = {
+        status: "available",
+        subject: token,
+        value: { price_usd: "1.25" },
+        freshness: expiredFreshness,
+        provenance,
+      };
+      const genericResult = evidence.createDataResultV1Schema(
+        (await import("zod")).z.string(),
+        (await import("zod")).z.object({ price_usd: (await import("zod")).z.string() }).strict(),
+      );
+      if (genericResult.safeParse({ ...tokenAvailable, subject: "token:arb" }).success)
+        process.exit(6);
+      if (plugins.TokenPriceReadResultV1Schema.safeParse(tokenAvailable).success)
+        process.exit(7);
+      if (endpoints.TokenMarketSnapshotResultV1Schema.safeParse(tokenAvailable).success)
+        process.exit(8);
+      if (evidence.FreshnessEvidenceV1Schema.safeParse({
+        ...expiredFreshness,
+        fresh_until: "2026-07-30T13:05:00.000Z",
+        observed_at_source: "receipt_fallback",
+      }).success) process.exit(9);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        schema_version: "1",
+        snapshot_id: "expired-packed-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        requested_tokens: [token],
+        items: [tokenAvailable],
+      }).success) process.exit(10);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);

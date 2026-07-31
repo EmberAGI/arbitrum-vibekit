@@ -6,6 +6,8 @@ import {
   PublicWarningV1Schema,
 } from '../external-data/index.js';
 
+import { validateAvailableCurrentness } from './result-invariants.js';
+
 const Rfc3339UtcSchema = z.string().datetime();
 const warningsShape = {
   warnings: z.array(PublicWarningV1Schema).max(100).optional(),
@@ -19,49 +21,51 @@ export function createFreshDataResultV1Schema<
   SubjectSchema extends z.ZodTypeAny,
   ValueSchema extends z.ZodTypeAny,
 >(subjectSchema: SubjectSchema, valueSchema: ValueSchema) {
-  return z.discriminatedUnion('status', [
-    z
-      .object({
-        status: z.literal('available'),
-        subject: subjectSchema,
-        value: valueSchema,
-        freshness: FreshnessEvidenceV1Schema,
-        provenance: ProvenanceV1Schema,
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('rate_limited'),
-        subject: subjectSchema,
-        reason: z.literal('rate_limited'),
-        retry_after: Rfc3339UtcSchema.optional(),
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('not_found'),
-        subject: subjectSchema,
-        reason: z.literal('not_found'),
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('unsupported'),
-        subject: subjectSchema,
-        reason: z.literal('unsupported_subject'),
-        ...warningsShape,
-      })
-      .strict(),
-    z
-      .object({
-        status: z.literal('unavailable'),
-        subject: subjectSchema,
-        reason: z.enum(['provider_unavailable', 'provider_payload_invalid']),
-        ...warningsShape,
-      })
-      .strict(),
-  ]);
+  return z
+    .discriminatedUnion('status', [
+      z
+        .object({
+          status: z.literal('available'),
+          subject: subjectSchema,
+          value: valueSchema,
+          freshness: FreshnessEvidenceV1Schema,
+          provenance: ProvenanceV1Schema,
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('rate_limited'),
+          subject: subjectSchema,
+          reason: z.literal('rate_limited'),
+          retry_after: Rfc3339UtcSchema.optional(),
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('not_found'),
+          subject: subjectSchema,
+          reason: z.literal('not_found'),
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('unsupported'),
+          subject: subjectSchema,
+          reason: z.literal('unsupported_subject'),
+          ...warningsShape,
+        })
+        .strict(),
+      z
+        .object({
+          status: z.literal('unavailable'),
+          subject: subjectSchema,
+          reason: z.enum(['provider_unavailable', 'provider_payload_invalid']),
+          ...warningsShape,
+        })
+        .strict(),
+    ])
+    .superRefine(validateAvailableCurrentness);
 }
