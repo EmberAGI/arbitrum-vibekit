@@ -1,9 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "baseUrl": ".",
     "composite": false,
     "incremental": false,
     "outDir": "dist",
+    "paths": {
+      "@emberai/onchain-actions-contracts/core": ["src/core/index.ts"],
+      "@emberai/onchain-actions-contracts/endpoints": ["src/endpoints/index.ts"],
+      "@emberai/onchain-actions-contracts/external-data": ["src/external-data/index.ts"],
+      "@emberai/onchain-actions-contracts/plugins": ["src/plugins/index.ts"]
+    },
     "rootDir": "src"
   },
   "include": ["src"]
