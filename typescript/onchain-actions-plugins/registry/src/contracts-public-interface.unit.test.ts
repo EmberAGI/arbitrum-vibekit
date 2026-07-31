@@ -1,7 +1,6 @@
-import { describe, expect, it } from 'vitest';
-
 import { TokenIdentifierSchema } from '@emberai/onchain-actions-contracts/core';
 import { createDataResultV1Schema } from '@emberai/onchain-actions-contracts/external-data';
+import { describe, expect, it } from 'vitest';
 
 describe('neutral contracts public Interface', () => {
   it('is consumable without the registry runtime', () => {
