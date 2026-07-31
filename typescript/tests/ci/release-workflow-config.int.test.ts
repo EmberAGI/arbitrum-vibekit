@@ -14,6 +14,8 @@ type WorkflowStep = {
   if?: string;
   name?: string;
   run?: string;
+  uses?: string;
+  with?: Record<string, unknown>;
 };
 
 type WorkflowJob = {
@@ -61,6 +63,25 @@ describe('release workflow trusted-branch configuration', () => {
 
     expect(stepNames).not.toContain('Setup pnpm');
     expect(stepNames).not.toContain('Install dependencies');
+  });
+
+  it('uses a current Node 24 runtime before installing the latest npm', async () => {
+    const workflow = await readReleaseWorkflow();
+
+    for (const job of [workflow.jobs?.validate, workflow.jobs?.release]) {
+      const setupNode = job?.steps?.find((step) => step.name === 'Setup Node.js');
+      const upgradeNpm = job?.steps?.find(
+        (step) => step.name === 'Upgrade npm for OIDC trusted publishing',
+      );
+
+      expect(setupNode).toMatchObject({
+        uses: 'actions/setup-node@v4',
+        with: {
+          'node-version': '24.x',
+        },
+      });
+      expect(job?.steps?.indexOf(setupNode!)).toBeLessThan(job?.steps?.indexOf(upgradeNpm!) ?? -1);
+    }
   });
 
   it('tests registry compatibility and contracts in both release jobs', async () => {
