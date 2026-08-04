@@ -276,6 +276,22 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       }
       if (!untrimmedThrew) process.exit(48);
 
+      // classifyTokenChainFamily is itself a public identity operation: it must
+      // reject whitespace-padded/empty input instead of silently trimming it.
+      let classifyUntrimmedThrew = false;
+      try {
+        core.classifyTokenChainFamily(" 42161 ");
+      } catch {
+        classifyUntrimmedThrew = true;
+      }
+      if (!classifyUntrimmedThrew) process.exit(70);
+
+      // A malformed CAIP-2 reference (embedded colon, whitespace, or over 32
+      // characters) stays opaque rather than deriving evm/solana semantics.
+      if (core.classifyTokenChainFamily("eip155:1:extra") !== "opaque") process.exit(71);
+      if (core.classifyTokenChainFamily("eip155:has space") !== "opaque") process.exit(72);
+      if (core.classifyTokenChainFamily("solana:" + "a".repeat(33)) !== "opaque") process.exit(73);
+
       // Envelope ordering + cardinality, exercised with case-sensitive Solana results
       // to prove the packed artifact enforces both invariants together.
       const freshFreshness = prematureStale.freshness; // received_at <= fresh_until: valid for "available"
@@ -403,6 +419,21 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         cjsUntrimmedThrew = true;
       }
       if (!cjsUntrimmedThrew) process.exit(42);
+
+      // classifyTokenChainFamily rejects whitespace-padded/empty input instead
+      // of silently trimming it, mirroring the ESM matrix.
+      let cjsClassifyUntrimmedThrew = false;
+      try {
+        core.classifyTokenChainFamily(" 42161 ");
+      } catch {
+        cjsClassifyUntrimmedThrew = true;
+      }
+      if (!cjsClassifyUntrimmedThrew) process.exit(70);
+
+      // A malformed CAIP-2 reference stays opaque rather than deriving evm/solana semantics.
+      if (core.classifyTokenChainFamily("eip155:1:extra") !== "opaque") process.exit(71);
+      if (core.classifyTokenChainFamily("eip155:has space") !== "opaque") process.exit(72);
+      if (core.classifyTokenChainFamily("solana:" + "a".repeat(33)) !== "opaque") process.exit(73);
 
       // Request uniqueness accepts case-distinct Solana identities, rejects true duplicates.
       const cjsSolanaMixedCase = { chainId: "solana", address: "${SOLANA_ADDRESS_MIXED_CASE}" };

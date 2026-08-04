@@ -50,13 +50,20 @@ capability all delegate to this Interface. Callers must not reimplement
 address-case policy locally. `TokenPriceReader.readTokenPrices` takes
 `CanonicalTokenIdentifierV1` values directly, not raw `TokenIdentifier` input.
 
-CAIP-2 namespace matching is syntactically lowercase-only (per CAIP-2), not
-case-folded: `EIP155:*`/`SOLANA:*` are invalid CAIP-2 ids and stay `opaque`.
+CAIP-2 matching follows the full CAIP-2 grammar, not just the namespace: a
+namespace is syntactically lowercase-only (`EIP155:*`/`SOLANA:*` are invalid
+CAIP-2 ids and stay `opaque`, not case-folded into `evm`/`solana`), and a
+reference containing a colon, whitespace, or more than 32 characters is
+likewise not valid CAIP-2 syntax and stays `opaque` rather than deriving
+`evm`/`solana` semantics.
+
+Every function in this Interface — `classifyTokenChainFamily`,
 `normalizeCanonicalTokenIdentifier`, `canonicalTokenIdentityKey`, and
-`tokenIdentitiesAreEquivalent` validate their input through
-`CanonicalTokenIdentifierV1Schema`, so calling them directly with an empty,
-all-whitespace, or leading/trailing-whitespace `chainId`/`address` throws
-instead of silently trimming or otherwise producing a key.
+`tokenIdentitiesAreEquivalent` — validates its `chainId`/`address` input
+through the same non-empty/trimmed invariant before dispatching on it, so
+calling any of them directly with an empty, all-whitespace, or
+leading/trailing-whitespace value throws instead of silently trimming or
+otherwise producing a result.
 
 `canonicalTokenIdentityKey` encodes the `(chainId, address)` pair as a
 `JSON.stringify`-escaped tuple rather than delimiter concatenation, since

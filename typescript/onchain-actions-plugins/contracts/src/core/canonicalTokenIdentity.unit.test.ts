@@ -17,9 +17,15 @@ describe('classifyTokenChainFamily', () => {
     expect(classifyTokenChainFamily('solana')).toBe('solana');
   });
 
-  it('trims surrounding whitespace before classifying', () => {
-    expect(classifyTokenChainFamily('  42161  ')).toBe('evm');
-    expect(classifyTokenChainFamily('  solana  ')).toBe('solana');
+  it('rejects whitespace-padded or empty chain ids instead of silently trimming them', () => {
+    // classifyTokenChainFamily is itself a public identity operation: it must
+    // enforce the same non-empty/trimmed invariant as every other exported
+    // function in this module rather than laundering invalid input through
+    // an internal `.trim()` before dispatch.
+    expect(() => classifyTokenChainFamily('  42161  ')).toThrow();
+    expect(() => classifyTokenChainFamily('  solana  ')).toThrow();
+    expect(() => classifyTokenChainFamily('')).toThrow();
+    expect(() => classifyTokenChainFamily('   ')).toThrow();
   });
 
   it('requires a syntactically valid lowercase CAIP-2 namespace and treats uppercase pseudo-CAIP-2 ids as opaque', () => {
@@ -37,7 +43,16 @@ describe('classifyTokenChainFamily', () => {
   it('treats a non-decimal, non-CAIP-2 identifier as opaque', () => {
     expect(classifyTokenChainFamily('mainnet')).toBe('opaque');
     expect(classifyTokenChainFamily('eip155')).toBe('opaque');
-    expect(classifyTokenChainFamily('')).toBe('opaque');
+  });
+
+  it('treats a syntactically malformed CAIP-2 reference as opaque rather than deriving evm/solana semantics', () => {
+    // CAIP-2 reference grammar is `[-_a-zA-Z0-9]{1,32}`. A reference with an
+    // embedded colon, whitespace, or more than 32 characters is not a valid
+    // CAIP-2 id and must fall through to `opaque`, not `evm`/`solana`.
+    expect(classifyTokenChainFamily('eip155:1:extra')).toBe('opaque');
+    expect(classifyTokenChainFamily('eip155:has space')).toBe('opaque');
+    expect(classifyTokenChainFamily('solana:' + 'a'.repeat(33))).toBe('opaque');
+    expect(classifyTokenChainFamily('eip155:')).toBe('opaque');
   });
 });
 

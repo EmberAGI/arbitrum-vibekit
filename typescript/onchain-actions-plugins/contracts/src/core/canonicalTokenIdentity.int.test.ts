@@ -96,4 +96,14 @@ describe('@emberai/onchain-actions-contracts/core chain-aware canonical token id
   it('validates through the public schema instead of letting a direct call bypass the non-empty invariant', () => {
     expect(() => canonicalTokenIdentityKey({ chainId: '', address: '0xabc' })).toThrow();
   });
+
+  it('rejects a direct classifyTokenChainFamily call with whitespace-padded input instead of silently trimming it', () => {
+    expect(() => classifyTokenChainFamily(' 42161 ')).toThrow();
+  });
+
+  it('treats a syntactically malformed CAIP-2 reference as opaque instead of deriving evm/solana semantics', () => {
+    expect(classifyTokenChainFamily('eip155:1:extra')).toBe('opaque');
+    expect(classifyTokenChainFamily('eip155:has space')).toBe('opaque');
+    expect(classifyTokenChainFamily('solana:' + 'a'.repeat(33))).toBe('opaque');
+  });
 });

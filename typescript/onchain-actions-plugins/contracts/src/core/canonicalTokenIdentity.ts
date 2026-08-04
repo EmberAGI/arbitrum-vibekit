@@ -32,32 +32,41 @@ export type TokenChainFamily = 'evm' | 'solana' | 'opaque';
 
 const LEGACY_SOLANA_CHAIN_ID = 'solana';
 const DECIMAL_CHAIN_ID_PATTERN = /^[0-9]+$/;
-// CAIP-2 namespaces are syntactically lowercase-only (CAIP-2 §Namespace). An
-// uppercase or mixed-case pseudo-CAIP-2 id such as `EIP155:1` is not a valid
-// CAIP-2 identifier, so it must not match here and must fall through to
-// `opaque` instead of being case-folded into `evm`/`solana` semantics.
-const CAIP2_CHAIN_ID_PATTERN = /^([-a-z0-9]{3,8}):(.+)$/;
+// CAIP-2 grammar (CAIP-2 §Syntax): `namespace:reference`, where
+// `namespace` is `[-a-z0-9]{3,8}` and `reference` is `[-_a-zA-Z0-9]{1,32}`.
+// Namespaces are syntactically lowercase-only, so an uppercase or mixed-case
+// pseudo-CAIP-2 id such as `EIP155:1` is not a valid CAIP-2 identifier. A
+// reference containing a colon, whitespace, or more than 32 characters is
+// likewise not valid CAIP-2 syntax. Either defect must fall through to
+// `opaque` instead of being derived into `evm`/`solana` semantics.
+const CAIP2_CHAIN_ID_PATTERN = /^([-a-z0-9]{3,8}):([-_a-zA-Z0-9]{1,32})$/;
 
 /**
  * Classifies a chain id into the address family that governs its identity
  * comparison. This is the sole authority for chain-family dispatch: legacy
  * decimal Ember chain ids and `eip155:*` CAIP-2 ids are `evm`, the legacy
  * `solana` literal and `solana:*` CAIP-2 ids are `solana`, and every other
- * chain id — including a syntactically invalid, non-lowercase pseudo-CAIP-2
- * id — is `opaque` and must never be silently lowercased.
+ * chain id — including a syntactically invalid, non-lowercase, or malformed
+ * pseudo-CAIP-2 id — is `opaque` and must never be silently lowercased.
+ *
+ * Validates `chainId` through the same non-empty/trimmed invariant enforced
+ * by {@link CanonicalTokenIdentifierV1Schema} before dispatching on it, so a
+ * caller cannot bypass that invariant by calling this function directly with
+ * invalid (e.g. empty, all-whitespace, or leading/trailing-whitespace-padded)
+ * input — it throws instead of silently trimming the value away.
  */
 export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
-  const trimmed = chainId.trim();
+  const validated = trimmedNonEmptyString.parse(chainId);
 
-  if (trimmed === LEGACY_SOLANA_CHAIN_ID) {
+  if (validated === LEGACY_SOLANA_CHAIN_ID) {
     return 'solana';
   }
 
-  if (DECIMAL_CHAIN_ID_PATTERN.test(trimmed)) {
+  if (DECIMAL_CHAIN_ID_PATTERN.test(validated)) {
     return 'evm';
   }
 
-  const namespace = CAIP2_CHAIN_ID_PATTERN.exec(trimmed)?.[1];
+  const namespace = CAIP2_CHAIN_ID_PATTERN.exec(validated)?.[1];
 
   if (namespace === 'eip155') {
     return 'evm';
@@ -78,9 +87,11 @@ export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
  * Validates `token` through {@link CanonicalTokenIdentifierV1Schema} first, so
  * a caller cannot bypass the public non-empty/trimmed invariant by calling
  * this helper directly with an invalid (e.g. empty, all-whitespace, or
- * leading/trailing-whitespace-padded) chain id or address — every other
- * public operation in this Module goes through this same validation because
- * they all delegate here.
+ * leading/trailing-whitespace-padded) chain id or address.
+ * {@link canonicalTokenIdentityKey} and {@link tokenIdentitiesAreEquivalent}
+ * delegate here for the same reason; {@link classifyTokenChainFamily}
+ * enforces the identical chain-id invariant independently, since it is
+ * itself a public entry point a caller can invoke directly.
  */
 export function normalizeCanonicalTokenIdentifier(
   token: TokenIdentifier,
