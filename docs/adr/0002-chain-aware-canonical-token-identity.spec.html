@@ -34,6 +34,11 @@
       </tbody>
     </table>
     <p>The classifier is pure and synchronous: it never queries Memgraph or another live registry, and its absence never invalidates an otherwise structurally valid token identity.</p>
+    <p>Two implementation invariants keep this decision precise:</p>
+    <ul>
+      <li>CAIP-2 namespace matching is <em>syntactically</em> lowercase-only, not case-folded — <code>EIP155:*</code> and <code>SOLANA:*</code> are not valid CAIP-2 identifiers and remain <code>opaque</code> exact-case values rather than receiving <code>evm</code>/<code>solana</code> semantics.</li>
+      <li><code>canonicalTokenIdentityKey</code> encodes the <code>(chainId, address)</code> pair with an unambiguous tuple encoding (not delimiter concatenation), because both a V1 chain id and a CAIP-2 chain id may themselves contain <code>:</code> — e.g. <code>(eip155:1, 0xab)</code> and <code>(eip155, 1:0xab)</code> would otherwise collide.</li>
+    </ul>
   </section>
   <section data-anchor="canonical-identity-adr-tradeoffs">
     <h2>Trade-offs</h2>

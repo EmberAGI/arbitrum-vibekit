@@ -60,4 +60,28 @@ describe('@emberai/onchain-actions-contracts/core chain-aware canonical token id
     expect(classifyTokenChainFamily('solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp')).toBe('solana');
     expect(classifyTokenChainFamily('cosmos:cosmoshub-4')).toBe('opaque');
   });
+
+  it('treats an invalid uppercase pseudo-CAIP-2 namespace as opaque exact-case rather than a valid CAIP-2 id', () => {
+    expect(classifyTokenChainFamily('EIP155:42161')).toBe('opaque');
+    expect(classifyTokenChainFamily('SOLANA:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp')).toBe('opaque');
+
+    const upper = { chainId: 'EIP155:42161', address: '0xABCDEF' };
+    const upperOtherCase = { chainId: 'EIP155:42161', address: '0xabcdef' };
+
+    expect(tokenIdentitiesAreEquivalent(upper, upperOtherCase)).toBe(false);
+  });
+
+  it('keys the (chainId, address) tuple unambiguously so distinct pairs never collide on a shared colon', () => {
+    const evmChainIdWithColon = canonicalTokenIdentityKey({ chainId: 'eip155:1', address: '0xab' });
+    const opaqueChainIdWithColonInAddress = canonicalTokenIdentityKey({
+      chainId: 'eip155',
+      address: '1:0xab',
+    });
+
+    expect(evmChainIdWithColon).not.toBe(opaqueChainIdWithColonInAddress);
+  });
+
+  it('validates through the public schema instead of letting a direct call bypass the non-empty invariant', () => {
+    expect(() => canonicalTokenIdentityKey({ chainId: '', address: '0xabc' })).toThrow();
+  });
 });

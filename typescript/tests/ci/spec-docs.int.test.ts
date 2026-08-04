@@ -8,6 +8,7 @@ const specificationPaths = [
   'docs/specs/index.spec.html',
   'docs/specs/domains/external-data-evidence-contract.spec.html',
   'docs/adr/0001-neutral-data-contract-package.spec.html',
+  'docs/adr/0002-chain-aware-canonical-token-identity.spec.html',
 ] as const;
 
 async function readSpecification(relativePath: string): Promise<string> {

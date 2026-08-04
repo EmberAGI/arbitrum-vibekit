@@ -4,6 +4,7 @@ import {
   canonicalTokenIdentityKey,
   classifyTokenChainFamily,
   normalizeCanonicalTokenIdentifier,
+  tokenIdentitiesAreEquivalent,
 } from './canonicalTokenIdentity.js';
 
 describe('classifyTokenChainFamily', () => {
@@ -21,9 +22,11 @@ describe('classifyTokenChainFamily', () => {
     expect(classifyTokenChainFamily('  solana  ')).toBe('solana');
   });
 
-  it('is case-insensitive on the CAIP-2 namespace', () => {
-    expect(classifyTokenChainFamily('EIP155:42161')).toBe('evm');
-    expect(classifyTokenChainFamily('Solana:mainnet-beta')).toBe('solana');
+  it('requires a syntactically valid lowercase CAIP-2 namespace and treats uppercase pseudo-CAIP-2 ids as opaque', () => {
+    expect(classifyTokenChainFamily('EIP155:42161')).toBe('opaque');
+    expect(classifyTokenChainFamily('Solana:mainnet-beta')).toBe('opaque');
+    expect(classifyTokenChainFamily('eip155:42161')).toBe('evm');
+    expect(classifyTokenChainFamily('solana:mainnet-beta')).toBe('solana');
   });
 
   it('treats an unknown CAIP-2 namespace as opaque without collapsing case', () => {
@@ -63,9 +66,9 @@ describe('normalizeCanonicalTokenIdentifier', () => {
 });
 
 describe('canonicalTokenIdentityKey', () => {
-  it('combines the trimmed chain id and normalized address', () => {
+  it('combines the trimmed chain id and normalized address as an unambiguous tuple', () => {
     expect(canonicalTokenIdentityKey({ chainId: ' 42161 ', address: ' 0xABCDEF ' })).toBe(
-      '42161:0xabcdef',
+      JSON.stringify(['42161', '0xabcdef']),
     );
   });
 
@@ -73,5 +76,31 @@ describe('canonicalTokenIdentityKey', () => {
     expect(canonicalTokenIdentityKey({ chainId: 'unknown', address: 'AbC' })).not.toBe(
       canonicalTokenIdentityKey({ chainId: 'unknown', address: 'abc' }),
     );
+  });
+
+  it('encodes the (chainId, address) tuple unambiguously so delimiter concatenation cannot collide', () => {
+    // Naive `${chainId}:${address}` concatenation collides here: both keys
+    // would serialize to the literal string "eip155:1:0xab".
+    const evmChainIdWithColon = canonicalTokenIdentityKey({ chainId: 'eip155:1', address: '0xab' });
+    const opaqueChainIdWithColonInAddress = canonicalTokenIdentityKey({
+      chainId: 'eip155',
+      address: '1:0xab',
+    });
+
+    expect(evmChainIdWithColon).not.toBe(opaqueChainIdWithColonInAddress);
+  });
+
+  it('validates through the public schema so a caller cannot bypass the non-empty/trimmed invariant', () => {
+    expect(() => canonicalTokenIdentityKey({ chainId: '', address: '0xabc' })).toThrow();
+    expect(() => canonicalTokenIdentityKey({ chainId: '   ', address: '0xabc' })).toThrow();
+    expect(() => canonicalTokenIdentityKey({ chainId: '42161', address: '' })).toThrow();
+  });
+});
+
+describe('tokenIdentitiesAreEquivalent', () => {
+  it('rejects an invalid empty identity instead of silently treating it as equivalent', () => {
+    expect(() =>
+      tokenIdentitiesAreEquivalent({ chainId: '', address: '0xabc' }, { chainId: '', address: '0xabc' }),
+    ).toThrow();
   });
 });

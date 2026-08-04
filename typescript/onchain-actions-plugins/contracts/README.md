@@ -48,3 +48,10 @@ import {
 Request uniqueness, result-order validation, and the `TokenPriceReader` host
 capability all delegate to this Interface. Callers must not reimplement
 address-case policy locally.
+
+CAIP-2 namespace matching is syntactically lowercase-only (per CAIP-2), not
+case-folded: `EIP155:*`/`SOLANA:*` are invalid CAIP-2 ids and stay `opaque`.
+`normalizeCanonicalTokenIdentifier`, `canonicalTokenIdentityKey`, and
+`tokenIdentitiesAreEquivalent` validate their input through
+`CanonicalTokenIdentifierV1Schema`, so calling them directly with an empty or
+all-whitespace `chainId`/`address` throws instead of silently producing a key.

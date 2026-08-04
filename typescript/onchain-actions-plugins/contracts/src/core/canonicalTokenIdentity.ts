@@ -18,14 +18,19 @@ export type TokenChainFamily = 'evm' | 'solana' | 'opaque';
 
 const LEGACY_SOLANA_CHAIN_ID = 'solana';
 const DECIMAL_CHAIN_ID_PATTERN = /^[0-9]+$/;
-const CAIP2_CHAIN_ID_PATTERN = /^([-a-zA-Z0-9]{3,8}):(.+)$/;
+// CAIP-2 namespaces are syntactically lowercase-only (CAIP-2 §Namespace). An
+// uppercase or mixed-case pseudo-CAIP-2 id such as `EIP155:1` is not a valid
+// CAIP-2 identifier, so it must not match here and must fall through to
+// `opaque` instead of being case-folded into `evm`/`solana` semantics.
+const CAIP2_CHAIN_ID_PATTERN = /^([-a-z0-9]{3,8}):(.+)$/;
 
 /**
  * Classifies a chain id into the address family that governs its identity
  * comparison. This is the sole authority for chain-family dispatch: legacy
  * decimal Ember chain ids and `eip155:*` CAIP-2 ids are `evm`, the legacy
  * `solana` literal and `solana:*` CAIP-2 ids are `solana`, and every other
- * chain id is `opaque` and must never be silently lowercased.
+ * chain id — including a syntactically invalid, non-lowercase pseudo-CAIP-2
+ * id — is `opaque` and must never be silently lowercased.
  */
 export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
   const trimmed = chainId.trim();
@@ -38,17 +43,14 @@ export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
     return 'evm';
   }
 
-  const caip2Match = CAIP2_CHAIN_ID_PATTERN.exec(trimmed);
-  const namespace = caip2Match?.[1]?.toLowerCase();
+  const namespace = CAIP2_CHAIN_ID_PATTERN.exec(trimmed)?.[1];
 
-  if (namespace !== undefined) {
-    if (namespace === 'eip155') {
-      return 'evm';
-    }
+  if (namespace === 'eip155') {
+    return 'evm';
+  }
 
-    if (namespace === LEGACY_SOLANA_CHAIN_ID) {
-      return 'solana';
-    }
+  if (namespace === LEGACY_SOLANA_CHAIN_ID) {
+    return 'solana';
   }
 
   return 'opaque';
@@ -58,21 +60,35 @@ export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
  * Returns the canonical form of a token identity for its chain family:
  * case-insensitive evm addresses normalize to lowercase, while solana and
  * opaque addresses preserve their exact case.
+ *
+ * Validates `token` through {@link CanonicalTokenIdentifierV1Schema} first, so
+ * a caller cannot bypass the public non-empty/trimmed invariant by calling
+ * this helper directly with an invalid (e.g. empty or all-whitespace) chain
+ * id or address — every other public operation in this Module goes through
+ * this same validation because they all delegate here.
  */
-export function normalizeCanonicalTokenIdentifier(token: TokenIdentifier): TokenIdentifier {
-  const chainId = token.chainId.trim();
-  const trimmedAddress = token.address.trim();
-  const family = classifyTokenChainFamily(chainId);
-  const address = family === 'evm' ? trimmedAddress.toLowerCase() : trimmedAddress;
+export function normalizeCanonicalTokenIdentifier(
+  token: TokenIdentifier,
+): CanonicalTokenIdentifierV1 {
+  const validated = CanonicalTokenIdentifierV1Schema.parse(token);
+  const family = classifyTokenChainFamily(validated.chainId);
+  const address = family === 'evm' ? validated.address.toLowerCase() : validated.address;
 
-  return { chainId, address };
+  return { chainId: validated.chainId, address };
 }
 
-/** A stable key for grouping/deduplicating token identities by chain-aware equivalence. */
+/**
+ * A stable key for grouping/deduplicating token identities by chain-aware
+ * equivalence. Both `chainId` and `address` may themselves contain `:`
+ * (arbitrary V1 chain ids and CAIP-2 ids both can), so a bare
+ * `${chainId}:${address}` concatenation is ambiguous — `(eip155:1, 0xab)` and
+ * `(eip155, 1:0xab)` would collide. `JSON.stringify` on the fixed-arity pair
+ * escapes both fields, so an ambiguous key cannot arise from that collision.
+ */
 export function canonicalTokenIdentityKey(token: TokenIdentifier): string {
   const normalized = normalizeCanonicalTokenIdentifier(token);
 
-  return `${normalized.chainId}:${normalized.address}`;
+  return JSON.stringify([normalized.chainId, normalized.address]);
 }
 
 /** Whether two token identities refer to the same token under chain-aware identity semantics. */

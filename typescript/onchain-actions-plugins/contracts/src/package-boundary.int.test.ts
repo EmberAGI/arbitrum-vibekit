@@ -211,6 +211,23 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         schema_version: "1",
         tokens: [solanaTokenMixedCase, solanaTokenMixedCase],
       }).success) process.exit(26);
+      if (core.classifyTokenChainFamily("EIP155:42161") !== "opaque") process.exit(40);
+      if (core.classifyTokenChainFamily("SOLANA:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") !== "opaque")
+        process.exit(41);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "EIP155:42161", address: "0xABCDEF" },
+        { chainId: "EIP155:42161", address: "0xabcdef" },
+      )) process.exit(42);
+      const collisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "0xab" });
+      const collisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:0xab" });
+      if (collisionKeyA === collisionKeyB) process.exit(43);
+      let bypassThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: "", address: "0xabc" });
+      } catch {
+        bypassThrew = true;
+      }
+      if (!bypassThrew) process.exit(44);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);
@@ -232,6 +249,14 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         { chainId: "solana", address: "MixedCaseAddress" },
         { chainId: "solana", address: "mixedcaseaddress" },
       )) process.exit(32);
+      if (core.classifyTokenChainFamily("EIP155:42161") !== "opaque") process.exit(33);
+      let cjsBypassThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: "   ", address: "0xabc" });
+      } catch {
+        cjsBypassThrew = true;
+      }
+      if (!cjsBypassThrew) process.exit(34);
     `;
 
     await expect(
