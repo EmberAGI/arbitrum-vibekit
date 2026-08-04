@@ -20,7 +20,7 @@ exists to prevent (previously reproduced at commit `3ed5a27`, which named
 agent/emb-1359-make-canonical-token-identity-chain-aware` for the exact SHA
 at review time instead of a literal hash hardcoded here.
 
-Round 7 (this cycle, on top of `3ed5a27`, round 6) closes the AC18 gap Agent Review
+Round 7 (on top of `3ed5a27`, round 6) closes the AC18 gap Agent Review
 found: zero/native-address handling was previously proven only at the unit
 tier (`canonicalTokenIdentity.unit.test.ts`), not through the public
 integration boundary or either packed ESM/CJS consumer. This cycle adds one
@@ -31,10 +31,42 @@ below) and changes no production source file — `git diff --stat` against
 that fixture instead of a local literal), `canonicalTokenIdentity.int.test.ts`,
 `package-boundary.int.test.ts`, and this file.
 
+Round 8 (this cycle, on top of round 7) closes an isolated
+dependency-lockfile/toolchain-provenance defect Agent Review found: the
+`viem` devDependency added at commit `83f4c7e` rewrote `typescript/pnpm-lock.yaml`
+by 497 additions/99 deletions, touching unrelated workspace peer snapshots
+(Zod 3/4 selections, Vitest UI peers, eslint resolver peers) and an unrelated
+`agent-runtime` workspace resolution, because the resolving tool was pnpm
+9.15.4 against a `packageManager: pnpm@10.7.0` pin. This cycle reconciles
+`typescript/pnpm-lock.yaml` against `origin/main` under pnpm 10.7.0 so the
+diff contains exactly the three lines the contracts importer's `viem:
+catalog:` devDependency requires (reusing the already-present, already
+9-times-referenced `viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)`
+snapshot, so no new package resolution was fetched). No production or test
+source file changed this round — `git diff --stat` against round 7 touches
+only `typescript/pnpm-lock.yaml` and this file. `pnpm install --frozen-lockfile`
+under pnpm 10.7.0 exits 0 against the reconciled lockfile with no further
+rewrite, confirming internal consistency across the whole workspace.
+
 Package: `typescript/onchain-actions-plugins/contracts`. Module under test:
 `src/core/canonicalTokenIdentity.ts`.
 
 ## Final-gate evidence for this cycle
+
+Round 8 (current), all run against pnpm 10.7.0 (repository-pinned):
+
+| Command | Location | Result |
+| --- | --- | --- |
+| `pnpm install --frozen-lockfile` | `typescript/` | exit 0, no lockfile rewrite |
+| `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/contracts` | 9 files / **70 passed**, 0 failed |
+| `pnpm run lint` | `onchain-actions-plugins/contracts` | clean |
+| `tsc --noEmit --project onchain-actions-plugins/contracts/tsconfig.json` | `typescript/` | clean |
+| `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/registry` | 4 files / **12 passed**, 0 failed |
+| `pnpm test:vitest tests/ci/spec-docs.int.test.ts` | `typescript/` | 1 file / **3 passed**, 0 failed |
+| `git diff origin/main -- typescript/pnpm-lock.yaml` | repo root | 3 lines added (contracts' `viem` devDependency only), 0 unrelated rewrites |
+
+Round 7 final-gate evidence (superseded by round 8 above, retained for
+history):
 
 | Command | Location | Result |
 | --- | --- | --- |
