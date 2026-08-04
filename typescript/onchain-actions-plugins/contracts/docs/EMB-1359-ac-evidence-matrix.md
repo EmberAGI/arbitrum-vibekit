@@ -10,26 +10,45 @@ exact test names and boundary/tier so the whole 22-item acceptance trace is
 independently checkable from this one file instead of PR-body narrative
 scattered across five Agent Fixes rounds.
 
-Reviewed commit range: `fbcba4b` (round 1) through `e69496c` (round 5, current
-`HEAD`) on `agent/emb-1359-make-canonical-token-identity-chain-aware`. This
-evidence cycle added only this file — `git diff --stat` against `e69496c` is
-empty for every source/test file; the two mutation proofs below were applied
-and reverted in-place and left no residual diff.
+Reviewed commit range: `fbcba4b` (round 1) through the commit that lands
+each cycle's update to this file, inclusive — that commit is always this
+evidence artifact's own upper bound, never a name for a prior commit. A
+matrix commit that names an earlier hash as "current HEAD" and excludes
+itself from the reviewed range is the exact provenance defect this wording
+exists to prevent (previously reproduced at commit `3ed5a27`, which named
+`e69496c` as HEAD and excluded itself); consult `git log --oneline
+agent/emb-1359-make-canonical-token-identity-chain-aware` for the exact SHA
+at review time instead of a literal hash hardcoded here.
+
+Round 6 (this cycle, on top of `3ed5a27`) closes the AC18 gap Agent Review
+found: zero/native-address handling was previously proven only at the unit
+tier (`canonicalTokenIdentity.unit.test.ts`), not through the public
+integration boundary or either packed ESM/CJS consumer. This cycle adds one
+zero/native-address assertion at each of those three tiers (see the AC18 row
+below) and changes no production source file — `git diff --stat` against
+`3ed5a27` touches only `canonicalTokenIdentity.testFixtures.ts` (new shared
+`EVM_ZERO_ADDRESS` fixture), `canonicalTokenIdentity.unit.test.ts` (reuses
+that fixture instead of a local literal), `canonicalTokenIdentity.int.test.ts`,
+`package-boundary.int.test.ts`, and this file.
 
 Package: `typescript/onchain-actions-plugins/contracts`. Module under test:
 `src/core/canonicalTokenIdentity.ts`.
 
-## Final-gate evidence for this cycle (HEAD `e69496c`)
+## Final-gate evidence for this cycle
 
 | Command | Location | Result |
 | --- | --- | --- |
-| `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/contracts` | 9 files / **69 passed**, 0 failed |
+| `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/contracts` | 9 files / **70 passed**, 0 failed |
 | `pnpm run lint` | `onchain-actions-plugins/contracts` | clean |
 | `tsc --noEmit --project onchain-actions-plugins/contracts/tsconfig.json` | `typescript/` | clean |
 | `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/registry` | 4 files / **12 passed**, 0 failed |
-| `pnpm run test:ci:root` (includes `tests/ci/spec-docs.int.test.ts`) | `typescript/` | 7 files / **36 passed**, 0 failed |
+| `pnpm run test:ci:root` (includes `tests/ci/spec-docs.int.test.ts`) | `typescript/` | 7 files / **36 passed**, 0 failed (one initial run hit an unrelated 10s timeout in `run-affected-command.int.test.ts` under full-suite parallel load; isolated and full-root reruns both passed clean, confirming a load-flake rather than a regression) |
 
 ## AC7 — mutation proof: restore unconditional `address.toLowerCase()`
+
+Captured in round 5 (commit `3ed5a27`); not re-run in round 6, which only
+adds the AC18 zero/native-address coverage below and does not touch
+`canonicalTokenIdentity.ts`. "This cycle" in this section refers to round 5.
 
 **Mutation applied** to `CanonicalTokenIdentifierV1Schema`'s transform in
 `src/core/canonicalTokenIdentity.ts` (family dispatch, `isAddress` strict
@@ -72,6 +91,9 @@ Test Files  9 passed (9)
 ```
 
 ## AC19 — mutation proof: bypass checksum validation
+
+Captured in round 5 (commit `3ed5a27`); not re-run in round 6 for the same
+reason noted under AC7 above. "This cycle" in this section refers to round 5.
 
 AC19 covers two independent failure modes ("reintroduces unconditional EVM
 lowercasing as canonical output **or** bypasses checksum validation"). AC7's
@@ -138,13 +160,13 @@ README/glossary prose, not a test.
 
 | AC | Criterion (short) | Test(s) | Tier | Status |
 | -- | -- | -- | -- | -- |
-| 1 | One public `./core` Interface is the sole identity authority | `package-boundary.int.test.ts` entrypoint-shape checks (`core.classifyTokenChainFamily`, `normalizeCanonicalTokenIdentifier`, `canonicalTokenIdentityKey`, `tokenIdentitiesAreEquivalent` all exported); README §"Chain-aware canonical token identity" | packed + docs | Met (current 69/69 GREEN) |
+| 1 | One public `./core` Interface is the sole identity authority | `package-boundary.int.test.ts` entrypoint-shape checks (`core.classifyTokenChainFamily`, `normalizeCanonicalTokenIdentifier`, `canonicalTokenIdentityKey`, `tokenIdentitiesAreEquivalent` all exported); README §"Chain-aware canonical token identity" | packed + docs | Met (current 70/70 GREEN) |
 | 2 | Request/envelope checks delegate; no endpoint-local lowercase remains | `src/endpoints/tokenMarket.ts` `RequestedTokensSchema`/envelope `superRefine` call `canonicalTokenIdentityKey`/`tokenIdentitiesAreEquivalent`; `src/internal/canonical-token.ts` deleted in `fbcba4b` and absent from `HEAD` | source inspection | Met |
 | 3 | Public-boundary REDs prove the complete identity matrix | `canonicalTokenIdentity.int.test.ts` — EVM equivalence, Solana case-distinct/-identical, different-chain distinctness, opaque never-collapse cases | public | Met (historical mutation cycle: round 2 lowercase mutation, 9/57 failed at the time; re-verified this cycle via AC7 above) |
 | 4 | Request schema accepts case-distinct Solana, rejects true duplicates | `public.int.test.ts > ... > accepts case-distinct Solana token identities as unique while rejecting true duplicates`; packed exit 25/26 | public + packed | Met |
 | 5 | Envelope accepts ordered Solana results, rejects swap/mismatch, preserves 1:1 | `public.int.test.ts > ... > accepts correctly ordered case-sensitive Solana results and rejects a swapped order`; packed exit 50/51/52 | public + packed | Met |
 | 6 | Packed ESM/CJS exercise the same matrix | `package-boundary.int.test.ts > ... > loads every public ESM and CJS entrypoint and rejects internal paths` (both probes) | packed | Met |
-| 7 | Mutation restoring unconditional `address.toLowerCase()` fails public+packed tests | see "AC7 — mutation proof" above | public + unit + packed | **Met — reproduced this cycle** (18/69 failed, reverted, 69/69 GREEN) |
+| 7 | Mutation restoring unconditional `address.toLowerCase()` fails public+packed tests | see "AC7 — mutation proof" above | public + unit + packed | **Met — reproduced in round 5** (18/69 failed, reverted, 69/69 GREEN; test count is 70 as of round 6's AC18 addition, not re-run) |
 | 8 | External-data spec + README define chain-aware semantics, ownership, unknown-family behavior, enforcement point | `docs/specs/domains/external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity`; `README.md` | docs | Met |
 | 9 | Registry compatibility surface single-sourced from contracts | `contracts-compatibility.unit.test.ts > re-exports the contracts schema instance instead of defining a copy`; `> keeps the built compatibility adapter dependent on contracts` | registry | Met (12/12 GREEN this cycle) |
 | 10 | No plugin-specific normalizer/provider/cache/network duplicate policy | Module boundary: only `src/core/canonicalTokenIdentity.ts` implements chain-family dispatch/canonicalization; `tokenMarket.ts`/`tokenPrice.ts` only call the shared functions | source inspection | Met |
@@ -155,8 +177,8 @@ README/glossary prose, not a test.
 | 15 | ADR 0002 linked from spec index and in the validator's canonical path list | `typescript/tests/ci/spec-docs.int.test.ts` `specificationPaths` includes `docs/adr/0002-chain-aware-canonical-token-identity.spec.html` (line 11) | ci-gate | Met (36/36 GREEN this cycle, includes 3/3 spec-docs tests) |
 | 16 | Full 20-byte EVM address, lowercase-or-EIP-55 ingress, invalid-checksum rejection, EIP-55 output | `unit.test.ts > normalizeCanonicalTokenIdentifier > normalizes a lowercase evm address...`, `> preserves an already-checksummed EIP-55 evm address exactly`, `> rejects an evm address with an invalid mixed-case checksum...`, `> rejects an evm address that is not a full 20-byte hexadecimal address`; packed exit 80/81/82 (esm), 80/81 (cjs) | public + unit + packed | Met |
 | 17 | Normalize/key/equality/uniqueness/order/`TokenPriceReader` all consume the same EIP-55 representation | `unit.test.ts > canonicalTokenIdentityKey > combines the chain id and normalized (EIP-55 checksummed) address...`, `tokenIdentitiesAreEquivalent > treats a lowercase and its EIP-55 checksummed form as the same evm identity...`; `plugins/tokenPrice.ts` `TokenPriceReader.readTokenPrices(tokenUids: readonly CanonicalTokenIdentifierV1[])`; packed exit 83 (esm)/82 (cjs) — EVM lowercase/checksummed spelling pair rejected as a true request duplicate | unit + source + packed | Met |
-| 18 | Public+packed RED/GREEN prove lowercase→EIP-55, EIP-55 preservation, invalid-checksum rejection, exact equality, zero-address convention, Solana/opaque case preservation | Union of AC16/AC17 tests plus `unit.test.ts > tokenIdentitiesAreEquivalent > preserves the existing V1 zero-address convention...`, `normalizeCanonicalTokenIdentifier > preserves address case for solana identities`, `> preserves address case for opaque chain families` | public + unit + packed | Met |
-| 19 | Mutation reintroducing unconditional lowercasing or bypassing checksum validation fails public+packed tests | see "AC19 — mutation proof" above (checksum-bypass variant; AC7 above independently witnesses the unconditional-lowercasing variant) | public + unit + packed | **Met — reproduced this cycle** (5/69 failed on the checksum-bypass variant, reverted, 69/69 GREEN) |
+| 18 | Public+packed RED/GREEN prove lowercase→EIP-55, EIP-55 preservation, invalid-checksum rejection, exact equality, zero/native-address convention, Solana/opaque case preservation | Union of AC16/AC17 tests plus, for zero/native-address handling specifically: `unit.test.ts > tokenIdentitiesAreEquivalent > preserves the existing V1 zero-address convention...`, `int.test.ts > ... > preserves the existing V1 zero/native-address convention through the public boundary` (new in round 6), packed exit 84/85 (esm), 83/84 (cjs) (new in round 6); plus `normalizeCanonicalTokenIdentifier > preserves address case for solana identities`, `> preserves address case for opaque chain families` for the Solana/opaque case-preservation clause | public + unit + packed | **Met — round 5 Agent Review found zero/native-address handling proven only at the unit tier; round 6 (this cycle) adds public-boundary and packed ESM/CJS coverage for it** (70/70 GREEN, see final-gate table above) |
+| 19 | Mutation reintroducing unconditional lowercasing or bypassing checksum validation fails public+packed tests | see "AC19 — mutation proof" above (checksum-bypass variant; AC7 above independently witnesses the unconditional-lowercasing variant) | public + unit + packed | **Met — reproduced in round 5** (5/69 failed on the checksum-bypass variant, reverted, 69/69 GREEN; test count is 70 as of round 6's AC18 addition, not re-run) |
 | 20 | ADR 0002 + spec + README + glossary define EIP-55 as sole canonical EVM representation | `docs/adr/0002-...spec.html` Decision section; `external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity`; `README.md` §"EIP-55 is the sole canonical evm representation"; `CONTEXT.md` "Canonical token identity" | docs | Met |
 | 21 | `CONTEXT.md` states ingress-vs-canonical distinction; equality exact over canonical identity | `CONTEXT.md` "Canonical token identity" / "Chain address family" glossary entries (lines 31–37) | docs | Met |
 | 22 | ADR 0002 + identity rule name graph persistence/projections explicitly | `docs/adr/0002-...spec.html` Decision/Consequences; `external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity` (names "graph persistence and graph projections", "canonical graph properties, keys/indexes, reconciliation evidence, and reads") | docs | Met |
@@ -168,6 +190,6 @@ are from the round-2 Agent Fixes cycle recorded in the PR body and this
 branch's `.vibecode/agent-emb-1359-make-canonical-token-identity-chain-aware/scratchpad.md`;
 they were not independently re-run in this cycle because Agent Review did not
 flag them as unauditable — only AC7 and AC19 were. The tests naming these
-criteria are still exercised by the current `69/69` GREEN run recorded above,
+criteria are still exercised by the current `70/70` GREEN run recorded above,
 so their current-tree pass/fail status is directly verified even though the
 historical RED excerpt itself is cited rather than reproduced.

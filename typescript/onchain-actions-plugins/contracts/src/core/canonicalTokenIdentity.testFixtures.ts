@@ -89,3 +89,13 @@ export const EVM_ADDRESS_CHECKSUMMED = '0xAbc00000000000000000000000000000000000
  * validator must reject rather than silently "correct".
  */
 export const EVM_ADDRESS_INVALID_CHECKSUM = '0xabc000000000000000000000000000000000000F';
+
+/**
+ * The V1 zero/native-token placeholder address. It contains no hexadecimal
+ * letters, so EIP-55 checksumming is a no-op for it — it must still parse
+ * and compare exactly as before under the stricter format/checksum
+ * validation {@link EVM_ADDRESS_LOWERCASE} exercises. Shared across the
+ * unit, public integration, and packed ESM/CJS consumer tiers so the V1
+ * zero/native-address convention is proven identically at every boundary.
+ */
+export const EVM_ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';

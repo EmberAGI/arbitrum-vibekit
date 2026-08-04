@@ -12,6 +12,7 @@ import {
   EVM_ADDRESS_CHECKSUMMED,
   EVM_ADDRESS_INVALID_CHECKSUM,
   EVM_ADDRESS_LOWERCASE,
+  EVM_ZERO_ADDRESS,
   SOLANA_ADDRESS_LOWERCASED,
   SOLANA_ADDRESS_MIXED_CASE,
 } from './canonicalTokenIdentity.testFixtures.js';
@@ -83,6 +84,21 @@ describe('@emberai/onchain-actions-contracts/core chain-aware canonical token id
     expect(classifyTokenChainFamily('eip155:42161')).toBe('evm');
     expect(classifyTokenChainFamily('solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp')).toBe('solana');
     expect(classifyTokenChainFamily('cosmos:cosmoshub-4')).toBe('opaque');
+  });
+
+  it('preserves the existing V1 zero/native-address convention through the public boundary', () => {
+    // The zero/native placeholder address has no hexadecimal letters, so
+    // EIP-55 checksumming is a no-op for it -- it must still parse and
+    // compare exactly as before under the stricter format/checksum
+    // validation, proven here through the public entrypoints rather than
+    // only the same-directory unit tier.
+    const zero = { chainId: EVM_CHAIN_ID, address: EVM_ZERO_ADDRESS };
+
+    expect(normalizeCanonicalTokenIdentifier(zero).address).toBe(EVM_ZERO_ADDRESS);
+    expect(tokenIdentitiesAreEquivalent(zero, zero)).toBe(true);
+    expect(canonicalTokenIdentityKey(zero)).toBe(
+      JSON.stringify([EVM_CHAIN_ID, EVM_ZERO_ADDRESS]),
+    );
   });
 
   it('treats an invalid uppercase pseudo-CAIP-2 namespace as opaque exact-case rather than a valid CAIP-2 id', () => {

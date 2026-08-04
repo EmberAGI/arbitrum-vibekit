@@ -11,6 +11,7 @@ import {
   EVM_ADDRESS_CHECKSUMMED,
   EVM_ADDRESS_INVALID_CHECKSUM,
   EVM_ADDRESS_LOWERCASE,
+  EVM_ZERO_ADDRESS,
 } from './canonicalTokenIdentity.testFixtures.js';
 
 describe('classifyTokenChainFamily', () => {
@@ -192,16 +193,16 @@ describe('tokenIdentitiesAreEquivalent', () => {
     // Zero/near-zero placeholder addresses contain no letters, so EIP-55
     // checksumming is a no-op for them -- they must still parse and compare
     // exactly as before under the new stricter format/checksum validation.
-    const zeroAddress = '0x0000000000000000000000000000000000000000';
-
-    expect(normalizeCanonicalTokenIdentifier({ chainId: '42161', address: zeroAddress })).toEqual({
+    expect(
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: EVM_ZERO_ADDRESS }),
+    ).toEqual({
       chainId: '42161',
-      address: zeroAddress,
+      address: EVM_ZERO_ADDRESS,
     });
     expect(
       tokenIdentitiesAreEquivalent(
-        { chainId: '42161', address: zeroAddress },
-        { chainId: '42161', address: zeroAddress },
+        { chainId: '42161', address: EVM_ZERO_ADDRESS },
+        { chainId: '42161', address: EVM_ZERO_ADDRESS },
       ),
     ).toBe(true);
   });

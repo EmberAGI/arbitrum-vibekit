@@ -20,6 +20,7 @@ import {
   EVM_ADDRESS_CHECKSUMMED,
   EVM_ADDRESS_INVALID_CHECKSUM,
   EVM_ADDRESS_LOWERCASE,
+  EVM_ZERO_ADDRESS,
   SOLANA_ADDRESS_MIXED_CASE,
 } from './core/canonicalTokenIdentity.testFixtures.js';
 
@@ -247,6 +248,14 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         evmChecksumThrew = true;
       }
       if (!evmChecksumThrew) process.exit(82);
+      // The zero/native placeholder address has no hexadecimal letters, so
+      // EIP-55 checksumming is a no-op for it -- it must still parse and
+      // compare exactly as before under the stricter format/checksum
+      // validation, proven here through the packed public entrypoint.
+      const zeroAddressToken = { chainId: "42161", address: "${EVM_ZERO_ADDRESS}" };
+      if (core.normalizeCanonicalTokenIdentifier(zeroAddressToken).address !== "${EVM_ZERO_ADDRESS}")
+        process.exit(84);
+      if (!core.tokenIdentitiesAreEquivalent(zeroAddressToken, zeroAddressToken)) process.exit(85);
       // Because both forms normalize to the same canonical (EIP-55) key, a
       // request naming the lowercase and checksummed spelling of the same
       // address is a true duplicate and must be rejected -- unlike the
@@ -417,6 +426,15 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         cjsEvmChecksumThrew = true;
       }
       if (!cjsEvmChecksumThrew) process.exit(81);
+
+      // The zero/native placeholder address has no hexadecimal letters, so
+      // EIP-55 checksumming is a no-op for it -- it must still parse and
+      // compare exactly as before under the stricter format/checksum
+      // validation, proven here through the packed public entrypoint.
+      const cjsZeroAddressToken = { chainId: "42161", address: "${EVM_ZERO_ADDRESS}" };
+      if (core.normalizeCanonicalTokenIdentifier(cjsZeroAddressToken).address !== "${EVM_ZERO_ADDRESS}")
+        process.exit(83);
+      if (!core.tokenIdentitiesAreEquivalent(cjsZeroAddressToken, cjsZeroAddressToken)) process.exit(84);
 
       // Solana: identical addresses equal, case-distinct addresses remain distinct.
       if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(33);
