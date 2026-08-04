@@ -63,11 +63,20 @@ describe('normalizeCanonicalTokenIdentifier', () => {
       }),
     ).toEqual({ chainId: 'cosmos:cosmoshub-4', address: 'MixedCaseAddress' });
   });
+
+  it('rejects untrimmed chainId/address instead of silently trimming them away', () => {
+    expect(() =>
+      normalizeCanonicalTokenIdentifier({ chainId: ' 42161 ', address: '0xabcdef' }),
+    ).toThrow();
+    expect(() =>
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: ' 0xabcdef ' }),
+    ).toThrow();
+  });
 });
 
 describe('canonicalTokenIdentityKey', () => {
-  it('combines the trimmed chain id and normalized address as an unambiguous tuple', () => {
-    expect(canonicalTokenIdentityKey({ chainId: ' 42161 ', address: ' 0xABCDEF ' })).toBe(
+  it('combines the chain id and normalized address as an unambiguous tuple', () => {
+    expect(canonicalTokenIdentityKey({ chainId: '42161', address: '0xABCDEF' })).toBe(
       JSON.stringify(['42161', '0xabcdef']),
     );
   });
@@ -94,6 +103,21 @@ describe('canonicalTokenIdentityKey', () => {
     expect(() => canonicalTokenIdentityKey({ chainId: '', address: '0xabc' })).toThrow();
     expect(() => canonicalTokenIdentityKey({ chainId: '   ', address: '0xabc' })).toThrow();
     expect(() => canonicalTokenIdentityKey({ chainId: '42161', address: '' })).toThrow();
+  });
+
+  it('rejects untrimmed chainId/address instead of silently trimming them away', () => {
+    // A transforming `.trim()` in the schema would silently accept these and
+    // fold ' 42161 ' into '42161' — the public schema must reject leading or
+    // trailing whitespace as invalid input, not launder it into a valid key.
+    expect(() =>
+      canonicalTokenIdentityKey({ chainId: ' 42161 ', address: '0xabcdef' }),
+    ).toThrow();
+    expect(() =>
+      canonicalTokenIdentityKey({ chainId: '42161', address: ' 0xabcdef ' }),
+    ).toThrow();
+    expect(() =>
+      canonicalTokenIdentityKey({ chainId: '42161', address: '0xabcdef\t' }),
+    ).toThrow();
   });
 });
 

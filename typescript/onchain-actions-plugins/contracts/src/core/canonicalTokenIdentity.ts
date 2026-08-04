@@ -2,9 +2,23 @@ import { z } from 'zod';
 
 import { TokenIdentifierSchema, type TokenIdentifier } from './tokenIdentifier.js';
 
+// `.trim()` in a Zod schema is a transform: it silently rewrites the parsed
+// value, so `.min(1)` after it checks the *trimmed* length and a caller
+// passing ' 42161 ' would get back a validated '42161' rather than an error.
+// The public contract requires the opposite: leading/trailing whitespace is
+// invalid input, not a value to launder away. `nonWhitespacePadded` rejects
+// (rather than rewrites) any string that isn't already its own trimmed form.
+const nonWhitespacePadded = (value: string): boolean =>
+  value.length > 0 && value === value.trim();
+
+const trimmedNonEmptyString = z
+  .string()
+  .min(1)
+  .refine(nonWhitespacePadded, 'must be non-empty and free of leading/trailing whitespace');
+
 export const CanonicalTokenIdentifierV1Schema = TokenIdentifierSchema.extend({
-  chainId: z.string().trim().min(1),
-  address: z.string().trim().min(1),
+  chainId: trimmedNonEmptyString,
+  address: trimmedNonEmptyString,
 }).strict();
 
 export type CanonicalTokenIdentifierV1 = z.infer<typeof CanonicalTokenIdentifierV1Schema>;
@@ -63,9 +77,10 @@ export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
  *
  * Validates `token` through {@link CanonicalTokenIdentifierV1Schema} first, so
  * a caller cannot bypass the public non-empty/trimmed invariant by calling
- * this helper directly with an invalid (e.g. empty or all-whitespace) chain
- * id or address — every other public operation in this Module goes through
- * this same validation because they all delegate here.
+ * this helper directly with an invalid (e.g. empty, all-whitespace, or
+ * leading/trailing-whitespace-padded) chain id or address — every other
+ * public operation in this Module goes through this same validation because
+ * they all delegate here.
  */
 export function normalizeCanonicalTokenIdentifier(
   token: TokenIdentifier,

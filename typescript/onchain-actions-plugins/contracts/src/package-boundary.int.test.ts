@@ -228,6 +228,67 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         bypassThrew = true;
       }
       if (!bypassThrew) process.exit(44);
+
+      // Different chain ids with the same address must remain distinct identities.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "0xabc0000000000000000000000000000000000f" },
+        { chainId: "1", address: "0xabc0000000000000000000000000000000000f" },
+      )) process.exit(45);
+
+      // An opaque (non-EVM, non-Solana) chain family must never silently collapse case.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "unknown-chain-family", address: "Case-Sensitive-ID" },
+        { chainId: "unknown-chain-family", address: "case-sensitive-id" },
+      )) process.exit(46);
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "unknown-chain-family", address: "Case-Sensitive-ID" },
+      ).address !== "Case-Sensitive-ID") process.exit(47);
+
+      // Untrimmed input must be rejected, not silently trimmed into a valid key.
+      let untrimmedThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: " 42161 ", address: "0xabcdef" });
+      } catch {
+        untrimmedThrew = true;
+      }
+      if (!untrimmedThrew) process.exit(48);
+
+      // Envelope ordering + cardinality, exercised with case-sensitive Solana results
+      // to prove the packed artifact enforces both invariants together.
+      const freshFreshness = prematureStale.freshness; // received_at <= fresh_until: valid for "available"
+      const solanaResult = (address) => ({
+        status: "available",
+        subject: { chainId: "solana", address },
+        value: { price_usd: "1.00" },
+        freshness: freshFreshness,
+        provenance: prematureStale.provenance,
+      });
+      const solanaAddressUpper = "B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2";
+      const solanaAddressLower = solanaAddressUpper.toLowerCase();
+      const wellOrderedEnvelope = {
+        schema_version: "1",
+        snapshot_id: "well-ordered-solana-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        requested_tokens: [
+          { chainId: "solana", address: solanaAddressUpper },
+          { chainId: "solana", address: solanaAddressLower },
+        ],
+        items: [solanaResult(solanaAddressUpper), solanaResult(solanaAddressLower)],
+      };
+      if (!endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse(wellOrderedEnvelope).success)
+        process.exit(50);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...wellOrderedEnvelope,
+        snapshot_id: "swapped-solana-snapshot",
+        items: [solanaResult(solanaAddressLower), solanaResult(solanaAddressUpper)],
+      }).success) process.exit(51);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...wellOrderedEnvelope,
+        snapshot_id: "cardinality-mismatch-snapshot",
+        items: [solanaResult(solanaAddressUpper)],
+      }).success) process.exit(52);
+
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);
@@ -244,19 +305,124 @@ describe('packed @emberai/onchain-actions-contracts', () => {
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
       if (typeof core.classifyTokenChainFamily !== "function") process.exit(30);
-      if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(31);
+
+      // EVM: case variants on the same chain compare equal.
+      if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(31);
+      if (!core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "0xABCDEF" },
+        { chainId: "42161", address: "0xabcdef" },
+      )) process.exit(32);
+
+      // Solana: identical addresses equal, case-distinct addresses remain distinct.
+      if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(33);
       if (core.tokenIdentitiesAreEquivalent(
         { chainId: "solana", address: "MixedCaseAddress" },
         { chainId: "solana", address: "mixedcaseaddress" },
-      )) process.exit(32);
-      if (core.classifyTokenChainFamily("EIP155:42161") !== "opaque") process.exit(33);
+      )) process.exit(34);
+      if (!core.tokenIdentitiesAreEquivalent(
+        { chainId: "solana", address: "MixedCaseAddress" },
+        { chainId: "solana", address: "MixedCaseAddress" },
+      )) process.exit(35);
+
+      // Different chain ids remain distinct even with the same address.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "0xabc0000000000000000000000000000000000f" },
+        { chainId: "1", address: "0xabc0000000000000000000000000000000000f" },
+      )) process.exit(36);
+
+      // Opaque/unknown chain families never silently collapse case.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "unknown-chain-family", address: "Case-Sensitive-ID" },
+        { chainId: "unknown-chain-family", address: "case-sensitive-id" },
+      )) process.exit(37);
+
+      // Uppercase pseudo-CAIP-2 ids are invalid CAIP-2 and stay opaque exact-case.
+      if (core.classifyTokenChainFamily("EIP155:42161") !== "opaque") process.exit(38);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "EIP155:42161", address: "0xABCDEF" },
+        { chainId: "EIP155:42161", address: "0xabcdef" },
+      )) process.exit(39);
+
+      // Unambiguous (chainId, address) key encoding: a shared colon must not collide.
+      const cjsCollisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "0xab" });
+      const cjsCollisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:0xab" });
+      if (cjsCollisionKeyA === cjsCollisionKeyB) process.exit(40);
+
+      // Public schema validation cannot be bypassed with empty, all-whitespace, or
+      // leading/trailing-whitespace-padded input.
       let cjsBypassThrew = false;
       try {
         core.canonicalTokenIdentityKey({ chainId: "   ", address: "0xabc" });
       } catch {
         cjsBypassThrew = true;
       }
-      if (!cjsBypassThrew) process.exit(34);
+      if (!cjsBypassThrew) process.exit(41);
+      let cjsUntrimmedThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: " 42161 ", address: "0xabcdef" });
+      } catch {
+        cjsUntrimmedThrew = true;
+      }
+      if (!cjsUntrimmedThrew) process.exit(42);
+
+      // Request uniqueness accepts case-distinct Solana identities, rejects true duplicates.
+      const cjsSolanaMixedCase = { chainId: "solana", address: "B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2" };
+      const cjsSolanaLowerCased = { chainId: "solana", address: cjsSolanaMixedCase.address.toLowerCase() };
+      if (!endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [cjsSolanaMixedCase, cjsSolanaLowerCased],
+      }).success) process.exit(43);
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [cjsSolanaMixedCase, cjsSolanaMixedCase],
+      }).success) process.exit(44);
+
+      // Envelope ordering + cardinality, mirroring the ESM matrix.
+      const cjsFreshness = {
+        observed_at: "2026-07-30T12:00:00.000Z",
+        received_at: "2026-07-30T12:00:01.000Z",
+        fresh_until: "2026-07-30T12:05:00.000Z",
+        observed_at_source: "provider",
+      };
+      const cjsProvenance = {
+        provider_id: "coingecko",
+        capability: "token_usd_price",
+        canonical_subject: "token:arb",
+        source_class: "provider_api",
+      };
+      const cjsSolanaResult = (address) => ({
+        status: "available",
+        subject: { chainId: "solana", address },
+        value: { price_usd: "1.00" },
+        freshness: cjsFreshness,
+        provenance: cjsProvenance,
+      });
+      const cjsWellOrderedEnvelope = {
+        schema_version: "1",
+        snapshot_id: "cjs-well-ordered-solana-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        requested_tokens: [cjsSolanaMixedCase, cjsSolanaLowerCased],
+        items: [
+          cjsSolanaResult(cjsSolanaMixedCase.address),
+          cjsSolanaResult(cjsSolanaLowerCased.address),
+        ],
+      };
+      if (!endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse(cjsWellOrderedEnvelope).success)
+        process.exit(45);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...cjsWellOrderedEnvelope,
+        snapshot_id: "cjs-swapped-solana-snapshot",
+        items: [
+          cjsSolanaResult(cjsSolanaLowerCased.address),
+          cjsSolanaResult(cjsSolanaMixedCase.address),
+        ],
+      }).success) process.exit(46);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...cjsWellOrderedEnvelope,
+        snapshot_id: "cjs-cardinality-mismatch-snapshot",
+        items: [cjsSolanaResult(cjsSolanaMixedCase.address)],
+      }).success) process.exit(47);
     `;
 
     await expect(

@@ -47,11 +47,18 @@ import {
 
 Request uniqueness, result-order validation, and the `TokenPriceReader` host
 capability all delegate to this Interface. Callers must not reimplement
-address-case policy locally.
+address-case policy locally. `TokenPriceReader.readTokenPrices` takes
+`CanonicalTokenIdentifierV1` values directly, not raw `TokenIdentifier` input.
 
 CAIP-2 namespace matching is syntactically lowercase-only (per CAIP-2), not
 case-folded: `EIP155:*`/`SOLANA:*` are invalid CAIP-2 ids and stay `opaque`.
 `normalizeCanonicalTokenIdentifier`, `canonicalTokenIdentityKey`, and
 `tokenIdentitiesAreEquivalent` validate their input through
-`CanonicalTokenIdentifierV1Schema`, so calling them directly with an empty or
-all-whitespace `chainId`/`address` throws instead of silently producing a key.
+`CanonicalTokenIdentifierV1Schema`, so calling them directly with an empty,
+all-whitespace, or leading/trailing-whitespace `chainId`/`address` throws
+instead of silently trimming or otherwise producing a key.
+
+`canonicalTokenIdentityKey` encodes the `(chainId, address)` pair as a
+`JSON.stringify`-escaped tuple rather than delimiter concatenation, since
+both a V1 chain id and a CAIP-2 chain id may themselves contain `:` — e.g.
+`(eip155:1, 0xab)` and `(eip155, 1:0xab)` would otherwise collide.

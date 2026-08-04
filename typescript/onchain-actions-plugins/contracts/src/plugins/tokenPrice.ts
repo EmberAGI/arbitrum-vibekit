@@ -1,6 +1,9 @@
 import { z } from 'zod';
 
-import { CanonicalTokenIdentifierV1Schema, type TokenIdentifier } from '../core/index.js';
+import {
+  CanonicalTokenIdentifierV1Schema,
+  type CanonicalTokenIdentifierV1,
+} from '../core/index.js';
 import {
   createFreshDataResultV1Schema,
   PositiveDecimalStringSchema,
@@ -22,5 +25,7 @@ export const TokenPriceReadResultV1Schema = createFreshDataResultV1Schema(
 export type TokenPriceReadResultV1 = z.infer<typeof TokenPriceReadResultV1Schema>;
 
 export interface TokenPriceReader {
-  readTokenPrices(tokenUids: readonly TokenIdentifier[]): Promise<TokenPriceReadResultV1[]>;
+  readTokenPrices(
+    tokenUids: readonly CanonicalTokenIdentifierV1[],
+  ): Promise<TokenPriceReadResultV1[]>;
 }
