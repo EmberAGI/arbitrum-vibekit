@@ -67,7 +67,13 @@ call site this exposed, `src/external-data/public.int.test.ts`'s
 literal array instead of a normalized one), was updated to route through
 `normalizeCanonicalTokenIdentifier` first — exactly the "route the default
 TokenPriceReader caller through the schema" correction the finding asked
-for. No production behavior changed: the addresses in that fixture contain
+for. Because this round touched `canonicalTokenIdentity.ts` (unlike round
+7), the AC7/AC19 mutation proofs were also re-applied and re-reverted fresh
+against the branded schema rather than citing the now-stale round-6 run —
+see the updated "AC7"/"AC19 — mutation proof" sections below; both
+reproduce the same failure counts as round 6, scaled by the two tests round
+7 and round 9 each added. No production behavior changed: the addresses in
+that fixture contain
 no hexadecimal letters, so EIP-55 checksumming is a no-op and the resulting
 values are byte-for-byte identical to the prior literals. `git diff --stat`
 against round 8 touches
@@ -169,26 +175,37 @@ history):
 
 ## AC7 — mutation proof: restore unconditional `address.toLowerCase()`
 
-Captured in round 6 (commit `3ed5a27`); not re-run in round 7, which only
-adds the AC18 zero/native-address coverage below and does not touch
-`canonicalTokenIdentity.ts`. "This cycle" in this section refers to round 6.
+Originally captured in round 6 (commit `3ed5a27`); not re-run in round 7,
+which only added the AC18 zero/native-address coverage and did not touch
+`canonicalTokenIdentity.ts`. Round 9 (this cycle) touched
+`canonicalTokenIdentity.ts` to add `.brand()`, so this mutation was
+re-applied and re-reverted fresh against the branded schema to keep the
+proof current rather than citing the now-stale round-6 run. "This cycle"
+below refers to round 9; the mutation, target lines, and failure pattern are
+otherwise identical to round 6's.
 
 **Mutation applied** to `CanonicalTokenIdentifierV1Schema`'s transform in
 `src/core/canonicalTokenIdentity.ts` (family dispatch, `isAddress` strict
-checksum gate, and `getAddress` canonicalization all removed):
+checksum gate, and `getAddress` canonicalization all removed; `.brand()`
+retained unchanged after the mutated transform):
 
 ```ts
 .transform((value) => {
   return { chainId: value.chainId, address: value.address.toLowerCase() };
-});
+})
+.brand<'CanonicalTokenIdentifierV1'>();
 ```
 
 **RED** — `pnpm run test:ci` (rebuilt + run against the mutated source):
 
 ```
 Test Files  4 failed | 5 passed (9)
-     Tests  18 failed | 51 passed (69)
+     Tests  18 failed | 53 passed (71)
 ```
+
+(Round 6's original run against the unbranded schema, before this cycle's
+AC17 fix added two tests, was 18 failed / 51 passed of 69 — the same 18
+failures, scaled by the two tests round 7 and round 9 each added.)
 
 Representative failures (public boundary, unit, and packed):
 
@@ -210,13 +227,14 @@ Representative failures (public boundary, unit, and packed):
 
 ```
 Test Files  9 passed (9)
-     Tests  69 passed (69)
+     Tests  71 passed (71)
 ```
 
 ## AC19 — mutation proof: bypass checksum validation
 
-Captured in round 6 (commit `3ed5a27`); not re-run in round 7 for the same
-reason noted under AC7 above. "This cycle" in this section refers to round 6.
+Originally captured in round 6 (commit `3ed5a27`); not re-run in round 7 for
+the same reason noted under AC7 above. Re-verified fresh in round 9 (this
+cycle) for the same reason as AC7 above.
 
 AC19 covers two independent failure modes ("reintroduces unconditional EVM
 lowercasing as canonical output **or** bypasses checksum validation"). AC7's
@@ -227,7 +245,8 @@ family-dispatch intact, but drop the `isAddress(..., { strict: true })`
 checksum gate so an invalid mixed-case checksum is silently re-checksummed
 by `getAddress` instead of rejected.
 
-**Mutation applied**:
+**Mutation applied** (`.brand()` retained unchanged after the mutated
+transform):
 
 ```ts
 .transform((value) => {
@@ -236,15 +255,20 @@ by `getAddress` instead of rejected.
   }
   // no isAddress(strict) gate
   return { chainId: value.chainId, address: getAddress(value.address) };
-});
+})
+.brand<'CanonicalTokenIdentifierV1'>();
 ```
 
 **RED** — `pnpm run test:ci`:
 
 ```
 Test Files  4 failed | 5 passed (9)
-     Tests  5 failed | 64 passed (69)
+     Tests  5 failed | 66 passed (71)
 ```
+
+(Round 6's original run against the unbranded schema was 5 failed / 64
+passed of 69 — the same 5 failures, scaled by the two tests round 7 and
+round 9 each added.)
 
 This is a materially different failure set from AC7's (5 tests vs. 18, all
 EVM-checksum-specific), confirming the two mutations exercise distinct
@@ -266,7 +290,7 @@ invariants rather than one proof rubber-stamping both criteria:
 
 ```
 Test Files  9 passed (9)
-     Tests  69 passed (69)
+     Tests  71 passed (71)
 ```
 
 ## Full AC-to-test map
@@ -289,7 +313,7 @@ README/glossary prose, not a test.
 | 4 | Request schema accepts case-distinct Solana, rejects true duplicates | `public.int.test.ts > ... > accepts case-distinct Solana token identities as unique while rejecting true duplicates`; packed exit 25/26 | public + packed | Met |
 | 5 | Envelope accepts ordered Solana results, rejects swap/mismatch, preserves 1:1 | `public.int.test.ts > ... > accepts correctly ordered case-sensitive Solana results and rejects a swapped order`; packed exit 50/51/52 | public + packed | Met |
 | 6 | Packed ESM/CJS exercise the same matrix | `package-boundary.int.test.ts > ... > loads every public ESM and CJS entrypoint and rejects internal paths` (both probes) | packed | Met |
-| 7 | Mutation restoring unconditional `address.toLowerCase()` fails public+packed tests | see "AC7 — mutation proof" above | public + unit + packed | **Met — reproduced in round 6** (18/69 failed, reverted, 69/69 GREEN; test count is 70 as of round 7's AC18 addition, not re-run) |
+| 7 | Mutation restoring unconditional `address.toLowerCase()` fails public+packed tests | see "AC7 — mutation proof" above | public + unit + packed | **Met — originally reproduced round 6, re-verified fresh round 9 against the branded schema** (18/71 failed, reverted, 71/71 GREEN) |
 | 8 | External-data spec + README define chain-aware semantics, ownership, unknown-family behavior, enforcement point | `docs/specs/domains/external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity`; `README.md` | docs | Met |
 | 9 | Registry compatibility surface single-sourced from contracts | `contracts-compatibility.unit.test.ts > re-exports the contracts schema instance instead of defining a copy`; `> keeps the built compatibility adapter dependent on contracts` | registry | Met (12/12 GREEN this cycle) |
 | 10 | No plugin-specific normalizer/provider/cache/network duplicate policy | Module boundary: only `src/core/canonicalTokenIdentity.ts` implements chain-family dispatch/canonicalization; `tokenMarket.ts`/`tokenPrice.ts` only call the shared functions | source inspection | Met |
@@ -301,7 +325,7 @@ README/glossary prose, not a test.
 | 16 | Full 20-byte EVM address, lowercase-or-EIP-55 ingress, invalid-checksum rejection, EIP-55 output | `unit.test.ts > normalizeCanonicalTokenIdentifier > normalizes a lowercase evm address...`, `> preserves an already-checksummed EIP-55 evm address exactly`, `> rejects an evm address with an invalid mixed-case checksum...`, `> rejects an evm address that is not a full 20-byte hexadecimal address`; packed exit 80/81/82 (esm), 80/81 (cjs) | public + unit + packed | Met |
 | 17 | Normalize/key/equality/uniqueness/order/`TokenPriceReader` all consume the same EIP-55 representation, and the seam is unforgeable | `unit.test.ts > canonicalTokenIdentityKey > combines the chain id and normalized (EIP-55 checksummed) address...`, `tokenIdentitiesAreEquivalent > treats a lowercase and its EIP-55 checksummed form as the same evm identity...`; `unit.test.ts > CanonicalTokenIdentifierV1Schema > is unforgeable by ordinary structural assignment...` (type-contract RED/GREEN via `tsc --noEmit`, see "AC17 — type-contract RED/GREEN" above); `plugins/tokenPrice.ts` `TokenPriceReader.readTokenPrices(tokenUids: readonly CanonicalTokenIdentifierV1[])` now branded via `.brand<'CanonicalTokenIdentifierV1'>()`; `package-boundary.int.test.ts > ... > type-checks a plugin with an injected TokenPriceReader from the tarball` (packed type-contract RED/GREEN against the tarball's own `.d.ts`/`.d.cts`); packed runtime exit 83 (esm)/82 (cjs) — EVM lowercase/checksummed spelling pair rejected as a true request duplicate | unit + source + packed | **Met — round 9 (this cycle) closes the type-forgeability gap Agent Review found**; the default `readTokenPrices` caller in `public.int.test.ts` now routes through `normalizeCanonicalTokenIdentifier` instead of passing a raw literal |
 | 18 | Public+packed RED/GREEN prove lowercase→EIP-55, EIP-55 preservation, invalid-checksum rejection, exact equality, zero/native-address convention, Solana/opaque case preservation | Union of AC16/AC17 tests plus, for zero/native-address handling specifically: `unit.test.ts > tokenIdentitiesAreEquivalent > preserves the existing V1 zero-address convention...`, `int.test.ts > ... > preserves the existing V1 zero/native-address convention through the public boundary` (new in round 7), packed exit 84/85 (esm), 83/84 (cjs) (new in round 7); plus `normalizeCanonicalTokenIdentifier > preserves address case for solana identities`, `> preserves address case for opaque chain families` for the Solana/opaque case-preservation clause | public + unit + packed | **Met — round 6 Agent Review found zero/native-address handling proven only at the unit tier; round 7 (this cycle) adds public-boundary and packed ESM/CJS coverage for it** (70/70 GREEN, see final-gate table above) |
-| 19 | Mutation reintroducing unconditional lowercasing or bypassing checksum validation fails public+packed tests | see "AC19 — mutation proof" above (checksum-bypass variant; AC7 above independently witnesses the unconditional-lowercasing variant) | public + unit + packed | **Met — reproduced in round 6** (5/69 failed on the checksum-bypass variant, reverted, 69/69 GREEN; test count is 70 as of round 7's AC18 addition, not re-run) |
+| 19 | Mutation reintroducing unconditional lowercasing or bypassing checksum validation fails public+packed tests | see "AC19 — mutation proof" above (checksum-bypass variant; AC7 above independently witnesses the unconditional-lowercasing variant) | public + unit + packed | **Met — originally reproduced round 6, re-verified fresh round 9 against the branded schema** (5/71 failed on the checksum-bypass variant, reverted, 71/71 GREEN) |
 | 20 | ADR 0002 + spec + README + glossary define EIP-55 as sole canonical EVM representation | `docs/adr/0002-...spec.html` Decision section; `external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity`; `README.md` §"EIP-55 is the sole canonical evm representation"; `CONTEXT.md` "Canonical token identity" | docs | Met |
 | 21 | `CONTEXT.md` states ingress-vs-canonical distinction; equality exact over canonical identity | `CONTEXT.md` "Canonical token identity" / "Chain address family" glossary entries (lines 31–37) | docs | Met |
 | 22 | ADR 0002 + identity rule name graph persistence/projections explicitly | `docs/adr/0002-...spec.html` Decision/Consequences; `external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity` (names "graph persistence and graph projections", "canonical graph properties, keys/indexes, reconciliation evidence, and reads") | docs | Met |
