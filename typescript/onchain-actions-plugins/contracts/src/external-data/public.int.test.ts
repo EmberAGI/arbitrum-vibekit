@@ -23,6 +23,8 @@ import {
   TokenPriceReadResultV1Schema,
 } from '@emberai/onchain-actions-contracts/plugins';
 
+import { SOLANA_ADDRESS_MIXED_CASE } from '../core/canonicalTokenIdentity.testFixtures.js';
+
 const freshness = {
   observed_at: '2026-07-30T12:00:00.000Z',
   received_at: '2026-07-30T12:00:01.000Z',
@@ -631,7 +633,7 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
   it('accepts case-distinct Solana token identities as unique while rejecting true duplicates', () => {
     const solanaTokenMixedCase = {
       chainId: 'solana',
-      address: 'B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2',
+      address: SOLANA_ADDRESS_MIXED_CASE,
     };
     const solanaTokenLowerCased = {
       chainId: 'solana',
@@ -655,7 +657,7 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
   it('accepts correctly ordered case-sensitive Solana results and rejects a swapped order', () => {
     const solanaTokenA = {
       chainId: 'solana',
-      address: 'B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2',
+      address: SOLANA_ADDRESS_MIXED_CASE,
     };
     const solanaTokenB = {
       chainId: 'solana',

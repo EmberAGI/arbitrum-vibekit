@@ -16,6 +16,8 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { SOLANA_ADDRESS_MIXED_CASE } from './core/canonicalTokenIdentity.testFixtures.js';
+
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(import.meta.dirname, '..');
 const workspaceRoot = path.resolve(packageRoot, '../..');
@@ -101,6 +103,25 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (!core.TokenIdentifierSchema || !plugins.TokenPriceReadResultV1Schema ||
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
+      // Fixture-validity proof: a case-transform pair is only a meaningful test
+      // of Solana case-sensitivity if both members genuinely decode to a
+      // 32-byte key -- lowercasing a Base58 string does not, in general,
+      // preserve decoded byte length. Mirrors decodedBase58ByteLength from
+      // ./core/canonicalTokenIdentity.testFixtures.ts.
+      const base58ByteLength = (value) => {
+        const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let numericValue = 0n;
+        for (const character of value) {
+          const digitValue = alphabet.indexOf(character);
+          if (digitValue === -1) return null;
+          numericValue = numericValue * 58n + BigInt(digitValue);
+        }
+        let leadingZeroBytes = 0;
+        for (const character of value) { if (character !== "1") break; leadingZeroBytes++; }
+        let magnitudeByteCount = 0;
+        while (numericValue > 0n) { numericValue /= 256n; magnitudeByteCount++; }
+        return leadingZeroBytes + magnitudeByteCount;
+      };
       const { z } = await import("zod");
       const genericResult = evidence.createDataResultV1Schema(
         z.string().min(1),
@@ -201,8 +222,10 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         { chainId: "solana", address: "MixedCaseAddress" },
         { chainId: "solana", address: "mixedcaseaddress" },
       )) process.exit(24);
-      const solanaTokenMixedCase = { chainId: "solana", address: "B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2" };
+      const solanaTokenMixedCase = { chainId: "solana", address: "${SOLANA_ADDRESS_MIXED_CASE}" };
       const solanaTokenLowerCased = { chainId: "solana", address: solanaTokenMixedCase.address.toLowerCase() };
+      if (base58ByteLength(solanaTokenMixedCase.address) !== 32) process.exit(60);
+      if (base58ByteLength(solanaTokenLowerCased.address) !== 32) process.exit(61);
       if (!endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
         schema_version: "1",
         tokens: [solanaTokenMixedCase, solanaTokenLowerCased],
@@ -263,7 +286,7 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         freshness: freshFreshness,
         provenance: prematureStale.provenance,
       });
-      const solanaAddressUpper = "B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2";
+      const solanaAddressUpper = "${SOLANA_ADDRESS_MIXED_CASE}";
       const solanaAddressLower = solanaAddressUpper.toLowerCase();
       const wellOrderedEnvelope = {
         schema_version: "1",
@@ -305,6 +328,22 @@ describe('packed @emberai/onchain-actions-contracts', () => {
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
       if (typeof core.classifyTokenChainFamily !== "function") process.exit(30);
+      // Fixture-validity proof: mirrors decodedBase58ByteLength from
+      // ./core/canonicalTokenIdentity.testFixtures.ts -- see the ESM probe above.
+      const cjsBase58ByteLength = (value) => {
+        const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let numericValue = 0n;
+        for (const character of value) {
+          const digitValue = alphabet.indexOf(character);
+          if (digitValue === -1) return null;
+          numericValue = numericValue * 58n + BigInt(digitValue);
+        }
+        let leadingZeroBytes = 0;
+        for (const character of value) { if (character !== "1") break; leadingZeroBytes++; }
+        let magnitudeByteCount = 0;
+        while (numericValue > 0n) { numericValue /= 256n; magnitudeByteCount++; }
+        return leadingZeroBytes + magnitudeByteCount;
+      };
 
       // EVM: case variants on the same chain compare equal.
       if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(31);
@@ -366,8 +405,10 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (!cjsUntrimmedThrew) process.exit(42);
 
       // Request uniqueness accepts case-distinct Solana identities, rejects true duplicates.
-      const cjsSolanaMixedCase = { chainId: "solana", address: "B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2" };
+      const cjsSolanaMixedCase = { chainId: "solana", address: "${SOLANA_ADDRESS_MIXED_CASE}" };
       const cjsSolanaLowerCased = { chainId: "solana", address: cjsSolanaMixedCase.address.toLowerCase() };
+      if (cjsBase58ByteLength(cjsSolanaMixedCase.address) !== 32) process.exit(60);
+      if (cjsBase58ByteLength(cjsSolanaLowerCased.address) !== 32) process.exit(61);
       if (!endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
         schema_version: "1",
         tokens: [cjsSolanaMixedCase, cjsSolanaLowerCased],

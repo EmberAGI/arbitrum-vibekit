@@ -7,10 +7,22 @@ import {
   tokenIdentitiesAreEquivalent,
 } from '@emberai/onchain-actions-contracts/core';
 
+import {
+  decodedBase58ByteLength,
+  SOLANA_ADDRESS_LOWERCASED,
+  SOLANA_ADDRESS_MIXED_CASE,
+} from './canonicalTokenIdentity.testFixtures.js';
+
 const EVM_CHAIN_ID = '42161';
 const SOLANA_CHAIN_ID = 'solana';
-const SOLANA_ADDRESS_MIXED_CASE = 'B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2';
-const SOLANA_ADDRESS_LOWERCASED = SOLANA_ADDRESS_MIXED_CASE.toLowerCase();
+
+describe('shared Solana fixture validity', () => {
+  it('verifies both fixture addresses decode to a genuine 32-byte Solana key', () => {
+    expect(decodedBase58ByteLength(SOLANA_ADDRESS_MIXED_CASE)).toBe(32);
+    expect(decodedBase58ByteLength(SOLANA_ADDRESS_LOWERCASED)).toBe(32);
+    expect(SOLANA_ADDRESS_MIXED_CASE).not.toBe(SOLANA_ADDRESS_LOWERCASED);
+  });
+});
 
 describe('@emberai/onchain-actions-contracts/core chain-aware canonical token identity', () => {
   it('treats EVM address case variants on the same chain as equivalent', () => {
