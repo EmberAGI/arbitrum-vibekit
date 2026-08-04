@@ -49,6 +49,12 @@ Request uniqueness, result-order validation, and the `TokenPriceReader` host
 capability all delegate to this Interface. Callers must not reimplement
 address-case policy locally. `TokenPriceReader.readTokenPrices` takes
 `CanonicalTokenIdentifierV1` values directly, not raw `TokenIdentifier` input.
+`CanonicalTokenIdentifierV1` is a branded (nominal) type, not merely a
+structural `{ chainId, address }` shape: a raw object literal does not
+satisfy it, however well-formed its fields are. The only way to produce one
+is to parse it through `CanonicalTokenIdentifierV1Schema` — directly or via
+`normalizeCanonicalTokenIdentifier` — which is what makes this seam
+unforgeable rather than a documentation-only convention.
 
 ### EIP-55 is the sole canonical evm representation
 

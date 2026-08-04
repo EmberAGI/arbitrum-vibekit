@@ -608,6 +608,18 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         },
       };
 
+      // AC17: the TokenPriceReader seam is unforgeable -- a raw
+      // {chainId, address} array was never validated/normalized through
+      // CanonicalTokenIdentifierV1Schema, so it must not satisfy
+      // readTokenPrices' parameter merely by structural shape. Checked
+      // against the packed tarball's own .d.ts/.d.cts output, not source.
+      const rawUnvalidatedTokens = [{ chainId: "42161", address: "not-an-address" }];
+      // @ts-expect-error a raw structural array is not a genuine
+      // CanonicalTokenIdentifierV1[] -- only values produced by
+      // CanonicalTokenIdentifierV1Schema (directly or via
+      // normalizeCanonicalTokenIdentifier) satisfy this parameter.
+      void reader.readTokenPrices(rawUnvalidatedTokens);
+
       void reader;
       void TokenIdentifierSchema;
       void TokenPriceReadResultV1Schema;

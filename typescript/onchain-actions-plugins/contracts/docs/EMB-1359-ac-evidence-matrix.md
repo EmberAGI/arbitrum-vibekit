@@ -31,29 +31,120 @@ below) and changes no production source file — `git diff --stat` against
 that fixture instead of a local literal), `canonicalTokenIdentity.int.test.ts`,
 `package-boundary.int.test.ts`, and this file.
 
-Round 8 (this cycle, on top of round 7) closes an isolated
+Round 8 (on top of round 7) closes an isolated
 dependency-lockfile/toolchain-provenance defect Agent Review found: the
 `viem` devDependency added at commit `83f4c7e` rewrote `typescript/pnpm-lock.yaml`
 by 497 additions/99 deletions, touching unrelated workspace peer snapshots
 (Zod 3/4 selections, Vitest UI peers, eslint resolver peers) and an unrelated
 `agent-runtime` workspace resolution, because the resolving tool was pnpm
-9.15.4 against a `packageManager: pnpm@10.7.0` pin. This cycle reconciles
+9.15.4 against a `packageManager: pnpm@10.7.0` pin. That cycle reconciled
 `typescript/pnpm-lock.yaml` against `origin/main` under pnpm 10.7.0 so the
-diff contains exactly the three lines the contracts importer's `viem:
+diff contained exactly the three lines the contracts importer's `viem:
 catalog:` devDependency requires (reusing the already-present, already
 9-times-referenced `viem@2.38.1(bufferutil@4.0.9)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)`
 snapshot, so no new package resolution was fetched). No production or test
-source file changed this round — `git diff --stat` against round 7 touches
-only `typescript/pnpm-lock.yaml` and this file. `pnpm install --frozen-lockfile`
-under pnpm 10.7.0 exits 0 against the reconciled lockfile with no further
-rewrite, confirming internal consistency across the whole workspace.
+source file changed that round.
+
+Round 9 (this cycle, on top of round 8) closes the AC17 gap Agent Review
+found: `CanonicalTokenIdentifierV1` was an unbranded structural
+`{ chainId: string; address: string }` type, so `TokenPriceReader
+.readTokenPrices` — which claims to consume only already-validated canonical
+identities — could be called with a raw, never-normalized object of the same
+shape. A reviewer compile probe proved this: assigning
+`{ chainId: " 42161 ", address: "not-an-address" }` directly to
+`CanonicalTokenIdentifierV1` typechecked cleanly under strict `tsc`. This
+cycle brands `CanonicalTokenIdentifierV1Schema` with
+`.brand<'CanonicalTokenIdentifierV1'>()` (`src/core/canonicalTokenIdentity.ts`),
+making the output type nominal: only a value produced by
+`CanonicalTokenIdentifierV1Schema.parse` (directly or via
+`normalizeCanonicalTokenIdentifier`) satisfies it, so the same raw literal
+now fails to typecheck. `.brand()` is a pure type-level marker — zod's
+`ZodBranded._parse` delegates entirely to the wrapped schema, so runtime
+parsing, canonicalization, and every existing passing assertion are
+unchanged; only the previously-forgeable static type tightens. The one real
+call site this exposed, `src/external-data/public.int.test.ts`'s
+`hostReader.readTokenPrices(tokens)` (which called the seam with a raw
+literal array instead of a normalized one), was updated to route through
+`normalizeCanonicalTokenIdentifier` first — exactly the "route the default
+TokenPriceReader caller through the schema" correction the finding asked
+for. No production behavior changed: the addresses in that fixture contain
+no hexadecimal letters, so EIP-55 checksumming is a no-op and the resulting
+values are byte-for-byte identical to the prior literals. `git diff --stat`
+against round 8 touches
+`src/core/canonicalTokenIdentity.ts`,
+`src/core/canonicalTokenIdentity.unit.test.ts`,
+`src/external-data/public.int.test.ts`,
+`src/package-boundary.int.test.ts`, `README.md`,
+`docs/adr/0002-chain-aware-canonical-token-identity.spec.html`, and this
+file — no lockfile change, no new dependency.
 
 Package: `typescript/onchain-actions-plugins/contracts`. Module under test:
 `src/core/canonicalTokenIdentity.ts`.
 
+## AC17 — type-contract RED/GREEN: the TokenPriceReader seam is unforgeable
+
+**RED** (before adding `.brand()`), unit tier —
+`tsc --noEmit --project onchain-actions-plugins/contracts/tsconfig.json`:
+
+```
+src/core/canonicalTokenIdentity.unit.test.ts(239,5): error TS2578: Unused '@ts-expect-error' directive.
+```
+
+This reproduces the gap: the `@ts-expect-error` above
+`const bypass: CanonicalTokenIdentifierV1 = { chainId: '42161', address: 'not-an-address' }`
+is unused because the raw structural literal type-checked without error.
+
+**RED** (before the fix), packed tier — `pnpm run test:ci`, the
+`package-boundary.int.test.ts > ... > type-checks a plugin with an injected
+TokenPriceReader from the tarball` test spawning `tsc --noEmit --strict`
+against the packed tarball's own `.d.ts`/`.d.cts`:
+
+```
+consumer.ts(26,7): error TS2578: Unused '@ts-expect-error' directive.
+```
+
+The suppressed line calls `reader.readTokenPrices(rawUnvalidatedTokens)` with
+a raw `[{ chainId: "42161", address: "not-an-address" }]` array — the exact
+`TokenPriceReader` seam AC17 names, checked against the artifact consumed by
+`onchain-actions` rather than source.
+
+**Fix**: `.brand<'CanonicalTokenIdentifierV1'>()` added to the end of
+`CanonicalTokenIdentifierV1Schema`'s definition in
+`src/core/canonicalTokenIdentity.ts`; the one real call site that previously
+passed a raw literal to `readTokenPrices` (`public.int.test.ts`) now
+normalizes first.
+
+**GREEN** — both `tsc --noEmit --project
+onchain-actions-plugins/contracts/tsconfig.json` and the packed
+`type-checks a plugin...` test exit 0 with no diagnostics: the
+`@ts-expect-error` directives are now used (the raw-literal assignment and
+the raw-array call both genuinely fail to typecheck and are the exact,
+sole errors suppressed), and every other existing type in both probes still
+checks clean.
+
+**Runtime schema proof retained**: the pre-existing runtime rejection tests
+(`CanonicalTokenIdentifierV1Schema > is the single validation point every
+public identity operation runs through...`, and the AC7/AC19 mutation
+proofs below) are unmodified and still pass — `.brand()` only changes the
+static type, never runtime parsing behavior.
+
 ## Final-gate evidence for this cycle
 
-Round 8 (current), all run against pnpm 10.7.0 (repository-pinned):
+Round 9 (current), all run against pnpm 10.7.0 (repository-pinned):
+
+| Command | Location | Result |
+| --- | --- | --- |
+| `pnpm install --frozen-lockfile` | `typescript/` | exit 0, no lockfile rewrite |
+| `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/contracts` | 9 files / **71 passed**, 0 failed |
+| `pnpm run lint` | `onchain-actions-plugins/contracts` | clean |
+| `tsc --noEmit --project onchain-actions-plugins/contracts/tsconfig.json` | `typescript/` | clean |
+| `pnpm run test:ci` (`tsdown && vitest run`) | `onchain-actions-plugins/registry` | 4 files / **12 passed**, 0 failed |
+| `pnpm test:vitest tests/ci/spec-docs.int.test.ts` | `typescript/` | 1 file / **3 passed**, 0 failed |
+| `git diff origin/main -- typescript/pnpm-lock.yaml` | repo root | 3 lines added (contracts' `viem` devDependency only, from round 8), 0 unrelated rewrites |
+| `git diff --check` | repo root | clean |
+
+Round 8 final-gate evidence (superseded by round 9 above, retained for
+history):
 
 | Command | Location | Result |
 | --- | --- | --- |
@@ -208,7 +299,7 @@ README/glossary prose, not a test.
 | 14 | Every public op validates through the schema; direct invalid input can't create a key | `unit.test.ts > canonicalTokenIdentityKey > validates through the public schema...`, `> rejects untrimmed chainId/address...` (×2 describe blocks); `int.test.ts > ... > validates through the public schema...`, `> rejects a direct classifyTokenChainFamily call with whitespace-padded input...`; packed exit 44/48/70 (esm), 41/42/70 (cjs) | public + unit + packed | Met (RED added first for the `.trim()`→`.refine()` fix in round 1, confirmed failing against the old schema, then GREEN — see `.vibecode/.../scratchpad.md` Resolution) |
 | 15 | ADR 0002 linked from spec index and in the validator's canonical path list | `typescript/tests/ci/spec-docs.int.test.ts` `specificationPaths` includes `docs/adr/0002-chain-aware-canonical-token-identity.spec.html` (line 11) | ci-gate | Met (36/36 GREEN this cycle, includes 3/3 spec-docs tests) |
 | 16 | Full 20-byte EVM address, lowercase-or-EIP-55 ingress, invalid-checksum rejection, EIP-55 output | `unit.test.ts > normalizeCanonicalTokenIdentifier > normalizes a lowercase evm address...`, `> preserves an already-checksummed EIP-55 evm address exactly`, `> rejects an evm address with an invalid mixed-case checksum...`, `> rejects an evm address that is not a full 20-byte hexadecimal address`; packed exit 80/81/82 (esm), 80/81 (cjs) | public + unit + packed | Met |
-| 17 | Normalize/key/equality/uniqueness/order/`TokenPriceReader` all consume the same EIP-55 representation | `unit.test.ts > canonicalTokenIdentityKey > combines the chain id and normalized (EIP-55 checksummed) address...`, `tokenIdentitiesAreEquivalent > treats a lowercase and its EIP-55 checksummed form as the same evm identity...`; `plugins/tokenPrice.ts` `TokenPriceReader.readTokenPrices(tokenUids: readonly CanonicalTokenIdentifierV1[])`; packed exit 83 (esm)/82 (cjs) — EVM lowercase/checksummed spelling pair rejected as a true request duplicate | unit + source + packed | Met |
+| 17 | Normalize/key/equality/uniqueness/order/`TokenPriceReader` all consume the same EIP-55 representation, and the seam is unforgeable | `unit.test.ts > canonicalTokenIdentityKey > combines the chain id and normalized (EIP-55 checksummed) address...`, `tokenIdentitiesAreEquivalent > treats a lowercase and its EIP-55 checksummed form as the same evm identity...`; `unit.test.ts > CanonicalTokenIdentifierV1Schema > is unforgeable by ordinary structural assignment...` (type-contract RED/GREEN via `tsc --noEmit`, see "AC17 — type-contract RED/GREEN" above); `plugins/tokenPrice.ts` `TokenPriceReader.readTokenPrices(tokenUids: readonly CanonicalTokenIdentifierV1[])` now branded via `.brand<'CanonicalTokenIdentifierV1'>()`; `package-boundary.int.test.ts > ... > type-checks a plugin with an injected TokenPriceReader from the tarball` (packed type-contract RED/GREEN against the tarball's own `.d.ts`/`.d.cts`); packed runtime exit 83 (esm)/82 (cjs) — EVM lowercase/checksummed spelling pair rejected as a true request duplicate | unit + source + packed | **Met — round 9 (this cycle) closes the type-forgeability gap Agent Review found**; the default `readTokenPrices` caller in `public.int.test.ts` now routes through `normalizeCanonicalTokenIdentifier` instead of passing a raw literal |
 | 18 | Public+packed RED/GREEN prove lowercase→EIP-55, EIP-55 preservation, invalid-checksum rejection, exact equality, zero/native-address convention, Solana/opaque case preservation | Union of AC16/AC17 tests plus, for zero/native-address handling specifically: `unit.test.ts > tokenIdentitiesAreEquivalent > preserves the existing V1 zero-address convention...`, `int.test.ts > ... > preserves the existing V1 zero/native-address convention through the public boundary` (new in round 7), packed exit 84/85 (esm), 83/84 (cjs) (new in round 7); plus `normalizeCanonicalTokenIdentifier > preserves address case for solana identities`, `> preserves address case for opaque chain families` for the Solana/opaque case-preservation clause | public + unit + packed | **Met — round 6 Agent Review found zero/native-address handling proven only at the unit tier; round 7 (this cycle) adds public-boundary and packed ESM/CJS coverage for it** (70/70 GREEN, see final-gate table above) |
 | 19 | Mutation reintroducing unconditional lowercasing or bypassing checksum validation fails public+packed tests | see "AC19 — mutation proof" above (checksum-bypass variant; AC7 above independently witnesses the unconditional-lowercasing variant) | public + unit + packed | **Met — reproduced in round 6** (5/69 failed on the checksum-bypass variant, reverted, 69/69 GREEN; test count is 70 as of round 7's AC18 addition, not re-run) |
 | 20 | ADR 0002 + spec + README + glossary define EIP-55 as sole canonical EVM representation | `docs/adr/0002-...spec.html` Decision section; `external-data-evidence-contract.spec.html` `evidence-rule-canonical-identity`; `README.md` §"EIP-55 is the sole canonical evm representation"; `CONTEXT.md` "Canonical token identity" | docs | Met |

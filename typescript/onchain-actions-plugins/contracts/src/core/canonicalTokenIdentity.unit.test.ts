@@ -6,6 +6,7 @@ import {
   classifyTokenChainFamily,
   normalizeCanonicalTokenIdentifier,
   tokenIdentitiesAreEquivalent,
+  type CanonicalTokenIdentifierV1,
 } from './canonicalTokenIdentity.js';
 import {
   EVM_ADDRESS_CHECKSUMMED,
@@ -225,5 +226,21 @@ describe('CanonicalTokenIdentifierV1Schema', () => {
     expect(
       CanonicalTokenIdentifierV1Schema.parse({ chainId: '42161', address: EVM_ADDRESS_LOWERCASE }),
     ).toEqual({ chainId: '42161', address: EVM_ADDRESS_CHECKSUMMED });
+  });
+
+  it('is unforgeable by ordinary structural assignment -- a raw {chainId, address} object does not satisfy CanonicalTokenIdentifierV1', () => {
+    // This is a compile-time proof, checked by `tsc --noEmit`, not a runtime
+    // assertion: a plain object literal has the right shape but was never
+    // validated/normalized through this schema, so it must not typecheck
+    // against the branded output type merely because its fields match.
+    // Without the brand, this assignment silently type-checks and the
+    // `@ts-expect-error` directive below is unused -- which `tsc --noEmit`
+    // reports as an error, reproducing the AC17 gap.
+    // @ts-expect-error a raw structural object is not a genuine, validated
+    // CanonicalTokenIdentifierV1 -- only CanonicalTokenIdentifierV1Schema.parse
+    // (directly or via normalizeCanonicalTokenIdentifier) produces one.
+    const bypass: CanonicalTokenIdentifierV1 = { chainId: '42161', address: 'not-an-address' };
+
+    expect(bypass).toBeDefined();
   });
 });

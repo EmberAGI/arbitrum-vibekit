@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { TokenIdentifierSchema } from '@emberai/onchain-actions-contracts/core';
+import {
+  normalizeCanonicalTokenIdentifier,
+  TokenIdentifierSchema,
+} from '@emberai/onchain-actions-contracts/core';
 import {
   PaginatedPossibleResultsRequestSchema,
   TokenMarketSnapshotEnvelopeV1Schema,
@@ -399,6 +402,11 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
   });
 
   it('lets a plugin consume an injected evidence-bearing token price reader', async () => {
+    // TokenPriceReader.readTokenPrices is an unforgeable seam: it takes
+    // CanonicalTokenIdentifierV1 values, which only normalizeCanonicalTokenIdentifier
+    // (or a direct CanonicalTokenIdentifierV1Schema.parse) can produce. The
+    // default/real caller normalizes raw request input before crossing this
+    // boundary, exactly as request/envelope validation already does.
     const tokens = [
       {
         chainId: '42161',
@@ -408,7 +416,7 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
         chainId: '42161',
         address: '0x0000000000000000000000000000000000000002',
       },
-    ];
+    ].map((token) => normalizeCanonicalTokenIdentifier(token));
     const hostReader: TokenPriceReader = {
       readTokenPrices(requestedTokens) {
         return Promise.resolve(

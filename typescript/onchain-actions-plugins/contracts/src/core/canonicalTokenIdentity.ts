@@ -29,6 +29,16 @@ const INVALID_EVM_ADDRESS_MESSAGE =
  * that starts from the schema — directly or through
  * {@link normalizeCanonicalTokenIdentifier} — normalizes identically; there
  * is no second call site that could drift from this one.
+ *
+ * `.brand()` makes the output type nominal, not merely structural: a plain
+ * `{ chainId, address }` object literal — however well-formed — does not
+ * satisfy {@link CanonicalTokenIdentifierV1} by ordinary assignment. The only
+ * way to produce a genuine value is to parse it through this schema, directly
+ * or via {@link normalizeCanonicalTokenIdentifier}. This is what makes the
+ * `TokenPriceReader` host-capability seam (`readTokenPrices(tokenUids:
+ * readonly CanonicalTokenIdentifierV1[])`) unforgeable: a caller cannot hand
+ * it raw, unvalidated `TokenIdentifier`-shaped input merely because the
+ * fields line up.
  */
 export const CanonicalTokenIdentifierV1Schema = TokenIdentifierSchema.extend({
   chainId: trimmedNonEmptyString,
@@ -57,7 +67,8 @@ export const CanonicalTokenIdentifierV1Schema = TokenIdentifierSchema.extend({
     }
 
     return { chainId: value.chainId, address: getAddress(value.address) };
-  });
+  })
+  .brand<'CanonicalTokenIdentifierV1'>();
 
 export type CanonicalTokenIdentifierV1 = z.infer<typeof CanonicalTokenIdentifierV1Schema>;
 
