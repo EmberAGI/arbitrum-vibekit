@@ -9,6 +9,9 @@ import {
 
 import {
   decodedBase58ByteLength,
+  EVM_ADDRESS_CHECKSUMMED,
+  EVM_ADDRESS_INVALID_CHECKSUM,
+  EVM_ADDRESS_LOWERCASE,
   SOLANA_ADDRESS_LOWERCASED,
   SOLANA_ADDRESS_MIXED_CASE,
 } from './canonicalTokenIdentity.testFixtures.js';
@@ -25,13 +28,22 @@ describe('shared Solana fixture validity', () => {
 });
 
 describe('@emberai/onchain-actions-contracts/core chain-aware canonical token identity', () => {
-  it('treats EVM address case variants on the same chain as equivalent', () => {
-    const lower = { chainId: EVM_CHAIN_ID, address: '0xabc0000000000000000000000000000000000f' };
-    const upper = { chainId: EVM_CHAIN_ID, address: '0xABC0000000000000000000000000000000000F' };
+  it('treats EVM address case variants on the same chain as equivalent and normalizes both to EIP-55', () => {
+    const lower = { chainId: EVM_CHAIN_ID, address: EVM_ADDRESS_LOWERCASE };
+    const checksummed = { chainId: EVM_CHAIN_ID, address: EVM_ADDRESS_CHECKSUMMED };
 
     expect(classifyTokenChainFamily(EVM_CHAIN_ID)).toBe('evm');
-    expect(tokenIdentitiesAreEquivalent(lower, upper)).toBe(true);
-    expect(canonicalTokenIdentityKey(lower)).toBe(canonicalTokenIdentityKey(upper));
+    expect(tokenIdentitiesAreEquivalent(lower, checksummed)).toBe(true);
+    expect(canonicalTokenIdentityKey(lower)).toBe(canonicalTokenIdentityKey(checksummed));
+    expect(normalizeCanonicalTokenIdentifier(lower).address).toBe(EVM_ADDRESS_CHECKSUMMED);
+    expect(normalizeCanonicalTokenIdentifier(checksummed).address).toBe(EVM_ADDRESS_CHECKSUMMED);
+  });
+
+  it('rejects an EVM address with an invalid mixed-case checksum instead of silently correcting or lowercasing it', () => {
+    const invalid = { chainId: EVM_CHAIN_ID, address: EVM_ADDRESS_INVALID_CHECKSUM };
+
+    expect(() => normalizeCanonicalTokenIdentifier(invalid)).toThrow();
+    expect(() => canonicalTokenIdentityKey(invalid)).toThrow();
   });
 
   it('treats case-distinct Solana Base58 addresses as distinct while identical ones remain equal', () => {
@@ -47,11 +59,11 @@ describe('@emberai/onchain-actions-contracts/core chain-aware canonical token id
   it('keeps identities on different chain ids distinct even with the same address', () => {
     const onArbitrum = {
       chainId: EVM_CHAIN_ID,
-      address: '0xabc0000000000000000000000000000000000f',
+      address: EVM_ADDRESS_LOWERCASE,
     };
     const onOtherEvmChain = {
       chainId: '1',
-      address: '0xabc0000000000000000000000000000000000f',
+      address: EVM_ADDRESS_LOWERCASE,
     };
 
     expect(tokenIdentitiesAreEquivalent(onArbitrum, onOtherEvmChain)).toBe(false);
@@ -84,10 +96,13 @@ describe('@emberai/onchain-actions-contracts/core chain-aware canonical token id
   });
 
   it('keys the (chainId, address) tuple unambiguously so distinct pairs never collide on a shared colon', () => {
-    const evmChainIdWithColon = canonicalTokenIdentityKey({ chainId: 'eip155:1', address: '0xab' });
+    const evmChainIdWithColon = canonicalTokenIdentityKey({
+      chainId: 'eip155:1',
+      address: EVM_ADDRESS_LOWERCASE,
+    });
     const opaqueChainIdWithColonInAddress = canonicalTokenIdentityKey({
       chainId: 'eip155',
-      address: '1:0xab',
+      address: `1:${EVM_ADDRESS_LOWERCASE}`,
     });
 
     expect(evmChainIdWithColon).not.toBe(opaqueChainIdWithColonInAddress);

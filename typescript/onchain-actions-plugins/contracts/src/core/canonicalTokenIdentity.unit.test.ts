@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CanonicalTokenIdentifierV1Schema,
   canonicalTokenIdentityKey,
   classifyTokenChainFamily,
   normalizeCanonicalTokenIdentifier,
   tokenIdentitiesAreEquivalent,
 } from './canonicalTokenIdentity.js';
+import {
+  EVM_ADDRESS_CHECKSUMMED,
+  EVM_ADDRESS_INVALID_CHECKSUM,
+  EVM_ADDRESS_LOWERCASE,
+} from './canonicalTokenIdentity.testFixtures.js';
 
 describe('classifyTokenChainFamily', () => {
   it('classifies legacy decimal Ember chain ids as evm', () => {
@@ -57,11 +63,37 @@ describe('classifyTokenChainFamily', () => {
 });
 
 describe('normalizeCanonicalTokenIdentifier', () => {
-  it('lowercases only the address for evm identities', () => {
-    expect(normalizeCanonicalTokenIdentifier({ chainId: '42161', address: '0xABCDEF' })).toEqual({
+  it('normalizes a lowercase evm address to its EIP-55 checksum form', () => {
+    expect(
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: EVM_ADDRESS_LOWERCASE }),
+    ).toEqual({
       chainId: '42161',
-      address: '0xabcdef',
+      address: EVM_ADDRESS_CHECKSUMMED,
     });
+  });
+
+  it('preserves an already-checksummed EIP-55 evm address exactly', () => {
+    expect(
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: EVM_ADDRESS_CHECKSUMMED }),
+    ).toEqual({
+      chainId: '42161',
+      address: EVM_ADDRESS_CHECKSUMMED,
+    });
+  });
+
+  it('rejects an evm address with an invalid mixed-case checksum instead of silently correcting it', () => {
+    expect(() =>
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: EVM_ADDRESS_INVALID_CHECKSUM }),
+    ).toThrow();
+  });
+
+  it('rejects an evm address that is not a full 20-byte hexadecimal address', () => {
+    expect(() =>
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: '0xABCDEF' }),
+    ).toThrow();
+    expect(() =>
+      normalizeCanonicalTokenIdentifier({ chainId: '42161', address: 'not-an-address' }),
+    ).toThrow();
   });
 
   it('preserves address case for solana identities', () => {
@@ -90,9 +122,9 @@ describe('normalizeCanonicalTokenIdentifier', () => {
 });
 
 describe('canonicalTokenIdentityKey', () => {
-  it('combines the chain id and normalized address as an unambiguous tuple', () => {
-    expect(canonicalTokenIdentityKey({ chainId: '42161', address: '0xABCDEF' })).toBe(
-      JSON.stringify(['42161', '0xabcdef']),
+  it('combines the chain id and normalized (EIP-55 checksummed) address as an unambiguous tuple', () => {
+    expect(canonicalTokenIdentityKey({ chainId: '42161', address: EVM_ADDRESS_LOWERCASE })).toBe(
+      JSON.stringify(['42161', EVM_ADDRESS_CHECKSUMMED]),
     );
   });
 
@@ -104,11 +136,15 @@ describe('canonicalTokenIdentityKey', () => {
 
   it('encodes the (chainId, address) tuple unambiguously so delimiter concatenation cannot collide', () => {
     // Naive `${chainId}:${address}` concatenation collides here: both keys
-    // would serialize to the literal string "eip155:1:0xab".
-    const evmChainIdWithColon = canonicalTokenIdentityKey({ chainId: 'eip155:1', address: '0xab' });
+    // would serialize to the literal string
+    // `eip155:1:${EVM_ADDRESS_LOWERCASE}`.
+    const evmChainIdWithColon = canonicalTokenIdentityKey({
+      chainId: 'eip155:1',
+      address: EVM_ADDRESS_LOWERCASE,
+    });
     const opaqueChainIdWithColonInAddress = canonicalTokenIdentityKey({
       chainId: 'eip155',
-      address: '1:0xab',
+      address: `1:${EVM_ADDRESS_LOWERCASE}`,
     });
 
     expect(evmChainIdWithColon).not.toBe(opaqueChainIdWithColonInAddress);
@@ -141,5 +177,52 @@ describe('tokenIdentitiesAreEquivalent', () => {
     expect(() =>
       tokenIdentitiesAreEquivalent({ chainId: '', address: '0xabc' }, { chainId: '', address: '0xabc' }),
     ).toThrow();
+  });
+
+  it('treats a lowercase and its EIP-55 checksummed form as the same evm identity after canonicalization', () => {
+    expect(
+      tokenIdentitiesAreEquivalent(
+        { chainId: '42161', address: EVM_ADDRESS_LOWERCASE },
+        { chainId: '42161', address: EVM_ADDRESS_CHECKSUMMED },
+      ),
+    ).toBe(true);
+  });
+
+  it('preserves the existing V1 zero-address convention for a native-token evm identity', () => {
+    // Zero/near-zero placeholder addresses contain no letters, so EIP-55
+    // checksumming is a no-op for them -- they must still parse and compare
+    // exactly as before under the new stricter format/checksum validation.
+    const zeroAddress = '0x0000000000000000000000000000000000000000';
+
+    expect(normalizeCanonicalTokenIdentifier({ chainId: '42161', address: zeroAddress })).toEqual({
+      chainId: '42161',
+      address: zeroAddress,
+    });
+    expect(
+      tokenIdentitiesAreEquivalent(
+        { chainId: '42161', address: zeroAddress },
+        { chainId: '42161', address: zeroAddress },
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('CanonicalTokenIdentifierV1Schema', () => {
+  it('is the single validation point every public identity operation runs through -- a direct parse rejects the same invalid mixed-case checksum', () => {
+    const result = CanonicalTokenIdentifierV1Schema.safeParse({
+      chainId: '42161',
+      address: EVM_ADDRESS_INVALID_CHECKSUM,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.path).toEqual(['address']);
+    }
+  });
+
+  it('normalizes a valid evm address to EIP-55 on direct parse', () => {
+    expect(
+      CanonicalTokenIdentifierV1Schema.parse({ chainId: '42161', address: EVM_ADDRESS_LOWERCASE }),
+    ).toEqual({ chainId: '42161', address: EVM_ADDRESS_CHECKSUMMED });
   });
 });

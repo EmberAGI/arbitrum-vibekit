@@ -1,3 +1,4 @@
+import { getAddress, isAddress } from 'viem';
 import { z } from 'zod';
 
 import { TokenIdentifierSchema, type TokenIdentifier } from './tokenIdentifier.js';
@@ -16,10 +17,47 @@ const trimmedNonEmptyString = z
   .min(1)
   .refine(nonWhitespacePadded, 'must be non-empty and free of leading/trailing whitespace');
 
+const INVALID_EVM_ADDRESS_MESSAGE =
+  'evm token address must be a full 0x-prefixed 20-byte hexadecimal address, either ' +
+  'all-lowercase or a validly checksummed EIP-55 address';
+
+/**
+ * `CanonicalTokenIdentifierV1Schema` is the single point where an evm
+ * address is validated and normalized to its canonical EIP-55 checksum form
+ * (see the module-level documentation on {@link normalizeCanonicalTokenIdentifier}).
+ * This transform runs on every parse, so every public identity operation
+ * that starts from the schema — directly or through
+ * {@link normalizeCanonicalTokenIdentifier} — normalizes identically; there
+ * is no second call site that could drift from this one.
+ */
 export const CanonicalTokenIdentifierV1Schema = TokenIdentifierSchema.extend({
   chainId: trimmedNonEmptyString,
   address: trimmedNonEmptyString,
-}).strict();
+})
+  .strict()
+  .transform((value, ctx) => {
+    if (classifyTokenChainFamily(value.chainId) !== 'evm') {
+      return value;
+    }
+
+    // `isAddress(..., { strict: true })` accepts a full 20-byte hex address
+    // that is either all-lowercase or already a validly checksummed EIP-55
+    // address, and rejects both malformed hex and a mixed-case address whose
+    // casing does not match its real checksum. `getAddress` alone does not
+    // reject a bad checksum — it silently re-checksums from the lowercase
+    // form — so the explicit `isAddress` gate is what makes an invalid
+    // mixed-case checksum a validation failure instead of a silent rewrite.
+    if (!isAddress(value.address, { strict: true })) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: INVALID_EVM_ADDRESS_MESSAGE,
+        path: ['address'],
+      });
+      return z.NEVER;
+    }
+
+    return { chainId: value.chainId, address: getAddress(value.address) };
+  });
 
 export type CanonicalTokenIdentifierV1 = z.infer<typeof CanonicalTokenIdentifierV1Schema>;
 
@@ -80,27 +118,29 @@ export function classifyTokenChainFamily(chainId: string): TokenChainFamily {
 }
 
 /**
- * Returns the canonical form of a token identity for its chain family:
- * case-insensitive evm addresses normalize to lowercase, while solana and
- * opaque addresses preserve their exact case.
+ * Returns the canonical form of a token identity for its chain family: a
+ * full evm address parses to its one deterministic EIP-55 checksum form
+ * (accepting either legacy all-lowercase input or an already-checksummed
+ * EIP-55 address, and rejecting an invalid mixed-case checksum), while
+ * solana and opaque addresses preserve their exact case. EIP-55 — not
+ * lowercase — is the sole canonical evm domain representation: there is no
+ * second, lowercase-keyed convention anywhere behind this Interface.
+ * Lowercase remains valid only as ingress a caller may submit, never as
+ * canonical output.
  *
- * Validates `token` through {@link CanonicalTokenIdentifierV1Schema} first, so
- * a caller cannot bypass the public non-empty/trimmed invariant by calling
- * this helper directly with an invalid (e.g. empty, all-whitespace, or
- * leading/trailing-whitespace-padded) chain id or address.
- * {@link canonicalTokenIdentityKey} and {@link tokenIdentitiesAreEquivalent}
- * delegate here for the same reason; {@link classifyTokenChainFamily}
- * enforces the identical chain-id invariant independently, since it is
- * itself a public entry point a caller can invoke directly.
+ * Delegates entirely to {@link CanonicalTokenIdentifierV1Schema}, which owns
+ * both the non-empty/trimmed invariant and the evm address-format/checksum
+ * invariant, so a caller cannot bypass either one by calling this helper
+ * directly with an invalid chain id or address. {@link canonicalTokenIdentityKey}
+ * and {@link tokenIdentitiesAreEquivalent} delegate here for the same reason;
+ * {@link classifyTokenChainFamily} enforces the identical chain-id invariant
+ * independently, since it is itself a public entry point a caller can invoke
+ * directly.
  */
 export function normalizeCanonicalTokenIdentifier(
   token: TokenIdentifier,
 ): CanonicalTokenIdentifierV1 {
-  const validated = CanonicalTokenIdentifierV1Schema.parse(token);
-  const family = classifyTokenChainFamily(validated.chainId);
-  const address = family === 'evm' ? validated.address.toLowerCase() : validated.address;
-
-  return { chainId: validated.chainId, address };
+  return CanonicalTokenIdentifierV1Schema.parse(token);
 }
 
 /**

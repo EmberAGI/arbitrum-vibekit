@@ -16,7 +16,12 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { SOLANA_ADDRESS_MIXED_CASE } from './core/canonicalTokenIdentity.testFixtures.js';
+import {
+  EVM_ADDRESS_CHECKSUMMED,
+  EVM_ADDRESS_INVALID_CHECKSUM,
+  EVM_ADDRESS_LOWERCASE,
+  SOLANA_ADDRESS_MIXED_CASE,
+} from './core/canonicalTokenIdentity.testFixtures.js';
 
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(import.meta.dirname, '..');
@@ -215,13 +220,45 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(21);
       if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(22);
       if (!core.tokenIdentitiesAreEquivalent(
-        { chainId: "42161", address: "0xABCDEF" },
-        { chainId: "42161", address: "0xabcdef" },
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
       )) process.exit(23);
       if (core.tokenIdentitiesAreEquivalent(
         { chainId: "solana", address: "MixedCaseAddress" },
         { chainId: "solana", address: "mixedcaseaddress" },
       )) process.exit(24);
+      // EIP-55 is the sole canonical evm representation: normalizing a
+      // lowercase address returns the checksummed form, and an
+      // already-checksummed address round-trips unchanged.
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+      ).address !== "${EVM_ADDRESS_CHECKSUMMED}") process.exit(80);
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+      ).address !== "${EVM_ADDRESS_CHECKSUMMED}") process.exit(81);
+      // An invalid mixed-case checksum is rejected, not silently corrected
+      // or lowercased.
+      let evmChecksumThrew = false;
+      try {
+        core.normalizeCanonicalTokenIdentifier(
+          { chainId: "42161", address: "${EVM_ADDRESS_INVALID_CHECKSUM}" },
+        );
+      } catch {
+        evmChecksumThrew = true;
+      }
+      if (!evmChecksumThrew) process.exit(82);
+      // Because both forms normalize to the same canonical (EIP-55) key, a
+      // request naming the lowercase and checksummed spelling of the same
+      // address is a true duplicate and must be rejected -- unlike the
+      // Solana case below, where case-distinct addresses are genuinely
+      // distinct tokens.
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [
+          { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+          { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+        ],
+      }).success) process.exit(83);
       const solanaTokenMixedCase = { chainId: "solana", address: "${SOLANA_ADDRESS_MIXED_CASE}" };
       const solanaTokenLowerCased = { chainId: "solana", address: solanaTokenMixedCase.address.toLowerCase() };
       if (base58ByteLength(solanaTokenMixedCase.address) !== 32) process.exit(60);
@@ -241,8 +278,8 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         { chainId: "EIP155:42161", address: "0xABCDEF" },
         { chainId: "EIP155:42161", address: "0xabcdef" },
       )) process.exit(42);
-      const collisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "0xab" });
-      const collisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:0xab" });
+      const collisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "${EVM_ADDRESS_LOWERCASE}" });
+      const collisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:${EVM_ADDRESS_LOWERCASE}" });
       if (collisionKeyA === collisionKeyB) process.exit(43);
       let bypassThrew = false;
       try {
@@ -254,8 +291,8 @@ describe('packed @emberai/onchain-actions-contracts', () => {
 
       // Different chain ids with the same address must remain distinct identities.
       if (core.tokenIdentitiesAreEquivalent(
-        { chainId: "42161", address: "0xabc0000000000000000000000000000000000f" },
-        { chainId: "1", address: "0xabc0000000000000000000000000000000000f" },
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "1", address: "${EVM_ADDRESS_LOWERCASE}" },
       )) process.exit(45);
 
       // An opaque (non-EVM, non-Solana) chain family must never silently collapse case.
@@ -361,12 +398,25 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         return leadingZeroBytes + magnitudeByteCount;
       };
 
-      // EVM: case variants on the same chain compare equal.
+      // EVM: case variants on the same chain compare equal, and both
+      // normalize to the deterministic EIP-55 checksum form.
       if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(31);
       if (!core.tokenIdentitiesAreEquivalent(
-        { chainId: "42161", address: "0xABCDEF" },
-        { chainId: "42161", address: "0xabcdef" },
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
       )) process.exit(32);
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+      ).address !== "${EVM_ADDRESS_CHECKSUMMED}") process.exit(80);
+      let cjsEvmChecksumThrew = false;
+      try {
+        core.normalizeCanonicalTokenIdentifier(
+          { chainId: "42161", address: "${EVM_ADDRESS_INVALID_CHECKSUM}" },
+        );
+      } catch {
+        cjsEvmChecksumThrew = true;
+      }
+      if (!cjsEvmChecksumThrew) process.exit(81);
 
       // Solana: identical addresses equal, case-distinct addresses remain distinct.
       if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(33);
@@ -381,8 +431,8 @@ describe('packed @emberai/onchain-actions-contracts', () => {
 
       // Different chain ids remain distinct even with the same address.
       if (core.tokenIdentitiesAreEquivalent(
-        { chainId: "42161", address: "0xabc0000000000000000000000000000000000f" },
-        { chainId: "1", address: "0xabc0000000000000000000000000000000000f" },
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "1", address: "${EVM_ADDRESS_LOWERCASE}" },
       )) process.exit(36);
 
       // Opaque/unknown chain families never silently collapse case.
@@ -399,8 +449,8 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       )) process.exit(39);
 
       // Unambiguous (chainId, address) key encoding: a shared colon must not collide.
-      const cjsCollisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "0xab" });
-      const cjsCollisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:0xab" });
+      const cjsCollisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "${EVM_ADDRESS_LOWERCASE}" });
+      const cjsCollisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:${EVM_ADDRESS_LOWERCASE}" });
       if (cjsCollisionKeyA === cjsCollisionKeyB) process.exit(40);
 
       // Public schema validation cannot be bypassed with empty, all-whitespace, or
@@ -448,6 +498,17 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         schema_version: "1",
         tokens: [cjsSolanaMixedCase, cjsSolanaMixedCase],
       }).success) process.exit(44);
+
+      // Unlike Solana, an evm lowercase/checksummed spelling pair is the same
+      // canonical (EIP-55) identity, so the request schema must reject it as
+      // a true duplicate.
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [
+          { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+          { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+        ],
+      }).success) process.exit(82);
 
       // Envelope ordering + cardinality, mirroring the ESM matrix.
       const cjsFreshness = {

@@ -62,3 +62,30 @@ export const SOLANA_ADDRESS_MIXED_CASE = '48ZgHweqoq3sU1Y29itgvAQBhhKY4v8o87r7GF
  * `canonicalTokenIdentity.int.test.ts` to decode to exactly 32 bytes.
  */
 export const SOLANA_ADDRESS_LOWERCASED = SOLANA_ADDRESS_MIXED_CASE.toLowerCase();
+
+/**
+ * Shared evm address fixtures for the EIP-55 canonical-representation test
+ * matrix (unit, integration, and packed ESM/CJS consumer tests).
+ *
+ * A short address such as `0xABCDEF` is not a full 20-byte evm address, so
+ * it cannot exercise real format/checksum validation — it would have been
+ * silently accepted by the pre-EIP-55 lowercase-only implementation this
+ * fixture set replaces. Every fixture below is a genuine 20-byte (40 hex
+ * character) address, and {@link EVM_ADDRESS_CHECKSUMMED} is the real EIP-55
+ * checksum of {@link EVM_ADDRESS_LOWERCASE} (computed with viem's
+ * `getAddress`, the same codec `canonicalTokenIdentity.ts` uses as its evm
+ * family-specific codec).
+ */
+export const EVM_ADDRESS_LOWERCASE = '0xabc000000000000000000000000000000000000f';
+
+/** The deterministic EIP-55 checksum form of {@link EVM_ADDRESS_LOWERCASE}. */
+export const EVM_ADDRESS_CHECKSUMMED = '0xAbc000000000000000000000000000000000000F';
+
+/**
+ * {@link EVM_ADDRESS_CHECKSUMMED} with its first letter's case flipped
+ * (`A` → `a`). It is still a full 20-byte hex address and still mixed-case
+ * (the trailing `F` stays uppercase), but that casing no longer matches the
+ * address's real EIP-55 checksum — the exact shape that a strict-mode
+ * validator must reject rather than silently "correct".
+ */
+export const EVM_ADDRESS_INVALID_CHECKSUM = '0xabc000000000000000000000000000000000000F';
