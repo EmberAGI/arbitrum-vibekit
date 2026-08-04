@@ -627,4 +627,71 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
       }).success,
     ).toBe(false);
   });
+
+  it('accepts case-distinct Solana token identities as unique while rejecting true duplicates', () => {
+    const solanaTokenMixedCase = {
+      chainId: 'solana',
+      address: 'B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2',
+    };
+    const solanaTokenLowerCased = {
+      chainId: 'solana',
+      address: solanaTokenMixedCase.address.toLowerCase(),
+    };
+
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [solanaTokenMixedCase, solanaTokenLowerCased],
+      }).success,
+    ).toBe(true);
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [solanaTokenMixedCase, solanaTokenMixedCase],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts correctly ordered case-sensitive Solana results and rejects a swapped order', () => {
+    const solanaTokenA = {
+      chainId: 'solana',
+      address: 'B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2',
+    };
+    const solanaTokenB = {
+      chainId: 'solana',
+      address: solanaTokenA.address.toLowerCase(),
+    };
+    const value = { price_usd: '1.25' } as const;
+    const itemA = {
+      status: 'available',
+      subject: solanaTokenA,
+      value,
+      freshness,
+      provenance,
+    } as const;
+    const itemB = {
+      status: 'available',
+      subject: solanaTokenB,
+      value,
+      freshness,
+      provenance,
+    } as const;
+    const envelope = {
+      schema_version: '1',
+      snapshot_id: 'solana-snapshot-1',
+      quote_currency: 'USD',
+      completeness: 'complete',
+      requested_tokens: [solanaTokenA, solanaTokenB],
+      items: [itemA, itemB],
+    } as const;
+
+    expect(TokenMarketSnapshotEnvelopeV1Schema.safeParse(envelope).success).toBe(true);
+    expect(
+      TokenMarketSnapshotEnvelopeV1Schema.safeParse({ ...envelope, items: [itemB, itemA] })
+        .success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotEnvelopeV1Schema.safeParse({ ...envelope, items: [itemA] }).success,
+    ).toBe(false);
+  });
 });

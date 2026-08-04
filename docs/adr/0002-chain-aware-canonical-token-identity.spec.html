@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR 0002 — Chain-aware Canonical Token Identity</title>
+  <link rel="stylesheet" href="../specs/.style/spec.css">
+  <script defer src="../specs/.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="canonical-identity-adr-title">
+    <p class="eyebrow">Accepted architecture decision · EMB-1359</p>
+    <h1>Chain-aware canonical token identity</h1>
+    <p class="lede">Token identity comparison follows the address semantics of its chain id, dispatched by one pure, conservative classifier owned by <code>@emberai/onchain-actions-contracts/core</code>, instead of one unconditional lowercase rule.</p>
+  </header>
+  <section data-anchor="canonical-identity-adr-context">
+    <h2>Context</h2>
+    <p>The contracts package's private <code>canonicalTokenKey</code> lowercased every token address before comparing or keying it. That is correct for EVM equivalence, but Solana Base58 addresses are case-sensitive: two distinct, valid Solana public keys differing only in case were treated as duplicates in the token-market request and rejected as an ordering mismatch in the envelope.</p>
+    <p>The public <code>TokenIdentifier.chainId</code> field is an arbitrary non-empty string, not a self-describing chain identifier. Current EVM callers use legacy decimal Ember chain ids such as <code>42161</code>; an existing internal Solana normalization utility uses the legacy literal <code>solana</code>. The address string alone cannot reliably determine its own family, so the family must be derived from <code>chainId</code>.</p>
+  </section>
+  <section data-anchor="canonical-identity-adr-decision">
+    <h2>Decision</h2>
+    <p>One pure, deep <code>CanonicalTokenIdentity</code> Module in <code>./core</code> owns identity validation, normalization, keying, and equality for every consumer: token-market request uniqueness, envelope result-order checks, and the <code>TokenPriceReader</code> host capability all delegate to it rather than reimplementing string policy.</p>
+    <p>Chain-family dispatch is a single conservative classifier, not a chain registry:</p>
+    <table>
+      <thead><tr><th><code>chainId</code> shape</th><th>Family</th></tr></thead>
+      <tbody>
+        <tr><td>Legacy decimal Ember chain id (e.g. <code>42161</code>)</td><td><code>evm</code> — case-insensitive, normalizes to lowercase</td></tr>
+        <tr><td>Legacy <code>solana</code> literal</td><td><code>solana</code> — case-sensitive</td></tr>
+        <tr><td>Self-describing CAIP-2 <code>eip155:*</code></td><td><code>evm</code>, derived from the namespace</td></tr>
+        <tr><td>Self-describing CAIP-2 <code>solana:*</code></td><td><code>solana</code>, derived from the namespace</td></tr>
+        <tr><td>Anything else</td><td><code>opaque</code> — exact-case, never silently lowercased</td></tr>
+      </tbody>
+    </table>
+    <p>The classifier is pure and synchronous: it never queries Memgraph or another live registry, and its absence never invalidates an otherwise structurally valid token identity.</p>
+  </section>
+  <section data-anchor="canonical-identity-adr-tradeoffs">
+    <h2>Trade-offs</h2>
+    <table>
+      <thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
+      <tbody>
+        <tr><td>Infer the address family from the address shape</td><td>The existing private <code>normalizeToken.ts</code> utility did this and it does not generalize; <code>chainId</code> semantics must be the authority, not the address string.</td></tr>
+        <tr><td>Look up chain type from a live chain registry (e.g. Memgraph)</td><td>The contracts package must stay deterministic and usable without database availability; registry absence must never invalidate a structurally valid token.</td></tr>
+        <tr><td>Enumerate every supported chain id individually</td><td>Unbounded maintenance surface for a V1 correction; the CAIP-2 namespace and two legacy conventions already cover the real cases without a table.</td></tr>
+        <tr><td>Let each plugin/endpoint normalize identity itself</td><td>Reintroduces the original bug's root cause: duplicated, drifting string policy instead of one authority.</td></tr>
+        <tr><td>Fail closed (reject) on an unknown chain family instead of preserving exact case</td><td>The operator refinement explicitly chose preserve-exact-case over rejection for V1; failing closed would reject structurally valid, provider-supported tokens on opaque chains that have no other current defect.</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-anchor="canonical-identity-adr-consequences">
+    <h2>Consequences</h2>
+    <ul>
+      <li>Case-distinct valid Solana addresses are always distinct identities; identical Solana addresses are always equal.</li>
+      <li>An opaque/unsupported chain id never has its address silently lowercased; extending semantics for a future opaque family requires extending this one classifier or first making <code>chainId</code> self-describing.</li>
+      <li>No plugin, endpoint, or downstream consumer may implement its own address-case normalization; all of them call the shared Interface.</li>
+      <li>A future migration from legacy chain ids to CAIP-2 is a separate compatibility decision and is not required by this correction.</li>
+    </ul>
+  </section>
+  <section data-anchor="canonical-identity-adr-references">
+    <h2>References</h2>
+    <p><a href="../specs/domains/external-data-evidence-contract.spec.html">External data evidence domain spec</a> · <a href="https://linear.app/emberai/issue/EMB-1359">EMB-1359</a> · <a href="0001-neutral-data-contract-package.spec.html">ADR 0001</a></p>
+  </section>
+</main>
+</body>
+</html>

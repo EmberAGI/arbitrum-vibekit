@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
-import type { TokenIdentifier } from '../core/index.js';
-import { CanonicalTokenIdentifierV1Schema } from '../internal/canonical-token.js';
+import { CanonicalTokenIdentifierV1Schema, type TokenIdentifier } from '../core/index.js';
 import {
   createFreshDataResultV1Schema,
   PositiveDecimalStringSchema,

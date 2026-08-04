@@ -187,6 +187,30 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         subject: emptyToken,
         reason: "not_found",
       }).success) process.exit(5);
+      if (typeof core.classifyTokenChainFamily !== "function" ||
+          typeof core.normalizeCanonicalTokenIdentifier !== "function" ||
+          typeof core.canonicalTokenIdentityKey !== "function" ||
+          typeof core.tokenIdentitiesAreEquivalent !== "function") process.exit(20);
+      if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(21);
+      if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(22);
+      if (!core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "0xABCDEF" },
+        { chainId: "42161", address: "0xabcdef" },
+      )) process.exit(23);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "solana", address: "MixedCaseAddress" },
+        { chainId: "solana", address: "mixedcaseaddress" },
+      )) process.exit(24);
+      const solanaTokenMixedCase = { chainId: "solana", address: "B62qkYzZ8vKxV3vNfoxjJExhKZ4t1qJyz9uWFxbY6Zw2" };
+      const solanaTokenLowerCased = { chainId: "solana", address: solanaTokenMixedCase.address.toLowerCase() };
+      if (!endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [solanaTokenMixedCase, solanaTokenLowerCased],
+      }).success) process.exit(25);
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [solanaTokenMixedCase, solanaTokenMixedCase],
+      }).success) process.exit(26);
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);
@@ -202,6 +226,12 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (!core.TokenIdentifierSchema || !plugins.TokenPriceReadResultV1Schema ||
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
+      if (typeof core.classifyTokenChainFamily !== "function") process.exit(30);
+      if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(31);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "solana", address: "MixedCaseAddress" },
+        { chainId: "solana", address: "mixedcaseaddress" },
+      )) process.exit(32);
     `;
 
     await expect(

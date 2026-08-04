@@ -27,3 +27,11 @@ _Avoid_: Metadata, diagnostics
 **Snapshot**:
 A versioned set of requested item results with derived completeness and a stable batch identity.
 _Avoid_: Provider observation, cache entry
+
+**Canonical token identity**:
+The one chain-aware equivalence and keying rule for a token identifier, owned by the contract kernel and reused by every request-uniqueness, result-order, and host-capability check.
+_Avoid_: Endpoint-local dedupe key, ad hoc string comparison
+
+**Chain address family**:
+The `evm`, `solana`, or `opaque` classification a chain id resolves to, which determines whether its address compares case-insensitively, case-sensitively, or exact-case-only.
+_Avoid_: Address-shape inference, per-plugin normalizer

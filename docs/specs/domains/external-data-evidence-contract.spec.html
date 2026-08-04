@@ -163,6 +163,7 @@
       <article class="card" data-anchor="evidence-concept-freshness"><h3>Freshness</h3><p>Observation, receipt, expiry, refresh, and retry timing with an explicit timestamp source.</p></article>
       <article class="card" data-anchor="evidence-concept-completeness"><h3>Completeness</h3><p>Whether current values cover every requested subject, some requested subjects, or none. Item states independently explain stale, rate-limited, not-found, and unavailable outcomes.</p></article>
       <article class="card" data-anchor="evidence-concept-kernel"><h3>Contract kernel</h3><p>Neutral token, chain, transaction, plugin, action, query, lifecycle, plugin-host capability, endpoint, and evidence schemas shared by registry implementations and service consumers.</p></article>
+      <article class="card" data-anchor="evidence-concept-canonical-identity"><h3>Canonical token identity</h3><p>The chain-aware equivalence and keying rule for a token identifier, derived from its chain id's address family rather than its literal string casing.</p></article>
     </div>
   </section>
 
@@ -178,6 +179,8 @@
         <tr data-anchor="evidence-language-observation"><td>Provider observation</td><td>One externally sourced value with provider identity and observation time before it is composed into a result or snapshot.</td><td>Snapshot, receipt, current price</td></tr>
         <tr data-anchor="evidence-language-evidence"><td>Evidence</td><td>The provenance, freshness, safe warning, and result-state material that lets a consumer judge an external value.</td><td>Metadata, diagnostic payload</td></tr>
         <tr data-anchor="evidence-language-snapshot"><td>Snapshot</td><td>A versioned set of requested item results with derived completeness and stable batch identity.</td><td>Provider observation, cache entry</td></tr>
+        <tr data-anchor="evidence-language-canonical-identity"><td>Canonical token identity</td><td>The one chain-aware equivalence and keying rule for a token identifier, owned by <code>./core</code> and reused by every request-uniqueness, result-order, and host-capability check.</td><td>Endpoint-local dedupe key, ad hoc string comparison</td></tr>
+        <tr data-anchor="evidence-language-chain-family"><td>Chain address family</td><td>The <code>evm</code>, <code>solana</code>, or <code>opaque</code> classification a chain id resolves to, which determines whether its address compares case-insensitively, case-sensitively, or exact-case-only.</td><td>Address-shape inference, per-plugin normalizer</td></tr>
       </tbody>
     </table>
     <p class="callout">Market-data providers belong to the read-only provider-composition context. Action/query plugins belong to the registry context. Both may depend on the contract kernel, but neither context owns the other.</p>
@@ -211,6 +214,7 @@
       <li data-anchor="evidence-rule-version">Breaking semantic changes require a new contract version.</li>
       <li data-anchor="evidence-rule-wire">Wire properties use <code>snake_case</code>; timestamps are RFC 3339 UTC strings and decimal quantities are strings.</li>
       <li data-anchor="evidence-rule-digest">V1 provenance contains no cryptographic source digest or canonical-JSON hashing contract; consumers have no approved use case that requires one.</li>
+      <li data-anchor="evidence-rule-canonical-identity">Token identity comparison follows the address family of its chain id, derived by <code>./core</code>'s canonical token identity Interface. It is never inferred from address shape and never unconditionally lowercased; an unknown or unsupported chain family always compares exact-case.</li>
     </ul>
   </section>
 
@@ -220,6 +224,7 @@
       <thead><tr><th>Type</th><th>Required meaning</th></tr></thead>
       <tbody>
         <tr data-anchor="evidence-contract-core"><td><code>@emberai/onchain-actions-contracts/core</code></td><td>Dependency-light token and chain identities, transaction plans and errors, fee breakdowns, and provider tracking schemas currently defined by the registry package.</td></tr>
+        <tr data-anchor="evidence-contract-canonical-identity"><td>Canonical token identity Interface (<code>./core</code>)</td><td><code>CanonicalTokenIdentifierV1Schema</code> plus pure <code>classifyTokenChainFamily(chainId)</code>, <code>normalizeCanonicalTokenIdentifier(token)</code>, <code>canonicalTokenIdentityKey(token)</code>, and <code>tokenIdentitiesAreEquivalent(a, b)</code> functions. This is the sole authority for token identity semantics: <code>evm</code> chain ids (legacy decimal Ember ids or CAIP-2 <code>eip155:*</code>) compare case-insensitively and normalize to lowercase; <code>solana</code> chain ids (the legacy literal or CAIP-2 <code>solana:*</code>) compare case-sensitively; every other chain id is <code>opaque</code> and is never silently lowercased. Token-market request uniqueness, envelope result-order checks, and the <code>TokenPriceReader</code> host capability all delegate to this Interface instead of reimplementing address-case policy.</td></tr>
         <tr data-anchor="evidence-contract-plugins"><td><code>@emberai/onchain-actions-contracts/plugins</code></td><td>Neutral plugin, action, query, lifecycle, and host-capability interfaces. Registry classes, registry configuration, server services, and bundled protocol implementations are excluded.</td></tr>
         <tr data-anchor="evidence-contract-endpoints"><td><code>@emberai/onchain-actions-contracts/endpoints</code></td><td>Shared Zod request/response and pagination contracts for public onchain-action Interfaces, including the EMB-1144 token-market schemas below.</td></tr>
         <tr data-anchor="evidence-contract-evidence"><td><code>@emberai/onchain-actions-contracts/external-data</code></td><td>The versioned external-data envelope, freshness, provenance, result, field, and warning schemas below.</td></tr>
@@ -309,6 +314,7 @@
       <li data-anchor="evidence-decision-token-market-no-stale">2026-07-16: EMB-1144 spec-chat review resolved token-market observations as fresh then evicted. Generic stale evidence remains available for domains such as wallet snapshots, but token-market result and reader schemas exclude stale last-known values.</li>
       <li data-anchor="evidence-decision-external-data-name">2026-07-16: the operator renamed the generic public contract subpath from bespoke <code>./evidence</code> to descriptive <code>./external-data</code> before first publication.</li>
       <li data-anchor="evidence-decision-no-digest">2026-07-16: the operator removed source digests, deterministic canonical-JSON hashing, and optional source-artifact references from V1 provenance because no approved consumer requires them.</li>
+      <li data-anchor="evidence-decision-canonical-identity">2026-08-04: the operator approved a chain-aware canonical token identity Interface in <code>./core</code> as the sole authority for token identity comparison, with a conservative pure chain-family classifier (legacy decimal Ember ids and CAIP-2 <code>eip155:*</code> as <code>evm</code>; the legacy <code>solana</code> literal and CAIP-2 <code>solana:*</code> as <code>solana</code>; everything else as exact-case <code>opaque</code>) rather than a live chain registry. See <a href="../../adr/0002-chain-aware-canonical-token-identity.spec.html">ADR 0002</a>.</li>
     </ul>
   </section>
 
@@ -322,6 +328,7 @@
       <li><a href="https://linear.app/emberai/issue/EMB-1148">EMB-1148 — deterministic plugin registry snapshots</a></li>
       <li><a href="https://linear.app/emberai/issue/EMB-1149">EMB-1149 — server registry snapshot consumption</a></li>
       <li><a href="https://linear.app/emberai/issue/EMB-1138">EMB-1138 — floor-safe rebalance lifecycle</a></li>
+      <li><a href="https://linear.app/emberai/issue/EMB-1359">EMB-1359 — make canonical token identity chain-aware</a></li>
     </ul>
   </section>
 </main>

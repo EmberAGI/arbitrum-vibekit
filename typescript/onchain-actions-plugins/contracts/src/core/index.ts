@@ -1,12 +1,7 @@
 import { z } from 'zod';
 
 import { ChainTypeSchema, TransactionTypeSchema } from './enums.js';
-
-export const TokenIdentifierSchema = z.object({
-  chainId: z.string(),
-  address: z.string(),
-});
-export type TokenIdentifier = z.infer<typeof TokenIdentifierSchema>;
+import { TokenIdentifierSchema } from './tokenIdentifier.js';
 
 export const TokenSchema = z.object({
   tokenUid: TokenIdentifierSchema,
@@ -78,3 +73,5 @@ export const ProviderTrackingStatusSchema = z.object({
 export type ProviderTrackingStatus = z.infer<typeof ProviderTrackingStatusSchema>;
 
 export * from './enums.js';
+export * from './tokenIdentifier.js';
+export * from './canonicalTokenIdentity.js';
