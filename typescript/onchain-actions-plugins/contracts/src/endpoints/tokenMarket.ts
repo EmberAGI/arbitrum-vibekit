@@ -1,16 +1,15 @@
 import { z } from 'zod';
 
-import type { TokenIdentifier } from '../core/index.js';
+import {
+  CanonicalTokenIdentifierV1Schema,
+  canonicalTokenIdentityKey,
+  tokenIdentitiesAreEquivalent,
+} from '../core/index.js';
 import { PublicWarningV1Schema } from '../external-data/index.js';
-import { CanonicalTokenIdentifierV1Schema } from '../internal/canonical-token.js';
 import {
   createFreshDataResultV1Schema,
   PositiveDecimalStringSchema,
 } from '../internal/fresh-data.js';
-
-function canonicalTokenKey(token: TokenIdentifier): string {
-  return `${token.chainId}:${token.address.toLowerCase()}`;
-}
 
 const RequestedTokensSchema = z
   .array(CanonicalTokenIdentifierV1Schema)
@@ -20,7 +19,19 @@ const RequestedTokensSchema = z
     const seen = new Set<string>();
 
     tokens.forEach((token, index) => {
-      const key = canonicalTokenKey(token);
+      // superRefine still runs even when an element already failed its own
+      // chainId/address schema check (zod marks that "dirty", not
+      // "aborted"). canonicalTokenIdentityKey validates through the public
+      // schema and throws for that already-invalid token; its own field
+      // issue is already reported, so skip the duplicate-identity check
+      // instead of letting the throw escape as an uncaught error.
+      let key: string;
+
+      try {
+        key = canonicalTokenIdentityKey(token);
+      } catch {
+        return;
+      }
 
       if (seen.has(key)) {
         context.addIssue({
@@ -83,7 +94,23 @@ export const TokenMarketSnapshotEnvelopeV1Schema = z
     snapshot.items.forEach((item, index) => {
       const requestedToken = snapshot.requested_tokens[index];
 
-      if (requestedToken && canonicalTokenKey(item.subject) !== canonicalTokenKey(requestedToken)) {
+      if (!requestedToken) {
+        return;
+      }
+
+      // See the matching comment in RequestedTokensSchema: an already
+      // schema-invalid subject or requested token makes
+      // tokenIdentitiesAreEquivalent throw; its own field issue is already
+      // reported, so skip the ordering check for it here.
+      let equivalent: boolean;
+
+      try {
+        equivalent = tokenIdentitiesAreEquivalent(item.subject, requestedToken);
+      } catch {
+        return;
+      }
+
+      if (!equivalent) {
         context.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'items must preserve requested token order',

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ADR 0002 — Chain-aware Canonical Token Identity</title>
+  <link rel="stylesheet" href="../specs/.style/spec.css">
+  <script defer src="../specs/.viz/runtime.js"></script>
+</head>
+<body>
+<main>
+  <header data-anchor="canonical-identity-adr-title">
+    <p class="eyebrow">Accepted architecture decision · EMB-1359</p>
+    <h1>Chain-aware canonical token identity</h1>
+    <p class="lede">Token identity comparison follows the address semantics of its chain id, dispatched by one pure, conservative classifier owned by <code>@emberai/onchain-actions-contracts/core</code>, instead of one unconditional lowercase rule. The one canonical evm domain representation is EIP-55 — never lowercase.</p>
+  </header>
+  <section data-anchor="canonical-identity-adr-context">
+    <h2>Context</h2>
+    <p>The contracts package's private <code>canonicalTokenKey</code> lowercased every token address before comparing or keying it. That is correct for EVM equivalence, but Solana Base58 addresses are case-sensitive: two distinct, valid Solana public keys differing only in case were treated as duplicates in the token-market request and rejected as an ordering mismatch in the envelope.</p>
+    <p>The public <code>TokenIdentifier.chainId</code> field is an arbitrary non-empty string, not a self-describing chain identifier. Current EVM callers use legacy decimal Ember chain ids such as <code>42161</code>; an existing internal Solana normalization utility uses the legacy literal <code>solana</code>. The address string alone cannot reliably determine its own family, so the family must be derived from <code>chainId</code>.</p>
+    <p>An initial correction chose lowercase as the canonical evm representation. Human Review rejected that choice: the system had accumulated repeated identity bugs precisely because equality, storage, provider matching, and public serialization used different case conventions for the same address. A public EIP-55 form plus a second, internal lowercase-keyed convention would have reintroduced that exact class of bug inside this Module. EIP-55 — not lowercase — is the one canonical evm domain representation after ingress.</p>
+  </section>
+  <section data-anchor="canonical-identity-adr-decision">
+    <h2>Decision</h2>
+    <p>One pure, deep <code>CanonicalTokenIdentity</code> Module in <code>./core</code> owns identity validation, normalization, keying, and equality for every consumer: token-market request uniqueness, envelope result-order checks, and the <code>TokenPriceReader</code> host capability all delegate to it rather than reimplementing string policy.</p>
+    <p>Chain-family dispatch is a single conservative classifier, not a chain registry:</p>
+    <table>
+      <thead><tr><th><code>chainId</code> shape</th><th>Family</th></tr></thead>
+      <tbody>
+        <tr><td>Legacy decimal Ember chain id (e.g. <code>42161</code>)</td><td><code>evm</code> — case-insensitive; canonicalizes to the deterministic EIP-55 checksum form</td></tr>
+        <tr><td>Legacy <code>solana</code> literal</td><td><code>solana</code> — case-sensitive</td></tr>
+        <tr><td>Self-describing CAIP-2 <code>eip155:*</code></td><td><code>evm</code>, derived from the namespace</td></tr>
+        <tr><td>Self-describing CAIP-2 <code>solana:*</code></td><td><code>solana</code>, derived from the namespace</td></tr>
+        <tr><td>Anything else</td><td><code>opaque</code> — exact-case, never silently lowercased</td></tr>
+      </tbody>
+    </table>
+    <p>An <code>evm</code> address is validated and canonicalized, not merely case-folded: <code>CanonicalTokenIdentifierV1Schema</code> requires a full <code>0x</code>-prefixed 20-byte hexadecimal address, accepts either legacy all-lowercase input or an already-checksummed EIP-55 address, rejects an invalid mixed-case checksum outright, and always emits the deterministic EIP-55 checksum form. There is exactly one canonical evm representation behind this Interface — EIP-55 — used identically by normalization, canonical keying, equality, token-market request/envelope validation, and the <code>TokenPriceReader</code> Interface; no second, lowercase-keyed convention exists anywhere in this Module. viem's <code>isAddress</code>/<code>getAddress</code> are used internally as the evm family-specific codec: <code>isAddress(address, { strict: true })</code> is what makes an invalid mixed-case checksum a hard validation failure (<code>getAddress</code> alone would silently re-checksum from the lowercase form instead of rejecting a bad checksum).</p>
+    <p>Lowercase remains valid only as ingress a caller may submit for a legacy all-lowercase address; it is never canonical output. A provider's documented wire Interface may still require lowercase on the wire — that projection stays local to the provider Adapter and is normalized back to the canonical EIP-55 representation before crossing the contracts Seam. Contracts, caches, persistence, evidence, and public responses only ever carry the canonical EIP-55 form. This includes graph persistence and graph projections by name: canonical graph properties, keys/indexes, reconciliation evidence, and reads all use EIP-55, not a lowercase-keyed convention. A frozen legacy graph property may remain lowercase only as a reversible migration artifact — never as a second canonical authority — and only until it is backfilled. Dual-projection/backfill of existing lowercase graph data onto the EIP-55 representation is implementation work this ADR does not perform; it is owned by <a href="https://linear.app/emberai/issue/EMB-1364">EMB-1364</a>, tracked as this ADR's open consequence below.</p>
+    <p>The classifier is pure and synchronous: it never queries Memgraph or another live registry, and its absence never invalidates an otherwise structurally valid token identity.</p>
+    <p>Four implementation invariants keep this decision precise:</p>
+    <ul>
+      <li>CAIP-2 matching enforces the full CAIP-2 grammar, not only the namespace: the namespace is <em>syntactically</em> lowercase-only, not case-folded — <code>EIP155:*</code> and <code>SOLANA:*</code> are not valid CAIP-2 identifiers — and the reference must match <code>[-_a-zA-Z0-9]{1,32}</code>, so a reference containing a colon, whitespace, or more than 32 characters is likewise not valid CAIP-2 syntax. Either defect remains <code>opaque</code> exact-case rather than receiving <code>evm</code>/<code>solana</code> semantics.</li>
+      <li><code>canonicalTokenIdentityKey</code> encodes the <code>(chainId, address)</code> pair with an unambiguous tuple encoding (not delimiter concatenation), because both a V1 chain id and a CAIP-2 chain id may themselves contain <code>:</code> — e.g. <code>(eip155:1, 0xab)</code> and <code>(eip155, 1:0xab)</code> would otherwise collide.</li>
+      <li>Every function in the Interface — including <code>classifyTokenChainFamily</code> itself — validates its <code>chainId</code>/<code>address</code> input through the same non-empty/trimmed invariant before dispatching on it, so no public entry point can be called directly to bypass that invariant.</li>
+      <li><code>CanonicalTokenIdentifierV1Schema</code> is the single validation point for the evm address-format/checksum invariant: it runs as a schema transform, so every public identity operation — direct schema parse or the <code>normalizeCanonicalTokenIdentifier</code>/<code>canonicalTokenIdentityKey</code>/<code>tokenIdentitiesAreEquivalent</code> functions, which all delegate to it — normalizes identically, and no caller can reach a canonical key by constructing a parsed value that bypasses the schema.</li>
+      <li><code>CanonicalTokenIdentifierV1</code> is a branded (nominal), not structural, type. A plain <code>{ chainId, address }</code> object literal — however well-formed — does not satisfy it; the compiler rejects that assignment. This is what makes the <code>TokenPriceReader</code> Interface's <code>readTokenPrices(tokenUids: readonly CanonicalTokenIdentifierV1[])</code> parameter unforgeable: a caller cannot hand it raw, unvalidated input merely because the fields line up, and must instead route it through <code>CanonicalTokenIdentifierV1Schema</code> or <code>normalizeCanonicalTokenIdentifier</code> first.</li>
+    </ul>
+  </section>
+  <section data-anchor="canonical-identity-adr-tradeoffs">
+    <h2>Trade-offs</h2>
+    <table>
+      <thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
+      <tbody>
+        <tr><td>Infer the address family from the address shape</td><td>The existing private <code>normalizeToken.ts</code> utility did this and it does not generalize; <code>chainId</code> semantics must be the authority, not the address string.</td></tr>
+        <tr><td>Look up chain type from a live chain registry (e.g. Memgraph)</td><td>The contracts package must stay deterministic and usable without database availability; registry absence must never invalidate a structurally valid token.</td></tr>
+        <tr><td>Enumerate every supported chain id individually</td><td>Unbounded maintenance surface for a V1 correction; the CAIP-2 namespace and two legacy conventions already cover the real cases without a table.</td></tr>
+        <tr><td>Let each plugin/endpoint normalize identity itself</td><td>Reintroduces the original bug's root cause: duplicated, drifting string policy instead of one authority.</td></tr>
+        <tr><td>Fail closed (reject) on an unknown chain family instead of preserving exact case</td><td>The operator refinement explicitly chose preserve-exact-case over rejection for V1; failing closed would reject structurally valid, provider-supported tokens on opaque chains that have no other current defect.</td></tr>
+        <tr><td>Canonicalize evm addresses to lowercase, with EIP-55 only as a public display form</td><td>Human Review rejected this: it recreates the exact bug class this ADR exists to close — equality, storage, provider matching, and public serialization drifting across two case conventions for the same address. One representation, enforced at ingress, has no such drift surface.</td></tr>
+        <tr><td>Accept only already-checksummed EIP-55 input and reject lowercase</td><td>Would break the legacy all-lowercase convention still in use by current callers with no compatibility path; accepting lowercase ingress while emitting EIP-55 canonical output covers both without weakening the checksum invariant on output.</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section data-anchor="canonical-identity-adr-consequences">
+    <h2>Consequences</h2>
+    <ul>
+      <li>Case-distinct valid Solana addresses are always distinct identities; identical Solana addresses are always equal.</li>
+      <li>An opaque/unsupported chain id never has its address silently lowercased; extending semantics for a future opaque family requires extending this one classifier or first making <code>chainId</code> self-describing.</li>
+      <li>No plugin, endpoint, or downstream consumer may implement its own address-case normalization; all of them call the shared Interface.</li>
+      <li>A lowercase and an EIP-55-checksummed spelling of the same evm address are the same canonical identity: submitting both in one token-market request is a true duplicate and is rejected, exactly like submitting the same address twice.</li>
+      <li>A provider that requires lowercase on its own wire format keeps that projection entirely inside its Adapter; the canonical EIP-55 form is what crosses the contracts Seam, and no lowercase-keyed convention may re-enter contracts, caches, persistence, evidence, or public responses — including graph persistence: canonical graph properties, keys/indexes, reconciliation evidence, and reads all use EIP-55.</li>
+      <li>An existing frozen lowercase graph property is tolerated only as a reversible migration artifact, never as canonical authority; migrating it to a dual EIP-55 projection with backfill is out of this contracts-package correction's scope and is owned by <a href="https://linear.app/emberai/issue/EMB-1364">EMB-1364</a>.</li>
+      <li>A future migration from legacy chain ids to CAIP-2 is a separate compatibility decision and is not required by this correction.</li>
+    </ul>
+  </section>
+  <section data-anchor="canonical-identity-adr-references">
+    <h2>References</h2>
+    <p><a href="../specs/domains/external-data-evidence-contract.spec.html">External data evidence domain spec</a> · <a href="https://linear.app/emberai/issue/EMB-1359">EMB-1359</a> · <a href="0001-neutral-data-contract-package.spec.html">ADR 0001</a></p>
+  </section>
+</main>
+</body>
+</html>

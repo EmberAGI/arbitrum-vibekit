@@ -58,6 +58,7 @@
   },
   "devDependencies": {
     "tsdown": "catalog:",
+    "viem": "catalog:",
     "zod": "^3.25.76"
   },
   "license": "MIT",

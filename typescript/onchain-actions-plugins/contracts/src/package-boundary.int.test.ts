@@ -16,6 +16,14 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import {
+  EVM_ADDRESS_CHECKSUMMED,
+  EVM_ADDRESS_INVALID_CHECKSUM,
+  EVM_ADDRESS_LOWERCASE,
+  EVM_ZERO_ADDRESS,
+  SOLANA_ADDRESS_MIXED_CASE,
+} from './core/canonicalTokenIdentity.testFixtures.js';
+
 const execFileAsync = promisify(execFile);
 const packageRoot = path.resolve(import.meta.dirname, '..');
 const workspaceRoot = path.resolve(packageRoot, '../..');
@@ -101,6 +109,25 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (!core.TokenIdentifierSchema || !plugins.TokenPriceReadResultV1Schema ||
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
+      // Fixture-validity proof: a case-transform pair is only a meaningful test
+      // of Solana case-sensitivity if both members genuinely decode to a
+      // 32-byte key -- lowercasing a Base58 string does not, in general,
+      // preserve decoded byte length. Mirrors decodedBase58ByteLength from
+      // ./core/canonicalTokenIdentity.testFixtures.ts.
+      const base58ByteLength = (value) => {
+        const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let numericValue = 0n;
+        for (const character of value) {
+          const digitValue = alphabet.indexOf(character);
+          if (digitValue === -1) return null;
+          numericValue = numericValue * 58n + BigInt(digitValue);
+        }
+        let leadingZeroBytes = 0;
+        for (const character of value) { if (character !== "1") break; leadingZeroBytes++; }
+        let magnitudeByteCount = 0;
+        while (numericValue > 0n) { numericValue /= 256n; magnitudeByteCount++; }
+        return leadingZeroBytes + magnitudeByteCount;
+      };
       const { z } = await import("zod");
       const genericResult = evidence.createDataResultV1Schema(
         z.string().min(1),
@@ -187,6 +214,166 @@ describe('packed @emberai/onchain-actions-contracts', () => {
         subject: emptyToken,
         reason: "not_found",
       }).success) process.exit(5);
+      if (typeof core.classifyTokenChainFamily !== "function" ||
+          typeof core.normalizeCanonicalTokenIdentifier !== "function" ||
+          typeof core.canonicalTokenIdentityKey !== "function" ||
+          typeof core.tokenIdentitiesAreEquivalent !== "function") process.exit(20);
+      if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(21);
+      if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(22);
+      if (!core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+      )) process.exit(23);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "solana", address: "MixedCaseAddress" },
+        { chainId: "solana", address: "mixedcaseaddress" },
+      )) process.exit(24);
+      // EIP-55 is the sole canonical evm representation: normalizing a
+      // lowercase address returns the checksummed form, and an
+      // already-checksummed address round-trips unchanged.
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+      ).address !== "${EVM_ADDRESS_CHECKSUMMED}") process.exit(80);
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+      ).address !== "${EVM_ADDRESS_CHECKSUMMED}") process.exit(81);
+      // An invalid mixed-case checksum is rejected, not silently corrected
+      // or lowercased.
+      let evmChecksumThrew = false;
+      try {
+        core.normalizeCanonicalTokenIdentifier(
+          { chainId: "42161", address: "${EVM_ADDRESS_INVALID_CHECKSUM}" },
+        );
+      } catch {
+        evmChecksumThrew = true;
+      }
+      if (!evmChecksumThrew) process.exit(82);
+      // The zero/native placeholder address has no hexadecimal letters, so
+      // EIP-55 checksumming is a no-op for it -- it must still parse and
+      // compare exactly as before under the stricter format/checksum
+      // validation, proven here through the packed public entrypoint.
+      const zeroAddressToken = { chainId: "42161", address: "${EVM_ZERO_ADDRESS}" };
+      if (core.normalizeCanonicalTokenIdentifier(zeroAddressToken).address !== "${EVM_ZERO_ADDRESS}")
+        process.exit(84);
+      if (!core.tokenIdentitiesAreEquivalent(zeroAddressToken, zeroAddressToken)) process.exit(85);
+      // Because both forms normalize to the same canonical (EIP-55) key, a
+      // request naming the lowercase and checksummed spelling of the same
+      // address is a true duplicate and must be rejected -- unlike the
+      // Solana case below, where case-distinct addresses are genuinely
+      // distinct tokens.
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [
+          { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+          { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+        ],
+      }).success) process.exit(83);
+      const solanaTokenMixedCase = { chainId: "solana", address: "${SOLANA_ADDRESS_MIXED_CASE}" };
+      const solanaTokenLowerCased = { chainId: "solana", address: solanaTokenMixedCase.address.toLowerCase() };
+      if (base58ByteLength(solanaTokenMixedCase.address) !== 32) process.exit(60);
+      if (base58ByteLength(solanaTokenLowerCased.address) !== 32) process.exit(61);
+      if (!endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [solanaTokenMixedCase, solanaTokenLowerCased],
+      }).success) process.exit(25);
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [solanaTokenMixedCase, solanaTokenMixedCase],
+      }).success) process.exit(26);
+      if (core.classifyTokenChainFamily("EIP155:42161") !== "opaque") process.exit(40);
+      if (core.classifyTokenChainFamily("SOLANA:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp") !== "opaque")
+        process.exit(41);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "EIP155:42161", address: "0xABCDEF" },
+        { chainId: "EIP155:42161", address: "0xabcdef" },
+      )) process.exit(42);
+      const collisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "${EVM_ADDRESS_LOWERCASE}" });
+      const collisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:${EVM_ADDRESS_LOWERCASE}" });
+      if (collisionKeyA === collisionKeyB) process.exit(43);
+      let bypassThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: "", address: "0xabc" });
+      } catch {
+        bypassThrew = true;
+      }
+      if (!bypassThrew) process.exit(44);
+
+      // Different chain ids with the same address must remain distinct identities.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "1", address: "${EVM_ADDRESS_LOWERCASE}" },
+      )) process.exit(45);
+
+      // An opaque (non-EVM, non-Solana) chain family must never silently collapse case.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "unknown-chain-family", address: "Case-Sensitive-ID" },
+        { chainId: "unknown-chain-family", address: "case-sensitive-id" },
+      )) process.exit(46);
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "unknown-chain-family", address: "Case-Sensitive-ID" },
+      ).address !== "Case-Sensitive-ID") process.exit(47);
+
+      // Untrimmed input must be rejected, not silently trimmed into a valid key.
+      let untrimmedThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: " 42161 ", address: "0xabcdef" });
+      } catch {
+        untrimmedThrew = true;
+      }
+      if (!untrimmedThrew) process.exit(48);
+
+      // classifyTokenChainFamily is itself a public identity operation: it must
+      // reject whitespace-padded/empty input instead of silently trimming it.
+      let classifyUntrimmedThrew = false;
+      try {
+        core.classifyTokenChainFamily(" 42161 ");
+      } catch {
+        classifyUntrimmedThrew = true;
+      }
+      if (!classifyUntrimmedThrew) process.exit(70);
+
+      // A malformed CAIP-2 reference (embedded colon, whitespace, or over 32
+      // characters) stays opaque rather than deriving evm/solana semantics.
+      if (core.classifyTokenChainFamily("eip155:1:extra") !== "opaque") process.exit(71);
+      if (core.classifyTokenChainFamily("eip155:has space") !== "opaque") process.exit(72);
+      if (core.classifyTokenChainFamily("solana:" + "a".repeat(33)) !== "opaque") process.exit(73);
+
+      // Envelope ordering + cardinality, exercised with case-sensitive Solana results
+      // to prove the packed artifact enforces both invariants together.
+      const freshFreshness = prematureStale.freshness; // received_at <= fresh_until: valid for "available"
+      const solanaResult = (address) => ({
+        status: "available",
+        subject: { chainId: "solana", address },
+        value: { price_usd: "1.00" },
+        freshness: freshFreshness,
+        provenance: prematureStale.provenance,
+      });
+      const solanaAddressUpper = "${SOLANA_ADDRESS_MIXED_CASE}";
+      const solanaAddressLower = solanaAddressUpper.toLowerCase();
+      const wellOrderedEnvelope = {
+        schema_version: "1",
+        snapshot_id: "well-ordered-solana-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        requested_tokens: [
+          { chainId: "solana", address: solanaAddressUpper },
+          { chainId: "solana", address: solanaAddressLower },
+        ],
+        items: [solanaResult(solanaAddressUpper), solanaResult(solanaAddressLower)],
+      };
+      if (!endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse(wellOrderedEnvelope).success)
+        process.exit(50);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...wellOrderedEnvelope,
+        snapshot_id: "swapped-solana-snapshot",
+        items: [solanaResult(solanaAddressLower), solanaResult(solanaAddressUpper)],
+      }).success) process.exit(51);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...wellOrderedEnvelope,
+        snapshot_id: "cardinality-mismatch-snapshot",
+        items: [solanaResult(solanaAddressUpper)],
+      }).success) process.exit(52);
+
       try {
         await import("@emberai/onchain-actions-contracts/dist/internal/fresh-data.js");
         process.exit(3);
@@ -202,6 +389,191 @@ describe('packed @emberai/onchain-actions-contracts', () => {
       if (!core.TokenIdentifierSchema || !plugins.TokenPriceReadResultV1Schema ||
           !endpoints.TokenMarketSnapshotEnvelopeV1Schema ||
           !evidence.FreshnessEvidenceV1Schema) process.exit(2);
+      if (typeof core.classifyTokenChainFamily !== "function") process.exit(30);
+      // Fixture-validity proof: mirrors decodedBase58ByteLength from
+      // ./core/canonicalTokenIdentity.testFixtures.ts -- see the ESM probe above.
+      const cjsBase58ByteLength = (value) => {
+        const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+        let numericValue = 0n;
+        for (const character of value) {
+          const digitValue = alphabet.indexOf(character);
+          if (digitValue === -1) return null;
+          numericValue = numericValue * 58n + BigInt(digitValue);
+        }
+        let leadingZeroBytes = 0;
+        for (const character of value) { if (character !== "1") break; leadingZeroBytes++; }
+        let magnitudeByteCount = 0;
+        while (numericValue > 0n) { numericValue /= 256n; magnitudeByteCount++; }
+        return leadingZeroBytes + magnitudeByteCount;
+      };
+
+      // EVM: case variants on the same chain compare equal, and both
+      // normalize to the deterministic EIP-55 checksum form.
+      if (core.classifyTokenChainFamily("42161") !== "evm") process.exit(31);
+      if (!core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+      )) process.exit(32);
+      if (core.normalizeCanonicalTokenIdentifier(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+      ).address !== "${EVM_ADDRESS_CHECKSUMMED}") process.exit(80);
+      let cjsEvmChecksumThrew = false;
+      try {
+        core.normalizeCanonicalTokenIdentifier(
+          { chainId: "42161", address: "${EVM_ADDRESS_INVALID_CHECKSUM}" },
+        );
+      } catch {
+        cjsEvmChecksumThrew = true;
+      }
+      if (!cjsEvmChecksumThrew) process.exit(81);
+
+      // The zero/native placeholder address has no hexadecimal letters, so
+      // EIP-55 checksumming is a no-op for it -- it must still parse and
+      // compare exactly as before under the stricter format/checksum
+      // validation, proven here through the packed public entrypoint.
+      const cjsZeroAddressToken = { chainId: "42161", address: "${EVM_ZERO_ADDRESS}" };
+      if (core.normalizeCanonicalTokenIdentifier(cjsZeroAddressToken).address !== "${EVM_ZERO_ADDRESS}")
+        process.exit(83);
+      if (!core.tokenIdentitiesAreEquivalent(cjsZeroAddressToken, cjsZeroAddressToken)) process.exit(84);
+
+      // Solana: identical addresses equal, case-distinct addresses remain distinct.
+      if (core.classifyTokenChainFamily("solana") !== "solana") process.exit(33);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "solana", address: "MixedCaseAddress" },
+        { chainId: "solana", address: "mixedcaseaddress" },
+      )) process.exit(34);
+      if (!core.tokenIdentitiesAreEquivalent(
+        { chainId: "solana", address: "MixedCaseAddress" },
+        { chainId: "solana", address: "MixedCaseAddress" },
+      )) process.exit(35);
+
+      // Different chain ids remain distinct even with the same address.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+        { chainId: "1", address: "${EVM_ADDRESS_LOWERCASE}" },
+      )) process.exit(36);
+
+      // Opaque/unknown chain families never silently collapse case.
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "unknown-chain-family", address: "Case-Sensitive-ID" },
+        { chainId: "unknown-chain-family", address: "case-sensitive-id" },
+      )) process.exit(37);
+
+      // Uppercase pseudo-CAIP-2 ids are invalid CAIP-2 and stay opaque exact-case.
+      if (core.classifyTokenChainFamily("EIP155:42161") !== "opaque") process.exit(38);
+      if (core.tokenIdentitiesAreEquivalent(
+        { chainId: "EIP155:42161", address: "0xABCDEF" },
+        { chainId: "EIP155:42161", address: "0xabcdef" },
+      )) process.exit(39);
+
+      // Unambiguous (chainId, address) key encoding: a shared colon must not collide.
+      const cjsCollisionKeyA = core.canonicalTokenIdentityKey({ chainId: "eip155:1", address: "${EVM_ADDRESS_LOWERCASE}" });
+      const cjsCollisionKeyB = core.canonicalTokenIdentityKey({ chainId: "eip155", address: "1:${EVM_ADDRESS_LOWERCASE}" });
+      if (cjsCollisionKeyA === cjsCollisionKeyB) process.exit(40);
+
+      // Public schema validation cannot be bypassed with empty, all-whitespace, or
+      // leading/trailing-whitespace-padded input.
+      let cjsBypassThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: "   ", address: "0xabc" });
+      } catch {
+        cjsBypassThrew = true;
+      }
+      if (!cjsBypassThrew) process.exit(41);
+      let cjsUntrimmedThrew = false;
+      try {
+        core.canonicalTokenIdentityKey({ chainId: " 42161 ", address: "0xabcdef" });
+      } catch {
+        cjsUntrimmedThrew = true;
+      }
+      if (!cjsUntrimmedThrew) process.exit(42);
+
+      // classifyTokenChainFamily rejects whitespace-padded/empty input instead
+      // of silently trimming it, mirroring the ESM matrix.
+      let cjsClassifyUntrimmedThrew = false;
+      try {
+        core.classifyTokenChainFamily(" 42161 ");
+      } catch {
+        cjsClassifyUntrimmedThrew = true;
+      }
+      if (!cjsClassifyUntrimmedThrew) process.exit(70);
+
+      // A malformed CAIP-2 reference stays opaque rather than deriving evm/solana semantics.
+      if (core.classifyTokenChainFamily("eip155:1:extra") !== "opaque") process.exit(71);
+      if (core.classifyTokenChainFamily("eip155:has space") !== "opaque") process.exit(72);
+      if (core.classifyTokenChainFamily("solana:" + "a".repeat(33)) !== "opaque") process.exit(73);
+
+      // Request uniqueness accepts case-distinct Solana identities, rejects true duplicates.
+      const cjsSolanaMixedCase = { chainId: "solana", address: "${SOLANA_ADDRESS_MIXED_CASE}" };
+      const cjsSolanaLowerCased = { chainId: "solana", address: cjsSolanaMixedCase.address.toLowerCase() };
+      if (cjsBase58ByteLength(cjsSolanaMixedCase.address) !== 32) process.exit(60);
+      if (cjsBase58ByteLength(cjsSolanaLowerCased.address) !== 32) process.exit(61);
+      if (!endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [cjsSolanaMixedCase, cjsSolanaLowerCased],
+      }).success) process.exit(43);
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [cjsSolanaMixedCase, cjsSolanaMixedCase],
+      }).success) process.exit(44);
+
+      // Unlike Solana, an evm lowercase/checksummed spelling pair is the same
+      // canonical (EIP-55) identity, so the request schema must reject it as
+      // a true duplicate.
+      if (endpoints.TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: "1",
+        tokens: [
+          { chainId: "42161", address: "${EVM_ADDRESS_LOWERCASE}" },
+          { chainId: "42161", address: "${EVM_ADDRESS_CHECKSUMMED}" },
+        ],
+      }).success) process.exit(82);
+
+      // Envelope ordering + cardinality, mirroring the ESM matrix.
+      const cjsFreshness = {
+        observed_at: "2026-07-30T12:00:00.000Z",
+        received_at: "2026-07-30T12:00:01.000Z",
+        fresh_until: "2026-07-30T12:05:00.000Z",
+        observed_at_source: "provider",
+      };
+      const cjsProvenance = {
+        provider_id: "coingecko",
+        capability: "token_usd_price",
+        canonical_subject: "token:arb",
+        source_class: "provider_api",
+      };
+      const cjsSolanaResult = (address) => ({
+        status: "available",
+        subject: { chainId: "solana", address },
+        value: { price_usd: "1.00" },
+        freshness: cjsFreshness,
+        provenance: cjsProvenance,
+      });
+      const cjsWellOrderedEnvelope = {
+        schema_version: "1",
+        snapshot_id: "cjs-well-ordered-solana-snapshot",
+        quote_currency: "USD",
+        completeness: "complete",
+        requested_tokens: [cjsSolanaMixedCase, cjsSolanaLowerCased],
+        items: [
+          cjsSolanaResult(cjsSolanaMixedCase.address),
+          cjsSolanaResult(cjsSolanaLowerCased.address),
+        ],
+      };
+      if (!endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse(cjsWellOrderedEnvelope).success)
+        process.exit(45);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...cjsWellOrderedEnvelope,
+        snapshot_id: "cjs-swapped-solana-snapshot",
+        items: [
+          cjsSolanaResult(cjsSolanaLowerCased.address),
+          cjsSolanaResult(cjsSolanaMixedCase.address),
+        ],
+      }).success) process.exit(46);
+      if (endpoints.TokenMarketSnapshotEnvelopeV1Schema.safeParse({
+        ...cjsWellOrderedEnvelope,
+        snapshot_id: "cjs-cardinality-mismatch-snapshot",
+        items: [cjsSolanaResult(cjsSolanaMixedCase.address)],
+      }).success) process.exit(47);
     `;
 
     await expect(
@@ -235,6 +607,18 @@ describe('packed @emberai/onchain-actions-contracts', () => {
           }));
         },
       };
+
+      // AC17: the TokenPriceReader seam is unforgeable -- a raw
+      // {chainId, address} array was never validated/normalized through
+      // CanonicalTokenIdentifierV1Schema, so it must not satisfy
+      // readTokenPrices' parameter merely by structural shape. Checked
+      // against the packed tarball's own .d.ts/.d.cts output, not source.
+      const rawUnvalidatedTokens = [{ chainId: "42161", address: "not-an-address" }];
+      // @ts-expect-error a raw structural array is not a genuine
+      // CanonicalTokenIdentifierV1[] -- only values produced by
+      // CanonicalTokenIdentifierV1Schema (directly or via
+      // normalizeCanonicalTokenIdentifier) satisfy this parameter.
+      void reader.readTokenPrices(rawUnvalidatedTokens);
 
       void reader;
       void TokenIdentifierSchema;

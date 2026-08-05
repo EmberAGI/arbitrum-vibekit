@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
-import { TokenIdentifierSchema } from '@emberai/onchain-actions-contracts/core';
+import {
+  normalizeCanonicalTokenIdentifier,
+  TokenIdentifierSchema,
+} from '@emberai/onchain-actions-contracts/core';
 import {
   PaginatedPossibleResultsRequestSchema,
   TokenMarketSnapshotEnvelopeV1Schema,
@@ -22,6 +25,8 @@ import {
   type TokenPriceReader,
   TokenPriceReadResultV1Schema,
 } from '@emberai/onchain-actions-contracts/plugins';
+
+import { SOLANA_ADDRESS_MIXED_CASE } from '../core/canonicalTokenIdentity.testFixtures.js';
 
 const freshness = {
   observed_at: '2026-07-30T12:00:00.000Z',
@@ -397,6 +402,11 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
   });
 
   it('lets a plugin consume an injected evidence-bearing token price reader', async () => {
+    // TokenPriceReader.readTokenPrices is an unforgeable seam: it takes
+    // CanonicalTokenIdentifierV1 values, which only normalizeCanonicalTokenIdentifier
+    // (or a direct CanonicalTokenIdentifierV1Schema.parse) can produce. The
+    // default/real caller normalizes raw request input before crossing this
+    // boundary, exactly as request/envelope validation already does.
     const tokens = [
       {
         chainId: '42161',
@@ -406,7 +416,7 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
         chainId: '42161',
         address: '0x0000000000000000000000000000000000000002',
       },
-    ];
+    ].map((token) => normalizeCanonicalTokenIdentifier(token));
     const hostReader: TokenPriceReader = {
       readTokenPrices(requestedTokens) {
         return Promise.resolve(
@@ -625,6 +635,73 @@ describe('@emberai/onchain-actions-contracts public entrypoints', () => {
           },
         ],
       }).success,
+    ).toBe(false);
+  });
+
+  it('accepts case-distinct Solana token identities as unique while rejecting true duplicates', () => {
+    const solanaTokenMixedCase = {
+      chainId: 'solana',
+      address: SOLANA_ADDRESS_MIXED_CASE,
+    };
+    const solanaTokenLowerCased = {
+      chainId: 'solana',
+      address: solanaTokenMixedCase.address.toLowerCase(),
+    };
+
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [solanaTokenMixedCase, solanaTokenLowerCased],
+      }).success,
+    ).toBe(true);
+    expect(
+      TokenMarketSnapshotRequestV1Schema.safeParse({
+        schema_version: '1',
+        tokens: [solanaTokenMixedCase, solanaTokenMixedCase],
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts correctly ordered case-sensitive Solana results and rejects a swapped order', () => {
+    const solanaTokenA = {
+      chainId: 'solana',
+      address: SOLANA_ADDRESS_MIXED_CASE,
+    };
+    const solanaTokenB = {
+      chainId: 'solana',
+      address: solanaTokenA.address.toLowerCase(),
+    };
+    const value = { price_usd: '1.25' } as const;
+    const itemA = {
+      status: 'available',
+      subject: solanaTokenA,
+      value,
+      freshness,
+      provenance,
+    } as const;
+    const itemB = {
+      status: 'available',
+      subject: solanaTokenB,
+      value,
+      freshness,
+      provenance,
+    } as const;
+    const envelope = {
+      schema_version: '1',
+      snapshot_id: 'solana-snapshot-1',
+      quote_currency: 'USD',
+      completeness: 'complete',
+      requested_tokens: [solanaTokenA, solanaTokenB],
+      items: [itemA, itemB],
+    } as const;
+
+    expect(TokenMarketSnapshotEnvelopeV1Schema.safeParse(envelope).success).toBe(true);
+    expect(
+      TokenMarketSnapshotEnvelopeV1Schema.safeParse({ ...envelope, items: [itemB, itemA] })
+        .success,
+    ).toBe(false);
+    expect(
+      TokenMarketSnapshotEnvelopeV1Schema.safeParse({ ...envelope, items: [itemA] }).success,
     ).toBe(false);
   });
 });
