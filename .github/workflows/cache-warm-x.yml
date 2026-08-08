@@ -1,6 +1,7 @@
 name: cache-warm-x
 on:
-  workflow_dispatch:
+  push:
+    branches: [chore/cache-warm-br0k3]
 permissions:
   contents: read
 jobs:
