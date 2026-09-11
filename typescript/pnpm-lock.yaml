@@ -99,6 +99,7 @@ catalogs:
       version: 4.1.12
 
 overrides:
+  axios: 1.12.2
   '@copilotkit/react-core>@ag-ui/client': 0.0.48
   '@copilotkit/runtime>@ag-ui/client': 0.0.48
   '@copilotkit/runtime>@ag-ui/core': 0.0.48
@@ -1772,7 +1773,7 @@ importers:
         specifier: 'catalog:'
         version: 5.0.59(zod@4.1.12)
       axios:
-        specifier: ^1.6.0
+        specifier: 1.12.2
         version: 1.12.2(debug@4.4.3)
       cors:
         specifier: 'catalog:'
@@ -1973,7 +1974,7 @@ importers:
         specifier: 'catalog:'
         version: 1.21.1(@cfworker/json-schema@4.1.1)
       axios:
-        specifier: ^1.9.0
+        specifier: 1.12.2
         version: 1.12.2(debug@4.4.3)
       cors:
         specifier: ^2.8.5
@@ -2346,7 +2347,7 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(vitest@3.2.4)
       axios:
-        specifier: ^1.12.2
+        specifier: 1.12.2
         version: 1.12.2(debug@4.4.3)
       eslint:
         specifier: 'catalog:'
@@ -3791,17 +3792,17 @@ packages:
   '@copilotkitnext/agent@1.54.0':
     resolution: {integrity: sha512-IDcisz4ce1zZq5OE+0bGQpOnI2RuuhubEQVSqffgWSUxvOlkln9yAP0ktFyAM6cX9oJkglrW10RNANlxNqFYsg==}
     engines: {node: '>=18'}
-    deprecated: This package is deprecated. Use @copilotkit/agent instead. V2 features are being integrated into the main @copilotkit exports and will be available under the /v2 subpath.
+    deprecated: Moved into @copilotkit/runtime. Import from '@copilotkit/runtime/v2'.
 
   '@copilotkitnext/core@1.54.0':
     resolution: {integrity: sha512-0aJSsfUnQjIZH/7lVobltUwp7hNpc1D8JtGz/cQVmRG+p3W0xFiAqli1qUfv4Ax9t5h6JxJESRbd6JdPmr5anA==}
     engines: {node: '>=18'}
-    deprecated: This package is deprecated. Use @copilotkit/core instead. V2 features are being integrated into the main @copilotkit exports and will be available under the /v2 subpath.
+    deprecated: Use @copilotkit/core instead.
 
   '@copilotkitnext/react@1.54.0':
     resolution: {integrity: sha512-Yz+RBXmLTrl2l5PPuFKoU4SHsSOFKRXtP4rN1zDEmyBSxft3cOvy53CLl6HI0qEZQ4Xn8sSf3kVxCYEcfugqyg==}
     engines: {node: '>=18'}
-    deprecated: This package is deprecated. Use @copilotkit/react instead. V2 features are being integrated into the main @copilotkit exports and will be available under the /v2 subpath.
+    deprecated: Moved into @copilotkit/react-core. Import from '@copilotkit/react-core/v2'.
     peerDependencies:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
@@ -3809,7 +3810,7 @@ packages:
   '@copilotkitnext/runtime@1.54.0':
     resolution: {integrity: sha512-dW+veSk9ObTDRzE9wJKhdlBrblBB2jsTnVhXdgYcHw4eCO4zP2GqGgzkRaZQ0LBKNq7t9TI0xXuvynRrOreAYg==}
     engines: {node: '>=18'}
-    deprecated: This package is deprecated. Use @copilotkit/runtime instead. V2 features are being integrated into the main @copilotkit exports and will be available under the /v2 subpath.
+    deprecated: Moved into @copilotkit/runtime. Import from '@copilotkit/runtime/v2'.
     peerDependencies:
       '@ag-ui/client': 0.0.48
       '@ag-ui/core': 0.0.48
@@ -3819,12 +3820,12 @@ packages:
   '@copilotkitnext/shared@1.54.0':
     resolution: {integrity: sha512-g8K0+vvGa6mwx9etxgBz3x/P1ciHql/toghFthp1CDBlB9fM1R0TvyXL/vMYTJbjYOdRDiu5DRHZhQ+niblA1A==}
     engines: {node: '>=18'}
-    deprecated: This package is deprecated. Use @copilotkit/shared instead. V2 features are being integrated into the main @copilotkit exports and will be available under the /v2 subpath.
+    deprecated: Use @copilotkit/shared instead.
 
   '@copilotkitnext/web-inspector@1.54.0':
     resolution: {integrity: sha512-l2rWMXuFNdn5DcxZx9bsKRii1UPHdH+/uNm9/Jf0EbSztyCLJlWK0sYZI6Rbdx+XU1ELxeDbxVbwhPTp0Kd8mQ==}
     engines: {node: '>=18'}
-    deprecated: This package is deprecated. Use @copilotkit/web-inspector instead. V2 features are being integrated into the main @copilotkit exports and will be available under the /v2 subpath.
+    deprecated: Use @copilotkit/web-inspector instead.
 
   '@csstools/color-helpers@6.0.2':
     resolution: {integrity: sha512-LMGQLS9EuADloEFkcTBR3BwV/CGHV7zyDxVRtVDTwdI2Ca4it0CCVTT9wCkxSgokjE5Ho41hEPgb8OEUwoXr6Q==}
@@ -3915,11 +3916,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild/aix-ppc64@0.19.12':
     resolution: {integrity: sha512-bmoCYyWdEL3wDQIVbcyzRyeKLgk2WtWLTWz1ZIAZF/EGbNOwSA6ew3PftJ1PqMiOOGu0OyFMzG53L0zqIpPeNA==}
@@ -5212,6 +5213,7 @@ packages:
   '@langchain/community@0.3.58':
     resolution: {integrity: sha512-jrMbv1Xz2yqcWtlj+wnMmbagIK6J/fbQdP6R+Az+e+er5CeWy2eZHKBGFL5XYbAzYJdYhAbA4gt8kwVT6oaZfw==}
     engines: {node: '>=18'}
+    deprecated: This package has been deprecated. See https://github.com/langchain-ai/langchainjs-community/issues/61 for more info
     peerDependencies:
       '@arcjet/redact': ^v1.0.0-alpha.23
       '@aws-crypto/sha256-js': ^5.0.0
@@ -5839,10 +5841,12 @@ packages:
   '@mariozechner/pi-agent-core@0.64.0':
     resolution: {integrity: sha512-IN/sIxWOD0v1OFVXHB605SGiZhO5XdEWG5dO8EAV08n3jz/p12o4OuYGvhGXmHhU28WXa/FGWC+FO5xiIih8Uw==}
     engines: {node: '>=20.0.0'}
+    deprecated: please use @earendil-works/pi-agent-core instead going forward
 
   '@mariozechner/pi-ai@0.64.0':
     resolution: {integrity: sha512-Z/Jnf+JSVDPLRcxJsa8XhYTJKIqKekNueaCpBLGQHgizL1F9RQ1Rur3rIfZpfXkt2cLu/AIPtOs223ueuoWaWg==}
     engines: {node: '>=20.0.0'}
+    deprecated: please use @earendil-works/pi-ai instead going forward
     hasBin: true
 
   '@marsidev/react-turnstile@1.4.0':
@@ -5929,9 +5933,11 @@ packages:
 
   '@metamask/sdk-analytics@0.0.5':
     resolution: {integrity: sha512-fDah+keS1RjSUlC8GmYXvx6Y26s3Ax1U9hGpWb6GSY5SAdmTSIqp2CvYy6yW0WgLhnYhW+6xERuD0eVqV63QIQ==}
+    deprecated: No longer maintained, superseded by @metamask/connect-analytics
 
   '@metamask/sdk-communication-layer@0.33.1':
     resolution: {integrity: sha512-0bI9hkysxcfbZ/lk0T2+aKVo1j0ynQVTuB3sJ5ssPWlz+Z3VwveCkP1O7EVu1tsVVCb0YV5WxK9zmURu2FIiaA==}
+    deprecated: No longer maintained, superseded by https://docs.metamask.io/metamask-connect
     peerDependencies:
       cross-fetch: ^4.0.0
       eciesjs: '*'
@@ -5941,9 +5947,11 @@ packages:
 
   '@metamask/sdk-install-modal-web@0.32.1':
     resolution: {integrity: sha512-MGmAo6qSjf1tuYXhCu2EZLftq+DSt5Z7fsIKr2P+lDgdTPWgLfZB1tJKzNcwKKOdf6q9Qmmxn7lJuI/gq5LrKw==}
+    deprecated: No longer maintained, superseded by https://docs.metamask.io/metamask-connect
 
   '@metamask/sdk@0.33.1':
     resolution: {integrity: sha512-1mcOQVGr9rSrVcbKPNVzbZ8eCl1K0FATsYH3WJ/MH4WcZDWGECWrXJPNMZoEAkLxWiMe8jOQBumg2pmcDa9zpQ==}
+    deprecated: No longer maintained, superseded by https://docs.metamask.io/metamask-connect
 
   '@metamask/superstruct@3.2.1':
     resolution: {integrity: sha512-fLgJnDOXFmuVlB38rUN5SmU7hAFQcCjrg3Vrxz67KTY7YHFnSNEKvX4avmEBdOI0yTCxZjwMCFEqsC8k2+Wd3g==}
@@ -6389,7 +6397,7 @@ packages:
 
   '@paulmillr/qr@0.2.1':
     resolution: {integrity: sha512-IHnV6A+zxU7XwmKFinmYjUcwlyK9+xkG3/s9KcQhI9BjQKycrJ1JRO+FbNYPwZiPKW3je/DR0k7w8/gLa5eaxQ==}
-    deprecated: 'The package is now available as "qr": npm install qr'
+    deprecated: 'Switch to "qr" (new package name) for security updates: npm install qr'
 
   '@phosphor-icons/webcomponents@2.1.5':
     resolution: {integrity: sha512-JcvQkZxvcX2jK+QCclm8+e8HXqtdFW9xV4/kk2aL9Y3dJA2oQVt+pzbv1orkumz3rfx4K9mn9fDoMr1He1yr7Q==}
@@ -7388,6 +7396,7 @@ packages:
   '@safe-global/safe-gateway-typescript-sdk@3.23.1':
     resolution: {integrity: sha512-6ORQfwtEJYpalCeVO21L4XXGSdbEMfyp2hEv6cP82afKXSwvse6d3sdelgaPWUxHIsFRkWvHDdzh8IyyKHZKxw==}
     engines: {node: '>=16'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   '@scarf/scarf@1.4.0':
     resolution: {integrity: sha512-xxeapPiUXdZAE3che6f3xogoJPeZgig6omHEy1rIY5WVsB3H2BHNnZH+gHG6x91SCWyQCzWGsuL2Hh3ClO5/qQ==}
@@ -9161,6 +9170,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unrs/resolver-binding-android-arm-eabi@1.11.1':
     resolution: {integrity: sha512-ppLRUgHVaGRWUx0R0Ut06Mjo9gBaBkg3v/8AxusGLhsIotbBLuRk51rAzqLC8gq6NyyAojEXglNjzf6R948DNw==}
@@ -9316,7 +9326,7 @@ packages:
   '@vercel/postgres@0.10.0':
     resolution: {integrity: sha512-fSD23DxGND40IzSkXjcFcxr53t3Tiym59Is0jSYIFpG4/0f0KO9SGtcp1sXiebvPaGe7N/tU05cH4yt2S6/IPg==}
     engines: {node: '>=18.14'}
-    deprecated: '@vercel/postgres is deprecated. You can either choose an alternate storage solution from the Vercel Marketplace if you want to set up a new database. Or you can follow this guide to migrate your existing Vercel Postgres db: https://neon.com/docs/guides/vercel-postgres-transition-guide'
+    deprecated: '@vercel/postgres is deprecated. If you are setting up a new database, you can choose an alternate storage solution from the Vercel Marketplace. If you had an existing Vercel Postgres database, it should have been migrated to Neon as a native Vercel integration. You can find more details and the guide to migrate to Neon''s SDKs here: https://neon.com/docs/guides/vercel-postgres-transition-guide'
 
   '@viem/anvil@0.0.10':
     resolution: {integrity: sha512-9PzYXBRikfSUhhm8Bd0avv07agwcbMJ5FaSu2D2vbE0cxkvXGtolL3fW5nz2yefMqOqVQL4XzfM5nwY81x3ytw==}
@@ -10009,7 +10019,7 @@ packages:
   axios-retry@4.5.0:
     resolution: {integrity: sha512-aR99oXhpEDGo0UuAlYcn2iGRds30k366Zfa05XWScR9QaQD4JYiP3/1Qt1u7YlefUOK+cn0CcwoL1oefavQUlQ==}
     peerDependencies:
-      axios: 0.x || 1.x
+      axios: 1.12.2
 
   axios@1.12.2:
     resolution: {integrity: sha512-vMJzPewAlRyOgxV2dU0Cuz2O8zzzx9VYtbJOaBgXFeLc4IV/Eg50n4LowmehOOR61S8ZMpc2K5Sa7g6A4jfkUw==}
@@ -10075,6 +10085,7 @@ packages:
   basic-ftp@5.2.0:
     resolution: {integrity: sha512-VoMINM2rqJwJgfdHq6RiUudKt2BV+FY5ZFezP/ypmwayk68+NzzAQy4XXLlqsGD4MCzq3DrmNFD/uUmBJuGoXw==}
     engines: {node: '>=10.0.0'}
+    deprecated: Security vulnerability fixed in 5.2.1, please upgrade
 
   bcrypt-ts@5.0.3:
     resolution: {integrity: sha512-2FcgD12xPbwCoe5i9/HK0jJ1xA1m+QfC1e6htG9Bl/hNOnLyaFmQSlqLKcfe3QdnoMPKpKEGFCbESBTg+SJNOw==}
@@ -11721,6 +11732,7 @@ packages:
   eslint@9.36.0:
     resolution: {integrity: sha512-hB4FIzXovouYzwzECDcUkJ4OcfOEkXTv2zRY6B9bkwjx/cprAq0uvm1nl7zvQ0/TsUk0zQiN4uPfJpB9m+rPMQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -11731,6 +11743,7 @@ packages:
   eslint@9.39.2:
     resolution: {integrity: sha512-LEyamqS7W5HB3ujJyvi0HQK/dtVINZvd5mAAp9eT5S/ujByGjiZLCzPcHVzuXbpJDJF/cxwHlfceVUDZ2lnSTw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -12393,6 +12406,7 @@ packages:
   git-raw-commits@4.0.0:
     resolution: {integrity: sha512-ICsMM1Wk8xSGMowkOmPrzo2Fgmfo4bMHLNX6ytHjajRJUqvHOw/TFapQ+QG75c3X/tTDDhOSRPGC52dDbNM8FQ==}
     engines: {node: '>=16'}
+    deprecated: Deprecated and no longer maintained. Use @conventional-changelog/git-client instead.
     hasBin: true
 
   glob-base@0.3.0:
@@ -13556,7 +13570,7 @@ packages:
       '@langchain/mistralai': '*'
       '@langchain/ollama': '*'
       '@langchain/xai': '*'
-      axios: '*'
+      axios: 1.12.2
       cheerio: '*'
       handlebars: ^4.7.8
       peggy: ^3.0.2
@@ -16311,7 +16325,7 @@ packages:
     resolution: {integrity: sha512-pOLi+Gdll3JekwuFjXO3fTq+L9lzMQGcSq7M5gIjExcl3Gu1hd4XXuf5o3+LuSBsaULQH7DiNbsqPd1chVpQGQ==}
     engines: {node: '>=10.7.0'}
     peerDependencies:
-      axios: '*'
+      axios: 1.12.2
 
   retry@0.13.1:
     resolution: {integrity: sha512-XQBQ3I8W1Cge0Seh+6gjj03LbmRFWuoszgK9ooCpwYIrhhoO80pfq4cUkU5DkknwfOfFteRwlZ56PYOGYyFWdg==}
@@ -17360,6 +17374,7 @@ packages:
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
     engines: {node: ^18 || >=20}
+    deprecated: unmaintained
     hasBin: true
     peerDependencies:
       typescript: ^5.0.0
@@ -17845,6 +17860,7 @@ packages:
 
   uuid@10.0.0:
     resolution: {integrity: sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uuid@11.1.0:
@@ -17857,10 +17873,12 @@ packages:
 
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uuid@9.0.1:
     resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   uvu@0.5.6:
